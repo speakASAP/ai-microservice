@@ -1,0 +1,33 @@
+{
+  "name": "statex-ai-admin-panel",
+  "version": "1.0.0",
+  "description": "Admin panel for StateX AI Platform",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "16.0.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "@types/node": "24.9.1",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "typescript": "^5.0.0",
+    "tailwindcss": "4.1.16",
+    "autoprefixer": "10.4.21",
+    "postcss": "8.5.6",
+    "axios": "1.12.2",
+    "zustand": "5.0.8",
+    "lucide-react": "0.548.0",
+    "clsx": "2.1.1",
+    "class-variance-authority": "0.7.1"
+  },
+  "devDependencies": {
+    "eslint": "9.38.0",
+    "eslint-config-next": "16.0.0"
+  }
+}
