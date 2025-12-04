@@ -1,0 +1,293 @@
+services:
+  # AI Orchestrator - Central coordination service (Blue)
+  ai-orchestrator:
+    build: ./services/ai-orchestrator
+    container_name: ai-microservice-orchestrator-green
+    ports:
+      - "127.0.0.1:${AI_ORCHESTRATOR_PORT:-3380}:${AI_ORCHESTRATOR_PORT:-3380}"
+    volumes:
+      - ./shared:/app/shared:ro
+      - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      - REDIS_URL=${REDIS_URL}
+      - NLP_SERVICE_URL=http://ai-microservice-nlp-service-green:${NLP_SERVICE_PORT:-3381}
+      - ASR_SERVICE_URL=http://ai-microservice-asr-service-green:${ASR_SERVICE_PORT:-3382}
+      - DOCUMENT_AI_URL=http://ai-microservice-document-ai-green:${DOCUMENT_AI_PORT:-3383}
+      - PROTOTYPE_GENERATOR_URL=http://ai-microservice-prototype-generator-green:${PROTOTYPE_GENERATOR_PORT:-3384}
+      - TEMPLATE_REPOSITORY_URL=http://ai-microservice-template-repository-green:${TEMPLATE_REPOSITORY_PORT:-3385}
+      - FREE_AI_SERVICE_URL=http://ai-microservice-free-ai-service-green:${FREE_AI_SERVICE_PORT:-3386}
+      - NOTIFICATION_SERVICE_URL=${NOTIFICATION_SERVICE_URL:-https://notifications.statex.cz}
+      - LOGGING_SERVICE_URL=${LOGGING_SERVICE_URL:-https://logging.statex.cz}
+      - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
+    restart: unless-stopped
+    networks:
+      - ${NGINX_NETWORK_NAME:-nginx-network}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${AI_ORCHESTRATOR_PORT:-3380}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # NLP Service - Text analysis and generation (Blue)
+  nlp-service:
+    build: ./services/nlp-service
+    container_name: ai-microservice-nlp-service-green
+    ports:
+      - "127.0.0.1:${NLP_SERVICE_PORT:-3381}:${NLP_SERVICE_PORT:-3381}"
+    volumes:
+      - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      - REDIS_URL=${REDIS_URL}
+      - LOGGING_SERVICE_URL=${LOGGING_SERVICE_URL:-https://logging.statex.cz}
+      - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
+    restart: unless-stopped
+    networks:
+      - ${NGINX_NETWORK_NAME:-nginx-network}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${NLP_SERVICE_PORT:-3381}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ASR Service - Speech-to-text conversion (Blue)
+  asr-service:
+    build: ./services/asr-service
+    container_name: ai-microservice-asr-service-green
+    ports:
+      - "127.0.0.1:${ASR_SERVICE_PORT:-3382}:${ASR_SERVICE_PORT:-3382}"
+    volumes:
+      - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      - REDIS_URL=${REDIS_URL}
+      - FREE_AI_SERVICE_URL=http://ai-microservice-free-ai-service-green:${FREE_AI_SERVICE_PORT:-3386}
+      - ASR_MODE=${ASR_MODE:-free}
+      - LOGGING_SERVICE_URL=${LOGGING_SERVICE_URL:-https://logging.statex.cz}
+      - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
+    restart: unless-stopped
+    networks:
+      - ${NGINX_NETWORK_NAME:-nginx-network}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${ASR_SERVICE_PORT:-3382}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Document AI Service - File analysis and processing (Blue)
+  document-ai:
+    build: ./services/document-ai
+    container_name: ai-microservice-document-ai-green
+    ports:
+      - "127.0.0.1:${DOCUMENT_AI_PORT:-3383}:${DOCUMENT_AI_PORT:-3383}"
+    volumes:
+      - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      - REDIS_URL=${REDIS_URL}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
+      - S3_SECRET_KEY=${S3_SECRET_KEY}
+      - LOGGING_SERVICE_URL=${LOGGING_SERVICE_URL:-https://logging.statex.cz}
+      - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
+    restart: unless-stopped
+    networks:
+      - ${NGINX_NETWORK_NAME:-nginx-network}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${DOCUMENT_AI_PORT:-3383}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Prototype Generator Service - Website and app creation (Blue)
+  prototype-generator:
+    build: ./services/prototype-generator
+    container_name: ai-microservice-prototype-generator-green
+    ports:
+      - "127.0.0.1:${PROTOTYPE_GENERATOR_PORT:-3384}:${PROTOTYPE_GENERATOR_PORT:-3384}"
+    volumes:
+      - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      - REDIS_URL=${REDIS_URL}
+      - TEMPLATE_REPOSITORY_URL=http://ai-microservice-template-repository-green:${TEMPLATE_REPOSITORY_PORT:-3385}
+      - DEPLOYMENT_URL=${DEPLOYMENT_URL}
+      - LOGGING_SERVICE_URL=${LOGGING_SERVICE_URL:-https://logging.statex.cz}
+      - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
+    depends_on:
+      - template-repository
+    restart: unless-stopped
+    networks:
+      - ${NGINX_NETWORK_NAME:-nginx-network}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PROTOTYPE_GENERATOR_PORT:-3384}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Template Repository Service - Template management (Blue)
+  template-repository:
+    build: ./services/template-repository
+    container_name: ai-microservice-template-repository-green
+    ports:
+      - "127.0.0.1:${TEMPLATE_REPOSITORY_PORT:-3385}:${TEMPLATE_REPOSITORY_PORT:-3385}"
+    volumes:
+      - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      - REDIS_URL=${REDIS_URL}
+      - GIT_REPO_URL=${TEMPLATE_GIT_REPO}
+      - LOGGING_SERVICE_URL=${LOGGING_SERVICE_URL:-https://logging.statex.cz}
+      - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
+    restart: unless-stopped
+    networks:
+      - ${NGINX_NETWORK_NAME:-nginx-network}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${TEMPLATE_REPOSITORY_PORT:-3385}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Free AI Service - Free AI models (Blue)
+  free-ai-service:
+    build: ./services/free-ai-service
+    container_name: ai-microservice-free-ai-service-green
+    ports:
+      - "127.0.0.1:${FREE_AI_SERVICE_PORT:-3386}:${FREE_AI_SERVICE_PORT:-3386}"
+    volumes:
+      - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      - REDIS_URL=${REDIS_URL}
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
+      - AI_MODE=${AI_MODE:-free}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOGGING_SERVICE_URL=${LOGGING_SERVICE_URL:-https://logging.statex.cz}
+      - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
+    restart: unless-stopped
+    networks:
+      - ${NGINX_NETWORK_NAME:-nginx-network}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${FREE_AI_SERVICE_PORT:-3386}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # AI Workers - AI processing agents and workers (Blue)
+  ai-workers:
+    build: ./services/ai-workers
+    container_name: ai-microservice-ai-workers-green
+    ports:
+      - "127.0.0.1:${AI_WORKERS_PORT:-3387}:${AI_WORKERS_PORT:-3387}"
+    volumes:
+      - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      - REDIS_URL=${REDIS_URL}
+      - AI_ORCHESTRATOR_URL=http://ai-microservice-orchestrator-green:${AI_ORCHESTRATOR_PORT:-3380}
+      - S3_ENDPOINT=http://${MINIO_INTERNAL_HOST}:${MINIO_INTERNAL_PORT}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
+      - S3_SECRET_KEY=${S3_SECRET_KEY}
+      - LOGGING_SERVICE_URL=${LOGGING_SERVICE_URL:-https://logging.statex.cz}
+      - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
+    restart: unless-stopped
+    networks:
+      - ${NGINX_NETWORK_NAME:-nginx-network}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${AI_WORKERS_PORT:-3387}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Gemini AI Service - Google Gemini AI models (Blue)
+  gemini-ai-service:
+    build: ./services/gemini-ai-service
+    container_name: ai-microservice-gemini-ai-service-green
+    ports:
+      - "127.0.0.1:${GEMINI_AI_SERVICE_PORT:-3388}:${GEMINI_AI_SERVICE_PORT:-3388}"
+    volumes:
+      - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      - REDIS_URL=${REDIS_URL}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - AI_MODE=${AI_MODE:-free}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOGGING_SERVICE_URL=${LOGGING_SERVICE_URL:-https://logging.statex.cz}
+      - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
+    restart: unless-stopped
+    networks:
+      - ${NGINX_NETWORK_NAME:-nginx-network}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${GEMINI_AI_SERVICE_PORT:-3388}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Data Analysis/Visualization Service (Blue)
+  data-viz-service:
+    build: ./services/data-viz-service
+    container_name: ai-microservice-data-viz-service-green
+    ports:
+      - "127.0.0.1:${DATA_VIZ_SERVICE_PORT:-3389}:${DATA_VIZ_SERVICE_PORT:-3389}"
+    volumes:
+      - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      - REDIS_URL=${REDIS_URL}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - UPLOAD_DIR=${UPLOAD_DIR:-./data/uploads}
+      - AI_MODE=${AI_MODE:-free}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOGGING_SERVICE_URL=${LOGGING_SERVICE_URL:-https://logging.statex.cz}
+      - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
+    restart: unless-stopped
+    networks:
+      - ${NGINX_NETWORK_NAME:-nginx-network}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${DATA_VIZ_SERVICE_PORT:-3389}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  ${NGINX_NETWORK_NAME:-nginx-network}:
+    external: true
+
