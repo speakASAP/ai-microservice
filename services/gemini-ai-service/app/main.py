@@ -7,7 +7,7 @@ This service provides access to Google Gemini AI models:
 2. Gemini 2.5 Pro - Most powerful model
 3. Gemini 2.5 Flash-Lite - Fastest and most cost-efficient
 
-Port: 8018
+Port: 3388 (configured in ai-microservice/.env)
 """
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
@@ -463,7 +463,7 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("GEMINI_AI_SERVICE_PORT", "8018"))
+    port = int(os.getenv("GEMINI_AI_SERVICE_PORT", "3388"))
     
     # Custom logging configuration for Uvicorn
     log_config = {
@@ -488,4 +488,4 @@ if __name__ == "__main__":
         },
     }
     
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("GEMINI_AI_SERVICE_EXTERNAL_PORT", "8018")), log_config=log_config)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("GEMINI_AI_SERVICE_PORT", "3388")), log_config=log_config)

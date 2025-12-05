@@ -7,7 +7,7 @@ This service provides access to free AI models:
 2. Ollama (Local LLM) - Llama 2, Mistral, CodeLlama
 3. Hugging Face Inference API - Various open-source models
 
-Port: 8016
+Port: 3386 (configured in ai-microservice/.env)
 """
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
@@ -780,4 +780,4 @@ if __name__ == "__main__":
         },
     }
     
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("FREE_AI_SERVICE_EXTERNAL_PORT", "8016")), log_config=log_config)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("FREE_AI_SERVICE_PORT", "3386")), log_config=log_config)

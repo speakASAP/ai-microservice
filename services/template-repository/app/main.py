@@ -418,4 +418,4 @@ if __name__ == "__main__":
         },
     }
     
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("TEMPLATE_REPOSITORY_PORT", "8015")), log_config=log_config)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("TEMPLATE_REPOSITORY_PORT", "3385")), log_config=log_config)

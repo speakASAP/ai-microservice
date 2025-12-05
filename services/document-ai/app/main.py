@@ -84,7 +84,7 @@ for logger_name in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
 
 
 # Configuration
-free_ai_port = os.getenv("FREE_AI_SERVICE_INTERNAL_PORT", "8016")
+free_ai_port = os.getenv("FREE_AI_SERVICE_PORT", "3386")
 FREE_AI_SERVICE_URL = os.getenv("FREE_AI_SERVICE_URL", f"http://localhost:{free_ai_port}")
 TESSERACT_CMD = os.getenv("TESSERACT_CMD", "/usr/bin/tesseract")
 
@@ -1070,4 +1070,4 @@ if __name__ == "__main__":
         },
     }
     
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("DOCUMENT_AI_EXTERNAL_PORT", "8013")), log_config=log_config)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("DOCUMENT_AI_PORT", "3383")), log_config=log_config)

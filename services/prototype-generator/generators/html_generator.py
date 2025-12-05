@@ -16,7 +16,7 @@ class HTMLGenerator:
         """Initialize HTML generator."""
         import os
         if free_ai_service_url is None:
-            free_ai_port = os.getenv("FREE_AI_SERVICE_INTERNAL_PORT", "8016")
+            free_ai_port = os.getenv("FREE_AI_SERVICE_PORT", "3386")
             free_ai_service_url = f"http://localhost:{free_ai_port}"
         self.free_ai_service_url = free_ai_service_url
         

@@ -7,6 +7,7 @@ It integrates with the prototype generator service and manages the complete gene
 
 import asyncio
 import logging
+import os
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 import httpx
@@ -23,7 +24,7 @@ class PrototypeWorkflowAgent(AgentInterface):
     def __init__(self):
         super().__init__("prototype-workflow", "workflow-coordinator")
         prototype_host = os.getenv("PROTOTYPE_SERVICE_HOST", "prototype-service")
-        prototype_port = os.getenv("PROTOTYPE_SERVICE_PORT", os.getenv("PROTOTYPE_GENERATOR_PORT", "8000"))
+        prototype_port = os.getenv("PROTOTYPE_SERVICE_PORT", os.getenv("PROTOTYPE_GENERATOR_PORT", "3384"))
         self.prototype_service_url = os.getenv("PROTOTYPE_SERVICE_URL", f"http://{prototype_host}:{prototype_port}")
         
     async def execute_task(self, task: AgentTask) -> AgentResult:

@@ -17,12 +17,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY app/ ./app/
 
-# Expose port (service listens on FREE_AI_SERVICE_EXTERNAL_PORT - 8016)
-EXPOSE 8016
+# Expose port (service listens on FREE_AI_SERVICE_PORT - 3386, configured in ai-microservice/.env)
+EXPOSE 3386
 
-# Health check (service listens on FREE_AI_SERVICE_EXTERNAL_PORT - 8016)
+# Health check (service listens on FREE_AI_SERVICE_PORT - 3386)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8016/health || exit 1
+    CMD curl -f http://localhost:3386/health || exit 1
 
-# Run the application (service listens on FREE_AI_SERVICE_EXTERNAL_PORT - 8016)
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8016"]
+# Run the application (service listens on FREE_AI_SERVICE_PORT - 3386)
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3386"]

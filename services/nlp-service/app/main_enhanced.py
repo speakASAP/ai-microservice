@@ -47,7 +47,7 @@ app.add_middleware(
 )
 
 # AI Configuration
-FREE_AI_SERVICE_URL = os.getenv("FREE_AI_SERVICE_URL", "http://free-ai-service:8016")
+FREE_AI_SERVICE_URL = os.getenv("FREE_AI_SERVICE_URL", "http://free-ai-service:3386")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 

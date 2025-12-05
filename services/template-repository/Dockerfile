@@ -23,12 +23,12 @@ COPY --chown=appuser:appuser . .
 # Switch to non-root user
 USER appuser
 
-# Expose port (service listens on TEMPLATE_REPOSITORY_PORT - 8015)
-EXPOSE 8015
+# Expose port (service listens on TEMPLATE_REPOSITORY_PORT - 3385, configured in ai-microservice/.env)
+EXPOSE 3385
 
 # Health check (uses port that service listens on)
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8015/health || exit 1
+    CMD curl -f http://localhost:3385/health || exit 1
 
-# Run the application (service listens on TEMPLATE_REPOSITORY_PORT - 8015)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8015"]
+# Run the application (service listens on TEMPLATE_REPOSITORY_PORT - 3385)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3385"]

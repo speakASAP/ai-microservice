@@ -25,12 +25,12 @@ COPY --chown=appuser:appuser . .
 # Switch to non-root user
 USER appuser
 
-# Expose port (service listens on PROTOTYPE_GENERATOR_PORT - 8014)
-EXPOSE 8014
+# Expose port (service listens on PROTOTYPE_GENERATOR_PORT - 3384, configured in ai-microservice/.env)
+EXPOSE 3384
 
 # Health check (uses port that service listens on)
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8014/health || exit 1
+    CMD curl -f http://localhost:3384/health || exit 1
 
-# Run the application (service listens on PROTOTYPE_GENERATOR_PORT - 8014)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8014"]
+# Run the application (service listens on PROTOTYPE_GENERATOR_PORT - 3384)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3384"]

@@ -8,7 +8,7 @@ This service provides data analysis and visualization capabilities:
 3. Creates visualization.md files with charts, graphs, and insights
 4. Integrates with the multi-agent workflow system
 
-Port: 8018
+Port: 3389
 """
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
@@ -656,7 +656,7 @@ if __name__ == "__main__":
     import uvicorn
     from datetime import timedelta
     
-    port = int(os.getenv("DATA_VIZ_SERVICE_PORT", "8018"))
+    port = int(os.getenv("DATA_VIZ_SERVICE_PORT", "3389"))
     
     # Custom logging configuration for Uvicorn
     log_config = {
@@ -681,4 +681,4 @@ if __name__ == "__main__":
         },
     }
     
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("DATA_VIZ_SERVICE_EXTERNAL_PORT", "8018")), log_config=log_config)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("DATA_VIZ_SERVICE_PORT", "3389")), log_config=log_config)
