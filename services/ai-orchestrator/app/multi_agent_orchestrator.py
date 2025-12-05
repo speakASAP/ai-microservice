@@ -179,7 +179,7 @@ class NLPAgent(AgentInterface):
     
     def __init__(self):
         super().__init__("NLP Analysis Agent", "nlp")
-        free_ai_port = os.getenv("FREE_AI_SERVICE_INTERNAL_PORT", "8016")
+        free_ai_port = os.getenv("FREE_AI_SERVICE_PORT", "3386")
         self.service_url = os.getenv("FREE_AI_SERVICE_URL", f"http://localhost:{free_ai_port}")
     
     async def execute_task(self, task: AgentTask) -> AgentResult:
@@ -302,7 +302,7 @@ class ASRAgent(AgentInterface):
     
     def __init__(self):
         super().__init__("ASR Agent", "asr")
-        asr_port = os.getenv("ASR_SERVICE_INTERNAL_PORT", "8012")
+        asr_port = os.getenv("ASR_SERVICE_PORT", "3382")
         self.service_url = os.getenv("ASR_SERVICE_URL", f"http://localhost:{asr_port}")
     
     async def execute_task(self, task: AgentTask) -> AgentResult:
@@ -405,7 +405,7 @@ class DocumentAgent(AgentInterface):
     
     def __init__(self):
         super().__init__("Document AI Agent", "document")
-        document_ai_port = os.getenv("DOCUMENT_AI_INTERNAL_PORT", "8013")
+        document_ai_port = os.getenv("DOCUMENT_AI_PORT", "3383")
         self.service_url = os.getenv("DOCUMENT_AI_URL", f"http://localhost:{document_ai_port}")
     
     async def execute_task(self, task: AgentTask) -> AgentResult:
@@ -496,7 +496,7 @@ class PrototypeAgent(AgentInterface):
     
     def __init__(self):
         super().__init__("Prototype Generator Agent", "prototype")
-        prototype_gen_port = os.getenv("PROTOTYPE_GENERATOR_INTERNAL_PORT", "8000")
+        prototype_gen_port = os.getenv("PROTOTYPE_GENERATOR_PORT", "3384")
         self.service_url = os.getenv("PROTOTYPE_GENERATOR_URL", f"http://localhost:{prototype_gen_port}")
     
     async def execute_task(self, task: AgentTask) -> AgentResult:
@@ -555,7 +555,7 @@ class GeminiAgent(AgentInterface):
     
     def __init__(self):
         super().__init__("Gemini AI Agent", "gemini")
-        gemini_port = os.getenv("GEMINI_AI_SERVICE_INTERNAL_PORT", "8018")
+        gemini_port = os.getenv("GEMINI_AI_SERVICE_PORT", "3388")
         self.service_url = os.getenv("GEMINI_AI_SERVICE_URL", f"http://localhost:{gemini_port}")
     
     async def execute_task(self, task: AgentTask) -> AgentResult:
@@ -678,7 +678,7 @@ class DataVizAgent(AgentInterface):
     
     def __init__(self):
         super().__init__("Data Visualization Agent", "data_viz")
-        data_viz_port = os.getenv("DATA_VIZ_SERVICE_INTERNAL_PORT", "8019")
+        data_viz_port = os.getenv("DATA_VIZ_SERVICE_PORT", "3389")
         self.service_url = os.getenv("DATA_VIZ_SERVICE_URL", f"http://localhost:{data_viz_port}")
     
     async def execute_task(self, task: AgentTask) -> AgentResult:
@@ -771,7 +771,7 @@ class SummarizerAgent(AgentInterface):
     
     def __init__(self):
         super().__init__("Summarizer Agent", "summarizer")
-        free_ai_port = os.getenv("FREE_AI_SERVICE_INTERNAL_PORT", "8016")
+        free_ai_port = os.getenv("FREE_AI_SERVICE_PORT", "3386")
         self.service_url = os.getenv("FREE_AI_SERVICE_URL", f"http://localhost:{free_ai_port}")
     
     async def execute_task(self, task: AgentTask) -> AgentResult:

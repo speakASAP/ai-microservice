@@ -112,7 +112,7 @@ app.add_middleware(
 
 # AI Configuration
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-free_ai_port = os.getenv("FREE_AI_SERVICE_INTERNAL_PORT", "8016")
+free_ai_port = os.getenv("FREE_AI_SERVICE_PORT", "3386")
 FREE_AI_SERVICE_URL = os.getenv("FREE_AI_SERVICE_URL", f"http://localhost:{free_ai_port}")
 ASR_MODE = os.getenv("ASR_MODE", "free")  # free, paid, hybrid
 
@@ -1035,4 +1035,4 @@ if __name__ == "__main__":
         },
     }
     
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("ASR_SERVICE_EXTERNAL_PORT", "8012")), log_config=log_config)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("ASR_SERVICE_PORT", "3382")), log_config=log_config)

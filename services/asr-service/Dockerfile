@@ -25,11 +25,11 @@ COPY --chown=appuser:appuser . .
 USER appuser
 
 # Expose port (internal port)
-EXPOSE 8012
+EXPOSE 3382
 
 # Health check (uses internal port that service listens on)
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8012/health || exit 1
+    CMD curl -f http://localhost:3382/health || exit 1
 
-# Run the application (service listens on ASR_SERVICE_INTERNAL_PORT - 8012)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8012"]
+# Run the application (service listens on ASR_SERVICE_PORT - 3382, configured in ai-microservice/.env)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3382"]

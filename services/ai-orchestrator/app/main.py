@@ -184,10 +184,10 @@ app.add_middleware(
 
 # Service URLs
 # Service URLs - use environment variables with defaults from .env
-free_ai_port = os.getenv("FREE_AI_SERVICE_INTERNAL_PORT", os.getenv("FREE_AI_SERVICE_PORT", "8016"))
-asr_port = os.getenv("ASR_SERVICE_INTERNAL_PORT", os.getenv("ASR_SERVICE_PORT", "8012"))
-document_ai_port = os.getenv("DOCUMENT_AI_INTERNAL_PORT", os.getenv("DOCUMENT_AI_PORT", "8013"))
-prototype_gen_port = os.getenv("PROTOTYPE_GENERATOR_INTERNAL_PORT", os.getenv("PROTOTYPE_GENERATOR_PORT", "8000"))
+free_ai_port = os.getenv("FREE_AI_SERVICE_PORT", "3386")
+asr_port = os.getenv("ASR_SERVICE_PORT", "3382")
+document_ai_port = os.getenv("DOCUMENT_AI_PORT", "3383")
+prototype_gen_port = os.getenv("PROTOTYPE_GENERATOR_PORT", "3384")
 free_ai_host = os.getenv("FREE_AI_SERVICE_HOST", "free-ai-service")
 asr_host = os.getenv("ASR_SERVICE_HOST", "asr-service")
 document_ai_host = os.getenv("DOCUMENT_AI_HOST", "document-ai")
@@ -1158,7 +1158,7 @@ async def get_prototype_status(workflow_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to get prototype status: {str(e)}")
 
 if __name__ == "__main__":
-    port = int(os.getenv("AI_ORCHESTRATOR_INTERNAL_PORT", "8010"))
+    port = int(os.getenv("AI_ORCHESTRATOR_PORT", "3380"))
     # Custom logging configuration for Uvicorn
     log_config = {
         "version": 1,
@@ -1182,4 +1182,4 @@ if __name__ == "__main__":
         },
     }
     
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("AI_ORCHESTRATOR_INTERNAL_PORT", "8010")), log_config=log_config)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("AI_ORCHESTRATOR_PORT", "3380")), log_config=log_config)

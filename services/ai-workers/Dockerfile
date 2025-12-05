@@ -22,12 +22,12 @@ COPY --chown=appuser:appuser . .
 # Switch to non-root user
 USER appuser
 
-# Health check (service listens on AI_WORKERS_EXTERNAL_PORT - 8017)
+# Health check (service listens on AI_WORKERS_PORT - 3387, configured in ai-microservice/.env)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8017/health || exit 1
+    CMD curl -f http://localhost:3387/health || exit 1
 
-# Expose port (service listens on AI_WORKERS_EXTERNAL_PORT - 8017)
-EXPOSE 8017
+# Expose port (service listens on AI_WORKERS_PORT - 3387)
+EXPOSE 3387
 
-# Start application (service listens on AI_WORKERS_EXTERNAL_PORT - 8017)
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8017"]
+# Start application (service listens on AI_WORKERS_PORT - 3387)
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3387"]

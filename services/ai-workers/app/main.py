@@ -122,4 +122,4 @@ if __name__ == "__main__":
         },
     }
     
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("AI_WORKERS_EXTERNAL_PORT", "8017")), log_config=log_config)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("AI_WORKERS_PORT", "3387")), log_config=log_config)

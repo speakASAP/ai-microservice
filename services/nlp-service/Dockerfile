@@ -26,11 +26,11 @@ COPY --chown=appuser:appuser . .
 USER appuser
 
 # Expose port (internal port)
-EXPOSE 8011
+EXPOSE 3381
 
 # Health check (uses internal port that service listens on)
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8011/health || exit 1
+    CMD curl -f http://localhost:3381/health || exit 1
 
-# Run the application (service listens on NLP_SERVICE_INTERNAL_PORT - 8011)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8011"]
+# Run the application (service listens on NLP_SERVICE_PORT - 3381, configured in ai-microservice/.env)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3381"]

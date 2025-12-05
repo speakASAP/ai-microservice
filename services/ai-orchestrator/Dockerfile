@@ -38,14 +38,14 @@ RUN mkdir -p /app/logs && chown -R appuser:appuser /app/logs
 USER appuser
 
 # Expose port (internal port)
-EXPOSE 8010
+EXPOSE 3380
 
-# Health check (uses internal port that service listens on)
+# Health check (uses port that service listens on)
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8010/health || exit 1
+    CMD curl -f http://localhost:3380/health || exit 1
 
 # Run the application
 # NOTE: This container is designed to work with volume mounts
 # The actual source code will be mounted from the host for instant hot reload
-# Service listens on AI_ORCHESTRATOR_INTERNAL_PORT (8010)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8010"]
+# Service listens on AI_ORCHESTRATOR_PORT (3380, configured in ai-microservice/.env)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3380"]
