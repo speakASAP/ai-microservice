@@ -19,17 +19,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
-COPY --chown=appuser:appuser statex-ai/services/ai-orchestrator/requirements.txt .
+COPY --chown=appuser:appuser requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy shared resources (needed for http_clients, etc.)
-# Note: Build context is now root (.), so paths are relative to root
-COPY --chown=appuser:appuser statex-ai/shared /app/shared
-COPY --chown=appuser:appuser statex-platform/shared /app/statex-platform/shared
-COPY --chown=appuser:appuser utils /app/utils
-
 # Copy application code with correct ownership
-COPY --chown=appuser:appuser statex-ai/services/ai-orchestrator /app
+# Note: Shared resources are mounted as volumes at runtime (./shared:/app/shared:ro)
+COPY --chown=appuser:appuser . .
 
 # Create logs directory with proper permissions
 RUN mkdir -p /app/logs && chown -R appuser:appuser /app/logs

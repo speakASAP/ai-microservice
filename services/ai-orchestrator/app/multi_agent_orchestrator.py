@@ -12,31 +12,30 @@ from typing import Dict, List, Optional, Any, Union
 import httpx
 import os
 import sys
-# Add the platform shared directory to Python path
+# Add the shared directory to Python path
 from pathlib import Path
 current_dir = Path(__file__).parent.resolve()
 possible_paths = [
-    current_dir.parent.parent.parent.parent / "statex-platform" / "shared",  # Development
-    Path("/app") / "statex-platform" / "shared",  # Container: /app/statex-platform/shared
-    Path("/app") / "shared",  # Container: /app/shared (fallback)
+    current_dir.parent.parent.parent / "shared",  # Development: /app/../shared
+    Path("/app") / "shared",  # Container: /app/shared
 ]
 
-platform_shared_dir = None
+shared_dir = None
 for path in possible_paths:
     http_clients_file = path / "http_clients.py"
     if http_clients_file.exists():
-        platform_shared_dir = str(path)
+        shared_dir = str(path)
         break
 
-if platform_shared_dir is None:
+if shared_dir is None:
     raise FileNotFoundError("Could not find http_clients.py in any expected location. Tried: " + str(possible_paths))
 
-if platform_shared_dir not in sys.path:
-    sys.path.append(platform_shared_dir)
+if shared_dir not in sys.path:
+    sys.path.append(shared_dir)
 
 # Import NotificationServiceClient with proper path resolution
 import importlib.util
-spec = importlib.util.spec_from_file_location("http_clients", os.path.join(platform_shared_dir, "http_clients.py"))
+spec = importlib.util.spec_from_file_location("http_clients", os.path.join(shared_dir, "http_clients.py"))
 http_clients_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(http_clients_module)
 NotificationServiceClient = http_clients_module.NotificationServiceClient  # type: ignore
@@ -59,41 +58,50 @@ from .offer_formatter import offer_formatter, FormattedOffer
 logger = logging.getLogger(__name__)
 
 def get_session_directory(submission_id: str, user_id: str, session_id: str = None) -> str:
-    """Get the session directory path for a submission using centralized utility"""
+    """Get the session directory path for a submission"""
     try:
         logger.info(f"🔍 [AI ORCHESTRATOR] Resolving session directory:")
         logger.info(f"  📋 Submission ID: {submission_id}")
         logger.info(f"  👤 User ID: {user_id}")
         logger.info(f"  🆔 Session ID: {session_id}")
         
-        # Import centralized upload utilities with proper path resolution
-        import importlib.util
-        upload_utils_spec = importlib.util.spec_from_file_location("upload_utils", os.path.join(platform_shared_dir, "upload_utils.py"))
-        upload_utils_module = importlib.util.module_from_spec(upload_utils_spec)
-        upload_utils_spec.loader.exec_module(upload_utils_module)
-        find_session_directory = upload_utils_module.find_session_directory
-        get_upload_base_dir = upload_utils_module.get_upload_base_dir
+        # Get upload base directory from environment variable
+        upload_base = os.getenv("UPLOAD_DIR", "/srv/storagebox/statex/docker-volumes/uploads")
+        base_dir = Path(upload_base)
+        base_dir.mkdir(parents=True, exist_ok=True)
         
-        # Log upload base directory
-        base_dir = get_upload_base_dir()
-        print(f"  📂 Upload base directory: {base_dir}")
-        print(f"  📁 Base exists: {base_dir.exists()}")
+        logger.info(f"  📂 Upload base directory: {base_dir}")
+        logger.info(f"  📁 Base exists: {base_dir.exists()}")
         
-        # Use centralized utility to find session directory
-        session_path = find_session_directory(user_id, session_id)
-        
-        if session_path:
-            print(f"  ✅ Session directory found: {session_path}")
-            print(f"  📁 Session exists: {session_path.exists()}")
-            logger.info(f"Using session directory: {session_path}")
-            return str(session_path)
-        else:
-            print(f"  ❌ Session directory not found for user {user_id}, session {session_id}")
-            logger.warning(f"Session directory not found for user {user_id}, session {session_id}")
+        # Get user directory
+        user_dir = base_dir / user_id
+        if not user_dir.exists():
+            logger.warning(f"User directory not found: {user_dir}")
             return None
+        
+        # Find session directory
+        if session_id:
+            session_path = user_dir / session_id
+            if session_path.exists():
+                logger.info(f"Using session directory: {session_path}")
+                return str(session_path)
+            else:
+                logger.warning(f"Session directory not found: {session_path}")
+                return None
+        else:
+            # Find the most recent session directory
+            session_dirs = [d for d in user_dir.iterdir() if d.is_dir() and d.name.startswith("sess_")]
+            if not session_dirs:
+                logger.warning(f"No session directories found for user {user_id}")
+                return None
+            
+            # Sort by modification time and get the most recent
+            latest_session = max(session_dirs, key=lambda x: x.stat().st_mtime)
+            logger.info(f"Using latest session directory: {latest_session}")
+            return str(latest_session)
             
     except Exception as e:
-        print(f"  💥 Error getting session directory: {e}")
+        logger.error(f"Error getting session directory: {e}", exc_info=True)
         logger.error(f"Error getting session directory: {e}")
         return None
 
