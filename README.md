@@ -100,7 +100,6 @@ NOTIFICATION_SERVICE_URL=https://notifications.statex.cz
 
 # AI API Keys
 OPENROUTER_API_KEY=<key>
-ANTHROPIC_API_KEY=<key>
 GEMINI_API_KEY=<key>
 ```
 

@@ -44,7 +44,6 @@ services:
       - .env
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
       - REDIS_URL=${REDIS_URL}
       - LOGGING_SERVICE_URL=${LOGGING_SERVICE_URL:-https://logging.statex.cz}
@@ -183,7 +182,6 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
       - REDIS_URL=${REDIS_URL}
-      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
       - AI_MODE=${AI_MODE:-free}
       - DEBUG=${DEBUG:-true}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
