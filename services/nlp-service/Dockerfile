@@ -17,8 +17,10 @@ COPY --chown=appuser:appuser requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Download NLTK data
-# Download all required data packages at once to avoid import-triggered wordnet loading issues
-RUN python -m nltk.downloader wordnet punkt stopwords vader_lexicon
+# Download wordnet manually first (before importing nltk) to avoid import-triggered loading issues
+RUN python -c "import urllib.request, zipfile, os; os.makedirs('/root/nltk_data/corpora', exist_ok=True); urllib.request.urlretrieve('https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/corpora/wordnet.zip', '/tmp/wordnet.zip'); zipfile.ZipFile('/tmp/wordnet.zip').extractall('/root/nltk_data/corpora/'); os.remove('/tmp/wordnet.zip')"
+# Then download other NLTK data packages
+RUN python -c "import nltk; nltk.download('punkt', quiet=True); nltk.download('stopwords', quiet=True); nltk.download('vader_lexicon', quiet=True)"
 
 # Copy application code with correct ownership
 COPY --chown=appuser:appuser . .
