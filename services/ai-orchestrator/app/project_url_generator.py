@@ -7,6 +7,7 @@ project plan URLs and offer detail URLs with proper validation and accessibility
 Requirements: 6.8, 6.9
 """
 
+import os
 import logging
 import hashlib
 import time
