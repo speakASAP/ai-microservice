@@ -4,3 +4,4 @@ pydantic==2.11.4
 pydantic-core==2.33.2
 aiohttp==3.12.14
 python-multipart==0.0.18
+httpx>=0.28.0

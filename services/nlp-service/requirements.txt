@@ -11,3 +11,4 @@ python-multipart==0.0.18
 python-dotenv==1.0.0
 aiohttp==3.12.14
 asyncio
+httpx>=0.28.0
