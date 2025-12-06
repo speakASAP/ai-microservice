@@ -29,7 +29,6 @@ current_dir = Path(__file__).parent.resolve()
 possible_paths = [
     current_dir.parent.parent.parent / "shared",  # Development: /app/../shared
     Path("/app") / "shared",  # Container: /app/shared
-    Path("/app") / "statex-platform" / "shared",  # Container: /app/statex-platform/shared
 ]
 
 shared_path = None
@@ -64,28 +63,13 @@ from .workflow_recovery import workflow_recovery_manager, RecoveryStrategy
 from .error_handling import error_recovery_manager
 from .project_url_generator import project_url_generator
 
-# Configure logging with timestamps
-# Add utils to path - try multiple possible paths
-utils_possible_paths = [
-    Path(__file__).parent.parent.parent.parent / "utils",  # Development
-    Path("/app") / "utils",  # Container: /app/utils
-]
-
-utils_path = None
-for path in utils_possible_paths:
-    logger_file = path / "logger.py"
-    if logger_file.exists():
-        utils_path = str(path)
-        break
-
-if utils_path is None:
-    raise FileNotFoundError("Could not find logger.py in any expected location. Tried: " + str(utils_possible_paths))
-
-if utils_path not in sys.path:
-    sys.path.insert(0, utils_path)
-
-from utils.logger import setup_logger
-logger = setup_logger(__name__, service_name="ai-orchestrator")
+# Configure logging with centralized external logging service
+# Import logger from shared directory
+import importlib.util
+logger_spec = importlib.util.spec_from_file_location("logger", os.path.join(shared_path, "logger.py"))
+logger_module = importlib.util.module_from_spec(logger_spec)
+logger_spec.loader.exec_module(logger_module)
+logger = logger_module.setup_logger(__name__, service_name="ai-orchestrator")
 
 # Configure Uvicorn logging to use centralized logger
 import logging
