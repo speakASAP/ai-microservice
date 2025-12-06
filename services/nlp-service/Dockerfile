@@ -16,8 +16,9 @@ RUN apt-get update && apt-get install -y \
 COPY --chown=appuser:appuser requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Download NLTK data (wordnet must be downloaded first as it's imported during nltk initialization)
-RUN python -c "import nltk; nltk.download('wordnet'); nltk.download('punkt'); nltk.download('stopwords'); nltk.download('vader_lexicon')"
+# Download NLTK data
+# Download all required data packages at once to avoid import-triggered wordnet loading issues
+RUN python -m nltk.downloader wordnet punkt stopwords vader_lexicon
 
 # Copy application code with correct ownership
 COPY --chown=appuser:appuser . .
