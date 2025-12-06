@@ -1,6 +1,6 @@
 services:
   # AI Orchestrator - Central coordination service (Blue)
-  ai-orchestrator:
+  backend:
     build: ./services/ai-orchestrator
     container_name: ai-microservice-orchestrator-green
     ports:
