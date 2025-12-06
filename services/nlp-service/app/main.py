@@ -14,27 +14,13 @@ import os
 # Configure logging with timestamps
 import sys
 from pathlib import Path
-# Add workspace root to path - try multiple possible paths
-workspace_possible_paths = [
-    Path(__file__).parent.parent.parent.parent.parent,  # Development: workspace root
-    Path("/app").parent,  # Container: workspace root at /app/..
-]
-
-workspace_root = None
-for path in workspace_possible_paths:
-    logger_file = path / "statex" / "utils" / "logger.py"
-    if logger_file.exists():
-        workspace_root = str(path)
-        break
-
-if workspace_root is None:
-    raise FileNotFoundError("Could not find logger.py in any expected location. Tried: " + str(workspace_possible_paths))
-
-if workspace_root not in sys.path:
-    sys.path.insert(0, workspace_root)
-
-from statex.utils.logger import setup_logger  # type: ignore
-logger = setup_logger(__name__, service_name="nlp-service")
+# Import logger from shared directory
+import importlib.util
+shared_path = "/app/shared"
+logger_spec = importlib.util.spec_from_file_location("logger", os.path.join(shared_path, "logger.py"))
+logger_module = importlib.util.module_from_spec(logger_spec)
+logger_spec.loader.exec_module(logger_module)
+logger = logger_module.setup_logger(__name__, service_name="nlp-service")
 # Configure Uvicorn logging to use centralized logger
 import logging
 

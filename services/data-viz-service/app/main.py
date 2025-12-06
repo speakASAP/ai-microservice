@@ -33,13 +33,13 @@ import matplotlib.dates as mdates
 from io import StringIO
 import base64
 
-# Add utils to path
-utils_path = Path(__file__).parent.parent.parent.parent.parent / 'utils'
-if str(utils_path) not in sys.path:
-    sys.path.insert(0, str(utils_path))
-
-from logger import setup_logger
-logger = setup_logger(__name__, service_name="data-viz-service")
+# Import logger from shared directory
+import importlib.util
+shared_path = "/app/shared"
+logger_spec = importlib.util.spec_from_file_location("logger", os.path.join(shared_path, "logger.py"))
+logger_module = importlib.util.module_from_spec(logger_spec)
+logger_spec.loader.exec_module(logger_module)
+logger = logger_module.setup_logger(__name__, service_name="data-viz-service")
 
 # Configure Uvicorn logging to use centralized logger
 import logging

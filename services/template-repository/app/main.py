@@ -18,13 +18,13 @@ from datetime import datetime
 # Configure logging with timestamps
 import sys
 from pathlib import Path
-# Add utils to path
-utils_path = Path(__file__).parent.parent.parent.parent.parent / 'utils'
-if str(utils_path) not in sys.path:
-    sys.path.insert(0, str(utils_path))
-
-from logger import setup_logger
-logger = setup_logger(__name__, service_name="template-repository")
+# Import logger from shared directory
+import importlib.util
+shared_path = "/app/shared"
+logger_spec = importlib.util.spec_from_file_location("logger", os.path.join(shared_path, "logger.py"))
+logger_module = importlib.util.module_from_spec(logger_spec)
+logger_spec.loader.exec_module(logger_module)
+logger = logger_module.setup_logger(__name__, service_name="template-repository")
 # Configure Uvicorn logging to use centralized logger
 import logging
 
