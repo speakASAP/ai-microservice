@@ -247,6 +247,158 @@ class SubmissionStatusResponse(BaseModel):
     updated_at: str
 
 
+@app.get("/")
+async def root():
+    """Root endpoint - Service information"""
+    return {
+        "service": "ai-microservice",
+        "description": "Centralized AI processing service for business automation",
+        "version": "2.0.0",
+        "status": "operational",
+        "endpoints": {
+            "health": "/health",
+            "api": "/api",
+            "processSubmission": "POST /api/process-submission",
+            "getStatus": "GET /api/status/{submission_id}",
+            "getResults": "GET /api/results/{submission_id}",
+            "multiAgentProcess": "POST /api/multi-agent/process",
+            "getWorkflowStatus": "GET /api/multi-agent/workflow/{workflow_id}",
+            "getAgentsHealth": "GET /api/multi-agent/agents/health",
+        },
+        "documentation": {
+            "healthCheck": "GET /health - Check service health status with multi-agent system status",
+            "processSubmission": "POST /api/process-submission - Process a new user submission",
+            "getStatus": "GET /api/status/{submission_id} - Get the status of a submission",
+            "getResults": "GET /api/results/{submission_id} - Get the final results of a submission",
+            "multiAgentProcess": "POST /api/multi-agent/process - Process request through multi-agent workflow system",
+            "getWorkflowStatus": "GET /api/multi-agent/workflow/{workflow_id} - Get status of a multi-agent workflow",
+            "getAgentsHealth": "GET /api/multi-agent/agents/health - Get health status of all agents",
+        },
+        "timestamp": datetime.now().isoformat(),
+    }
+
+@app.get("/api")
+async def api_info():
+    """API documentation endpoint"""
+    return {
+        "success": True,
+        "service": "ai-microservice",
+        "apiVersion": "2.0.0",
+        "endpoints": [
+            {
+                "method": "GET",
+                "path": "/health",
+                "description": "Health check endpoint with multi-agent system status",
+                "response": {
+                    "status": "healthy|degraded",
+                    "service": "ai-orchestrator",
+                    "timestamp": "ISO 8601 string",
+                    "version": "2.0.0",
+                    "multi_agent_system": "object with system health information",
+                },
+            },
+            {
+                "method": "POST",
+                "path": "/api/process-submission",
+                "description": "Process a new user submission",
+                "contentType": "application/json",
+                "requestBody": {
+                    "user_id": "string (required)",
+                    "submission_type": "text|voice|file|mixed (required)",
+                    "text_content": "string (optional)",
+                    "voice_file_url": "string (optional)",
+                    "file_urls": "array of strings (optional)",
+                    "requirements": "string (optional)",
+                    "contact_info": "object (optional)",
+                },
+                "response": {
+                    "submission_id": "string",
+                    "status": "pending|processing|completed|failed",
+                    "message": "string",
+                    "estimated_completion_time": "string",
+                },
+            },
+            {
+                "method": "GET",
+                "path": "/api/status/{submission_id}",
+                "description": "Get the status of a submission",
+                "pathParameters": {
+                    "submission_id": "string (required) - submission UUID",
+                },
+                "response": {
+                    "submission_id": "string",
+                    "status": "pending|processing|completed|failed",
+                    "progress": "number (0-100)",
+                    "current_step": "string",
+                    "workflow_steps": "array of workflow step objects",
+                    "results": "object (if completed)",
+                },
+            },
+            {
+                "method": "GET",
+                "path": "/api/results/{submission_id}",
+                "description": "Get the final results of a submission",
+                "pathParameters": {
+                    "submission_id": "string (required) - submission UUID",
+                },
+                "response": {
+                    "submission_id": "string",
+                    "status": "completed",
+                    "results": "object with AI analysis results",
+                    "workflow_steps": "array of workflow step objects",
+                },
+            },
+            {
+                "method": "POST",
+                "path": "/api/multi-agent/process",
+                "description": "Process request through multi-agent workflow system",
+                "contentType": "application/json",
+                "requestBody": {
+                    "submission_id": "string (required)",
+                    "user_id": "string (required)",
+                    "workflow_type": "business_analysis|document_processing|voice_analysis|prototype_generation (required)",
+                    "text_content": "string (optional)",
+                    "voice_file_url": "string (optional)",
+                    "file_urls": "array of strings (optional)",
+                    "contact_info": "object (optional)",
+                },
+                "response": {
+                    "submission_id": "string",
+                    "status": "processing",
+                    "message": "string",
+                    "workflow_type": "string",
+                    "estimated_completion_time": "string",
+                },
+            },
+            {
+                "method": "GET",
+                "path": "/api/multi-agent/workflow/{workflow_id}",
+                "description": "Get status of a multi-agent workflow",
+                "pathParameters": {
+                    "workflow_id": "string (required) - workflow UUID",
+                },
+                "response": {
+                    "workflow_id": "string",
+                    "submission_id": "string",
+                    "status": "pending|running|completed|failed|cancelled",
+                    "progress": "number (0-100)",
+                    "current_step": "string",
+                    "agent_results": "object with agent results",
+                },
+            },
+            {
+                "method": "GET",
+                "path": "/api/multi-agent/agents/health",
+                "description": "Get health status of all agents",
+                "response": {
+                    "system_health": "object with overall system health",
+                    "agent_metrics": "object with metrics for each agent",
+                },
+            },
+        ],
+        "timestamp": datetime.now().isoformat(),
+    }
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint with multi-agent system status"""
