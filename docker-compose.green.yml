@@ -4,7 +4,7 @@ services:
     build: ./services/ai-orchestrator
     container_name: ai-microservice-orchestrator-green
     ports:
-      - "127.0.0.1:${AI_ORCHESTRATOR_PORT:-3380}:${AI_ORCHESTRATOR_PORT:-3380}"
+      - ${AI_ORCHESTRATOR_PORT:-3380}:${AI_ORCHESTRATOR_PORT:-3380}
     volumes:
       - ./shared:/app/shared:ro
       - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
@@ -24,7 +24,7 @@ services:
       - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
     restart: unless-stopped
     networks:
-      - ${NGINX_NETWORK_NAME:-nginx-network}
+      - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${AI_ORCHESTRATOR_PORT:-3380}/health"]
       interval: 30s
@@ -37,7 +37,7 @@ services:
     build: ./services/nlp-service
     container_name: ai-microservice-nlp-service-green
     ports:
-      - "127.0.0.1:${NLP_SERVICE_PORT:-3381}:${NLP_SERVICE_PORT:-3381}"
+      - ${NLP_SERVICE_PORT:-3381}:${NLP_SERVICE_PORT:-3381}
     volumes:
       - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
     env_file:
@@ -51,7 +51,7 @@ services:
       - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
     restart: unless-stopped
     networks:
-      - ${NGINX_NETWORK_NAME:-nginx-network}
+      - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${NLP_SERVICE_PORT:-3381}/health"]
       interval: 30s
@@ -64,7 +64,7 @@ services:
     build: ./services/asr-service
     container_name: ai-microservice-asr-service-green
     ports:
-      - "127.0.0.1:${ASR_SERVICE_PORT:-3382}:${ASR_SERVICE_PORT:-3382}"
+      - ${ASR_SERVICE_PORT:-3382}:${ASR_SERVICE_PORT:-3382}
     volumes:
       - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
     env_file:
@@ -79,7 +79,7 @@ services:
       - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
     restart: unless-stopped
     networks:
-      - ${NGINX_NETWORK_NAME:-nginx-network}
+      - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${ASR_SERVICE_PORT:-3382}/health"]
       interval: 30s
@@ -92,7 +92,7 @@ services:
     build: ./services/document-ai
     container_name: ai-microservice-document-ai-green
     ports:
-      - "127.0.0.1:${DOCUMENT_AI_PORT:-3383}:${DOCUMENT_AI_PORT:-3383}"
+      - ${DOCUMENT_AI_PORT:-3383}:${DOCUMENT_AI_PORT:-3383}
     volumes:
       - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
     env_file:
@@ -107,7 +107,7 @@ services:
       - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
     restart: unless-stopped
     networks:
-      - ${NGINX_NETWORK_NAME:-nginx-network}
+      - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${DOCUMENT_AI_PORT:-3383}/health"]
       interval: 30s
@@ -120,7 +120,7 @@ services:
     build: ./services/prototype-generator
     container_name: ai-microservice-prototype-generator-green
     ports:
-      - "127.0.0.1:${PROTOTYPE_GENERATOR_PORT:-3384}:${PROTOTYPE_GENERATOR_PORT:-3384}"
+      - ${PROTOTYPE_GENERATOR_PORT:-3384}:${PROTOTYPE_GENERATOR_PORT:-3384}
     volumes:
       - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
     env_file:
@@ -136,7 +136,7 @@ services:
       - template-repository
     restart: unless-stopped
     networks:
-      - ${NGINX_NETWORK_NAME:-nginx-network}
+      - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${PROTOTYPE_GENERATOR_PORT:-3384}/health"]
       interval: 30s
@@ -149,7 +149,7 @@ services:
     build: ./services/template-repository
     container_name: ai-microservice-template-repository-green
     ports:
-      - "127.0.0.1:${TEMPLATE_REPOSITORY_PORT:-3385}:${TEMPLATE_REPOSITORY_PORT:-3385}"
+      - ${TEMPLATE_REPOSITORY_PORT:-3385}:${TEMPLATE_REPOSITORY_PORT:-3385}
     volumes:
       - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
     env_file:
@@ -162,7 +162,7 @@ services:
       - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
     restart: unless-stopped
     networks:
-      - ${NGINX_NETWORK_NAME:-nginx-network}
+      - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${TEMPLATE_REPOSITORY_PORT:-3385}/health"]
       interval: 30s
@@ -175,7 +175,7 @@ services:
     build: ./services/free-ai-service
     container_name: ai-microservice-free-ai-service-green
     ports:
-      - "127.0.0.1:${FREE_AI_SERVICE_PORT:-3386}:${FREE_AI_SERVICE_PORT:-3386}"
+      - ${FREE_AI_SERVICE_PORT:-3386}:${FREE_AI_SERVICE_PORT:-3386}
     volumes:
       - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
     env_file:
@@ -191,7 +191,7 @@ services:
       - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
     restart: unless-stopped
     networks:
-      - ${NGINX_NETWORK_NAME:-nginx-network}
+      - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${FREE_AI_SERVICE_PORT:-3386}/health"]
       interval: 30s
@@ -204,7 +204,7 @@ services:
     build: ./services/ai-workers
     container_name: ai-microservice-ai-workers-green
     ports:
-      - "127.0.0.1:${AI_WORKERS_PORT:-3387}:${AI_WORKERS_PORT:-3387}"
+      - ${AI_WORKERS_PORT:-3387}:${AI_WORKERS_PORT:-3387}
     volumes:
       - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
     env_file:
@@ -220,7 +220,7 @@ services:
       - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
     restart: unless-stopped
     networks:
-      - ${NGINX_NETWORK_NAME:-nginx-network}
+      - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${AI_WORKERS_PORT:-3387}/health"]
       interval: 30s
@@ -233,7 +233,7 @@ services:
     build: ./services/gemini-ai-service
     container_name: ai-microservice-gemini-ai-service-green
     ports:
-      - "127.0.0.1:${GEMINI_AI_SERVICE_PORT:-3388}:${GEMINI_AI_SERVICE_PORT:-3388}"
+      - ${GEMINI_AI_SERVICE_PORT:-3388}:${GEMINI_AI_SERVICE_PORT:-3388}
     volumes:
       - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
     env_file:
@@ -249,7 +249,7 @@ services:
       - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
     restart: unless-stopped
     networks:
-      - ${NGINX_NETWORK_NAME:-nginx-network}
+      - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${GEMINI_AI_SERVICE_PORT:-3388}/health"]
       interval: 30s
@@ -262,7 +262,7 @@ services:
     build: ./services/data-viz-service
     container_name: ai-microservice-data-viz-service-green
     ports:
-      - "127.0.0.1:${DATA_VIZ_SERVICE_PORT:-3389}:${DATA_VIZ_SERVICE_PORT:-3389}"
+      - ${DATA_VIZ_SERVICE_PORT:-3389}:${DATA_VIZ_SERVICE_PORT:-3389}
     volumes:
       - ${DOCKER_VOLUME_BASE_PATH:-/srv/storagebox/statex/docker-volumes}/ai-microservice/logs:/app/logs
     env_file:
@@ -279,7 +279,7 @@ services:
       - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
     restart: unless-stopped
     networks:
-      - ${NGINX_NETWORK_NAME:-nginx-network}
+      - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${DATA_VIZ_SERVICE_PORT:-3389}/health"]
       interval: 30s
@@ -288,6 +288,6 @@ services:
       start_period: 40s
 
 networks:
-  ${NGINX_NETWORK_NAME:-nginx-network}:
+  nginx-network:
     external: true
 
