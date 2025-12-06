@@ -55,15 +55,26 @@ class CentralizedLogger:
             console_handler.setFormatter(formatter)
             self.logger.addHandler(console_handler)
         
-        # File handler (fallback)
+        # File handler (fallback) - only if directory is writable
         if os.getenv('LOG_TO_FILE', 'true').lower() == 'true':
             log_dir = Path("/app/logs") if Path("/app/logs").exists() else Path("./logs")
-            log_dir.mkdir(exist_ok=True)
-            log_file = log_dir / f'{service_name}.log'
-            
-            file_handler = logging.FileHandler(log_file)
-            file_handler.setFormatter(formatter)
-            self.logger.addHandler(file_handler)
+            try:
+                log_dir.mkdir(exist_ok=True, mode=0o755)
+                log_file = log_dir / f'{service_name}.log'
+                # Test if we can write to the directory
+                test_file = log_dir / '.test_write'
+                try:
+                    test_file.touch()
+                    test_file.unlink()
+                    file_handler = logging.FileHandler(log_file)
+                    file_handler.setFormatter(formatter)
+                    self.logger.addHandler(file_handler)
+                except (PermissionError, OSError):
+                    # Directory not writable, skip file logging
+                    pass
+            except (PermissionError, OSError):
+                # Cannot create directory, skip file logging
+                pass
     
     def _map_log_level(self, level: str) -> str:
         """Map internal log levels to logging-microservice API format"""
