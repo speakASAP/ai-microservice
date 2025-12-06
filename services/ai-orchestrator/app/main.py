@@ -278,6 +278,7 @@ async def root():
     }
 
 @app.get("/api")
+@app.get("/api/")
 async def api_info():
     """API documentation endpoint"""
     return {
