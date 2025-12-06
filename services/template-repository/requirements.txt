@@ -4,3 +4,4 @@ pydantic==2.11.4
 pydantic-core==2.33.2
 python-dotenv==1.0.0
 gitpython==3.1.40
+httpx>=0.28.0
