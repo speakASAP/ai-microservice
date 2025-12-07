@@ -27,10 +27,10 @@ services:
       - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${AI_ORCHESTRATOR_PORT:-3380}/health"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 2
+      start_period: 30s
 
   # NLP Service - Text analysis and generation (Blue)
   nlp-service:
@@ -54,10 +54,10 @@ services:
       - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${NLP_SERVICE_PORT:-3381}/health"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 2
+      start_period: 30s
 
   # ASR Service - Speech-to-text conversion (Blue)
   asr-service:
@@ -83,10 +83,10 @@ services:
       - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${ASR_SERVICE_PORT:-3382}/health"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 2
+      start_period: 30s
 
   # Document AI Service - File analysis and processing (Blue)
   document-ai:
@@ -112,10 +112,10 @@ services:
       - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${DOCUMENT_AI_PORT:-3383}/health"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 2
+      start_period: 30s
 
   # Prototype Generator Service - Website and app creation (Blue)
   prototype-generator:
@@ -142,10 +142,10 @@ services:
       - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${PROTOTYPE_GENERATOR_PORT:-3384}/health"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 2
+      start_period: 30s
 
   # Template Repository Service - Template management (Blue)
   template-repository:
@@ -169,10 +169,10 @@ services:
       - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${TEMPLATE_REPOSITORY_PORT:-3385}/health"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 2
+      start_period: 30s
 
   # Free AI Service - Free AI models (Blue)
   free-ai-service:
@@ -198,10 +198,10 @@ services:
       - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${FREE_AI_SERVICE_PORT:-3386}/health"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 2
+      start_period: 30s
 
   # AI Workers - AI processing agents and workers (Blue)
   ai-workers:
@@ -228,10 +228,10 @@ services:
       - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${AI_WORKERS_PORT:-3387}/health"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 2
+      start_period: 30s
 
   # Gemini AI Service - Google Gemini AI models (Blue)
   gemini-ai-service:
@@ -258,10 +258,10 @@ services:
       - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${GEMINI_AI_SERVICE_PORT:-3388}/health"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 2
+      start_period: 30s
 
   # Data Analysis/Visualization Service (Blue)
   data-viz-service:
@@ -289,10 +289,10 @@ services:
       - nginx-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${DATA_VIZ_SERVICE_PORT:-3389}/health"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 3
-      start_period: 40s
+      retries: 2
+      start_period: 30s
 
 networks:
   nginx-network:
