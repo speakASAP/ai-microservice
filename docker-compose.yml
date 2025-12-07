@@ -23,6 +23,12 @@ services:
     restart: unless-stopped
     networks:
       - nginx-network
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+        reservations:
+          memory: 50M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${AI_ORCHESTRATOR_PORT:-3380}/health"]
       interval: 10s
@@ -47,6 +53,12 @@ services:
     restart: unless-stopped
     networks:
       - nginx-network
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+        reservations:
+          memory: 40M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${NLP_SERVICE_PORT:-3381}/health"]
       interval: 10s
@@ -73,6 +85,12 @@ services:
     restart: unless-stopped
     networks:
       - nginx-network
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+        reservations:
+          memory: 60M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${ASR_SERVICE_PORT:-3382}/health"]
       interval: 10s
@@ -99,6 +117,12 @@ services:
     restart: unless-stopped
     networks:
       - nginx-network
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+        reservations:
+          memory: 70M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${DOCUMENT_AI_PORT:-3383}/health"]
       interval: 10s
@@ -126,6 +150,12 @@ services:
     restart: unless-stopped
     networks:
       - nginx-network
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+        reservations:
+          memory: 50M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${PROTOTYPE_GENERATOR_PORT:-3384}/health"]
       interval: 10s
@@ -150,6 +180,12 @@ services:
     restart: unless-stopped
     networks:
       - nginx-network
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+        reservations:
+          memory: 45M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${TEMPLATE_REPOSITORY_PORT:-3385}/health"]
       interval: 10s
@@ -176,6 +212,12 @@ services:
     restart: unless-stopped
     networks:
       - nginx-network
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+        reservations:
+          memory: 75M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${FREE_AI_SERVICE_PORT:-3386}/health"]
       interval: 10s
@@ -203,6 +245,12 @@ services:
     restart: unless-stopped
     networks:
       - nginx-network
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+        reservations:
+          memory: 65M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${AI_WORKERS_PORT:-3387}/health"]
       interval: 10s
@@ -230,6 +278,12 @@ services:
     restart: unless-stopped
     networks:
       - nginx-network
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+        reservations:
+          memory: 65M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${GEMINI_AI_SERVICE_PORT:-3388}/health"]
       interval: 10s
@@ -258,6 +312,12 @@ services:
     restart: unless-stopped
     networks:
       - nginx-network
+    deploy:
+      resources:
+        limits:
+          memory: 250M
+        reservations:
+          memory: 100M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${DATA_VIZ_SERVICE_PORT:-3389}/health"]
       interval: 10s
