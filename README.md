@@ -76,6 +76,12 @@ cd /home/statex/ai-microservice
 Copy `.env.example` to `.env` and configure:
 
 ```bash
+# Service Domain - Used by nginx-microservice for auto-registry (required for correct domain detection)
+DOMAIN=ai.statex.cz
+
+# Service Name - Used for logging and service identification
+SERVICE_NAME=ai-microservice
+
 # Port Configuration
 AI_ORCHESTRATOR_PORT=3380
 NLP_SERVICE_PORT=3381
