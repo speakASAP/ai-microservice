@@ -29,7 +29,7 @@ services:
       resources:
         limits:
           memory: 200M
-          cpus: '0.5\'
+          cpus: '0.5'
         reservations:
           memory: 50M
     healthcheck:
@@ -63,7 +63,7 @@ services:
       resources:
         limits:
           memory: 200M
-          cpus: '0.5\'
+          cpus: '0.5'
         reservations:
           memory: 40M
     healthcheck:
@@ -99,7 +99,7 @@ services:
       resources:
         limits:
           memory: 200M
-          cpus: '0.5\'
+          cpus: '0.5'
         reservations:
           memory: 60M
     healthcheck:
@@ -133,7 +133,7 @@ services:
       resources:
         limits:
           memory: 200M
-          cpus: '0.5\'
+          cpus: '0.5'
         reservations:
           memory: 70M
     healthcheck:
@@ -170,7 +170,7 @@ services:
       resources:
         limits:
           memory: 200M
-          cpus: '0.5\'
+          cpus: '0.5'
         reservations:
           memory: 50M
     healthcheck:
@@ -204,7 +204,7 @@ services:
       resources:
         limits:
           memory: 200M
-          cpus: '0.5\'
+          cpus: '0.5'
         reservations:
           memory: 45M
     healthcheck:
@@ -240,7 +240,7 @@ services:
       resources:
         limits:
           memory: 200M
-          cpus: '0.5\'
+          cpus: '0.5'
         reservations:
           memory: 75M
     healthcheck:
@@ -275,7 +275,7 @@ services:
       resources:
         limits:
           memory: 200M
-          cpus: '0.5\'
+          cpus: '0.5'
         reservations:
           memory: 65M
     healthcheck:
@@ -312,7 +312,7 @@ services:
       resources:
         limits:
           memory: 200M
-          cpus: '0.5\'
+          cpus: '0.5'
         reservations:
           memory: 65M
     healthcheck:
@@ -350,7 +350,7 @@ services:
       resources:
         limits:
           memory: 250M
-          cpus: '0.5\'
+          cpus: '0.5'
         reservations:
           memory: 100M
     healthcheck:
