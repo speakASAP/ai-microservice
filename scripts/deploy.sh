@@ -28,6 +28,10 @@ if [ ! -f "$NGINX_MICROSERVICE_DIR/scripts/blue-green/deploy-smart.sh" ]; then
 fi
 
 echo ""
+echo "Updating code from repository..."
+git pull
+
+echo ""
 echo "Deploying via nginx microservice..."
 echo ""
 
