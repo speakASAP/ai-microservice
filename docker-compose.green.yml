@@ -3,6 +3,9 @@ services:
   backend:
     build: ./services/ai-orchestrator
     container_name: ai-microservice-orchestrator-green
+    labels:
+      - "com.statex.service=backend"
+      - "com.statex.port=3380"
     ports:
       - ${AI_ORCHESTRATOR_PORT:-3380}:${AI_ORCHESTRATOR_PORT:-3380}
     volumes:
