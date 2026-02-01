@@ -2,14 +2,20 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system deps + build deps for numpy (for CPU compatibility on older hosts)
 RUN apt-get update && apt-get install -y \
     curl \
+    gcc \
+    gfortran \
+    libopenblas-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Rebuild numpy from source so it matches the build host CPU (fixes X86_V2 on older prod servers)
+RUN pip install --no-cache-dir --no-binary numpy numpy
 
 # Copy application code
 COPY app/ ./app/
