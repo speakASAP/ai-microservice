@@ -17,7 +17,8 @@ COPY --chown=appuser:appuser requirements.txt .
 # Install NumPy from source so it matches build host CPU (avoids RuntimeError: NumPy was built with
 # baseline optimizations X86_V2 but your machine doesn't support X86_V2 when building on older VMs/emulators)
 RUN pip install --no-cache-dir "numpy>=1.26.0" --no-binary numpy
-RUN pip install --no-cache-dir -r requirements.txt
+# Keep --no-binary numpy so pip does not overwrite with a wheel when installing nltk/spacy deps
+RUN pip install --no-cache-dir --no-binary numpy -r requirements.txt
 
 # Download NLTK data
 # Download wordnet manually first (before importing nltk) to avoid import-triggered loading issues
