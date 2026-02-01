@@ -20,11 +20,15 @@ RUN pip install --no-cache-dir "numpy>=1.26.0" --no-binary numpy
 # Keep --no-binary numpy so pip does not overwrite with a wheel when installing nltk/spacy deps
 RUN pip install --no-cache-dir --no-binary numpy -r requirements.txt
 
-# Download NLTK data
-# Download wordnet manually first (before importing nltk) to avoid import-triggered loading issues
-RUN python -c "import urllib.request, zipfile, os; os.makedirs('/root/nltk_data/corpora', exist_ok=True); urllib.request.urlretrieve('https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/corpora/wordnet.zip', '/tmp/wordnet.zip'); zipfile.ZipFile('/tmp/wordnet.zip').extractall('/root/nltk_data/corpora/'); os.remove('/tmp/wordnet.zip')"
-# Then download other NLTK data packages
-RUN python -c "import nltk; nltk.download('punkt', quiet=True); nltk.download('stopwords', quiet=True); nltk.download('vader_lexicon', quiet=True)"
+# Download NLTK data manually (no "import nltk" at build time to avoid NumPy X86_V2 wheel load)
+ENV NLTK_DATA=/app/nltk_data
+RUN python -c "\
+import urllib.request, zipfile, os; \
+base='https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages'; \
+dest='/app/nltk_data'; \
+pkgs=[('corpora/wordnet', 'wordnet'), ('tokenizers/punkt', 'punkt'), ('corpora/stopwords', 'stopwords'), ('sentiment/vader_lexicon', 'vader_lexicon')]; \
+[(os.makedirs(os.path.join(dest, os.path.dirname(p)), exist_ok=True), urllib.request.urlretrieve(f'{base}/{p}.zip', f'/tmp/{n}.zip'), zipfile.ZipFile(f'/tmp/{n}.zip').extractall(os.path.join(dest, os.path.dirname(p))), os.remove(f'/tmp/{n}.zip')) for p, n in pkgs]\
+" && chown -R appuser:appuser /app/nltk_data
 
 # Copy application code with correct ownership
 COPY --chown=appuser:appuser . .
