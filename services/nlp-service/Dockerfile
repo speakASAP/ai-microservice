@@ -14,6 +14,9 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements and install Python dependencies
 COPY --chown=appuser:appuser requirements.txt .
+# Install NumPy from source so it matches build host CPU (avoids RuntimeError: NumPy was built with
+# baseline optimizations X86_V2 but your machine doesn't support X86_V2 when building on older VMs/emulators)
+RUN pip install --no-cache-dir "numpy>=1.26.0" --no-binary numpy
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Download NLTK data
