@@ -31,7 +31,7 @@ Centralized AI processing service for the Statex microservices ecosystem. Provid
 **Port Range**: 338x (shared microservices)
 
 | Service | Host Port | Container Port | .env Variable | Description |
-|---------|-----------|----------------|---------------|-------------|
+| ------- | --------- | -------------- | ------------- | ----------- |
 | **AI Orchestrator** | `${AI_ORCHESTRATOR_PORT:-3380}` | `${AI_ORCHESTRATOR_PORT:-3380}` | `AI_ORCHESTRATOR_PORT` | Central AI coordination |
 | **NLP Service** | `${NLP_SERVICE_PORT:-3381}` | `${NLP_SERVICE_PORT:-3381}` | `NLP_SERVICE_PORT` | Text analysis and generation |
 | **ASR Service** | `${ASR_SERVICE_PORT:-3382}` | `${ASR_SERVICE_PORT:-3382}` | `ASR_SERVICE_PORT` | Speech-to-text conversion |
