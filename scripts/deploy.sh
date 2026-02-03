@@ -28,10 +28,16 @@ if [ ! -f "$NGINX_MICROSERVICE_DIR/scripts/blue-green/deploy-smart.sh" ]; then
 fi
 
 echo ""
-echo "Updating code from repository..."
-git pull
+# Deploy only code from repository: sync with remote (discard local changes on server)
+if [ -d ".git" ]; then
+    echo "Syncing with remote repository..."
+    git fetch origin
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    git reset --hard "origin/$BRANCH"
+    echo "✓ Repository synced to origin/$BRANCH"
+    echo ""
+fi
 
-echo ""
 echo "Deploying via nginx microservice..."
 echo ""
 
