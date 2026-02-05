@@ -169,15 +169,18 @@ app.add_middleware(
 # Service URLs
 # Service URLs - use environment variables with defaults from .env
 free_ai_port = os.getenv("FREE_AI_SERVICE_PORT", "3386")
+gemini_ai_port = os.getenv("GEMINI_AI_SERVICE_PORT", "3388")
 asr_port = os.getenv("ASR_SERVICE_PORT", "3382")
 document_ai_port = os.getenv("DOCUMENT_AI_PORT", "3383")
 prototype_gen_port = os.getenv("PROTOTYPE_GENERATOR_PORT", "3384")
 free_ai_host = os.getenv("FREE_AI_SERVICE_HOST", "free-ai-service")
+gemini_ai_host = os.getenv("GEMINI_AI_SERVICE_HOST", "gemini-ai-service")
 asr_host = os.getenv("ASR_SERVICE_HOST", "asr-service")
 document_ai_host = os.getenv("DOCUMENT_AI_HOST", "document-ai")
 prototype_gen_host = os.getenv("PROTOTYPE_GENERATOR_HOST", "prototype-generator")
 
 NLP_SERVICE_URL = os.getenv("NLP_SERVICE_URL", f"http://{free_ai_host}:{free_ai_port}")  # Use free-ai-service
+GEMINI_AI_SERVICE_URL = os.getenv("GEMINI_AI_SERVICE_URL", f"http://{gemini_ai_host}:{gemini_ai_port}")
 ASR_SERVICE_URL = os.getenv("ASR_SERVICE_URL", f"http://{asr_host}:{asr_port}")
 DOCUMENT_AI_URL = os.getenv("DOCUMENT_AI_URL", f"http://{document_ai_host}:{document_ai_port}")
 PROTOTYPE_GENERATOR_URL = os.getenv("PROTOTYPE_GENERATOR_URL", f"http://{prototype_gen_host}:{prototype_gen_port}")
@@ -412,6 +415,188 @@ async def health_check():
         "version": "2.0.0",
         "multi_agent_system": system_health
     }
+
+@app.get("/models")
+async def get_available_models(
+    free_only: bool = False,
+    context_min: Optional[int] = None,
+    limit: Optional[int] = None,
+    provider: Optional[str] = None
+):
+    """Get unified list of all available AI models from all services (fetched from source APIs)
+    
+    Query Parameters:
+        free_only: If True, return only free models (default: False)
+        context_min: Minimum context window size in tokens (optional)
+        limit: Maximum number of models to return per provider (optional)
+        provider: Filter by specific provider (e.g., "openrouter", "gemini") (optional)
+    """
+    try:
+        models_by_provider = {}
+        providers = {}
+        model_list = []
+        
+        # Build query parameters for free-ai-service
+        free_ai_params = {}
+        if free_only:
+            free_ai_params["free_only"] = "true"
+        if context_min is not None:
+            free_ai_params["context_min"] = str(context_min)
+        if limit is not None:
+            free_ai_params["limit"] = str(limit)
+        
+        # Fetch models from free-ai-service (which fetches from OpenRouter API)
+        if not provider or provider == "openrouter":
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    free_ai_response = await client.get(
+                        f"{NLP_SERVICE_URL}/models",
+                        params=free_ai_params
+                    )
+                    if free_ai_response.status_code == 200:
+                        free_ai_data = free_ai_response.json()
+                        free_ai_models = free_ai_data.get("models", {})
+                        free_ai_providers = free_ai_data.get("providers", {})
+                    
+                        # Process free-ai-service models (from OpenRouter API)
+                        # Format: {"openrouter": [{"id": "...", "name": "...", "description": "...", "context_length": ..., "pricing": {...}}, ...]}
+                        for prov, provider_models in free_ai_models.items():
+                            if prov not in models_by_provider:
+                                models_by_provider[prov] = []
+                            if isinstance(provider_models, list):
+                                for model_item in provider_models:
+                                    if isinstance(model_item, dict):
+                                        model_id = model_item.get("id") or model_item.get("name", "")
+                                        model_name = model_item.get("name", model_id)
+                                        description = model_item.get("description", "")
+                                        context_length = model_item.get("context_length", 0)
+                                        pricing = model_item.get("pricing", {})
+                                        capabilities = model_item.get("capabilities", [])
+                                        
+                                        if model_id:
+                                            models_by_provider[prov].append({
+                                                "id": model_id,
+                                                "name": model_name,
+                                                "description": description,
+                                                "context_length": context_length,
+                                                "pricing": pricing,
+                                                "capabilities": capabilities
+                                            })
+                                            model_list.append({
+                                                "provider": prov,
+                                                "name": model_id,
+                                                "description": description,
+                                                "context_length": context_length,
+                                                "pricing": pricing
+                                            })
+                            elif isinstance(provider_models, dict):
+                                # Handle dict format (fallback)
+                                for model_id, model_info in provider_models.items():
+                                    if isinstance(model_info, dict):
+                                        model_name = model_info.get("name", model_id)
+                                        description = model_info.get("description", "")
+                                        context_length = model_info.get("context_length", 0)
+                                        pricing = model_info.get("pricing", {})
+                                        capabilities = model_info.get("capabilities", [])
+                                    else:
+                                        model_name = str(model_id)
+                                        description = ""
+                                        context_length = 0
+                                        pricing = {}
+                                        capabilities = []
+                                    models_by_provider[prov].append({
+                                        "id": model_id,
+                                        "name": model_name,
+                                        "description": description,
+                                        "context_length": context_length,
+                                        "pricing": pricing,
+                                        "capabilities": capabilities
+                                    })
+                                    model_list.append({
+                                        "provider": prov,
+                                        "name": model_id,
+                                        "description": description,
+                                        "context_length": context_length,
+                                        "pricing": pricing
+                                    })
+                        
+                        # Add provider status
+                        providers.update(free_ai_providers)
+                        logger.info(f"Fetched {len(model_list)} models from free-ai-service (OpenRouter)")
+        except Exception as e:
+            logger.warning(f"Failed to fetch models from free-ai-service: {e}")
+        
+        # Fetch models from gemini-ai-service
+        if not provider or provider == "gemini":
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    gemini_response = await client.get(f"{GEMINI_AI_SERVICE_URL}/models")
+                    if gemini_response.status_code == 200:
+                        gemini_data = gemini_response.json()
+                        gemini_models = gemini_data.get("models", {})
+                        
+                        # Process gemini-ai-service models
+                        gemini_provider = "gemini"
+                        if gemini_provider not in models_by_provider:
+                            models_by_provider[gemini_provider] = []
+                        
+                        gemini_count = 0
+                        if isinstance(gemini_models, dict):
+                            for model_id, model_info in gemini_models.items():
+                                # Apply filters
+                                if free_only:
+                                    # Gemini models are generally free, but check if needed
+                                    pass  # Include all Gemini models as they're typically free
+                                
+                                if isinstance(model_info, dict):
+                                    model_name = model_info.get("name", model_id)
+                                    description = model_info.get("description", "")
+                                    capabilities = model_info.get("capabilities", [])
+                                    context_length = model_info.get("context_length", 0)
+                                    
+                                    # Filter by context_min if specified
+                                    if context_min is not None and context_length < context_min:
+                                        continue
+                                    
+                                    models_by_provider[gemini_provider].append({
+                                        "id": model_id,
+                                        "name": model_name,
+                                        "description": description,
+                                        "context_length": context_length,
+                                        "pricing": {"free": True},
+                                        "capabilities": capabilities
+                                    })
+                                    model_list.append({
+                                        "provider": gemini_provider,
+                                        "name": model_id,
+                                        "description": description,
+                                        "context_length": context_length,
+                                        "pricing": {"free": True}
+                                    })
+                                    gemini_count += 1
+                                    
+                                    # Apply limit if specified
+                                    if limit is not None and gemini_count >= limit:
+                                        break
+                        
+                        providers[gemini_provider] = {"status": "available"}
+                        logger.info(f"Fetched {gemini_count} models from gemini-ai-service")
+            except Exception as e:
+                logger.warning(f"Failed to fetch models from gemini-ai-service: {e}")
+                providers["gemini"] = {"status": "error"}
+        
+        return {
+            "models": models_by_provider,
+            "providers": providers,
+            "modelList": model_list
+        }
+    except Exception as e:
+        logger.error(f"Error fetching available models: {e}")
+        return {
+            "models": {},
+            "providers": {},
+            "modelList": []
+        }
 
 @app.get("/metrics")
 async def metrics():

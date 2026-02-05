@@ -664,12 +664,111 @@ async def metrics():
     return {"message": "Metrics collection is disabled", "status": "disabled"}
 
 @app.get("/models")
-async def get_available_models():
-    """Get list of available AI models"""
-    return {
-        "models": free_ai_service.available_models,
-        "providers": free_ai_service.provider_status
-    }
+async def get_available_models(free_only: bool = False, context_min: Optional[int] = None, limit: Optional[int] = None):
+    """Get list of available AI models from source APIs
+    
+    Args:
+        free_only: If True, return only free models
+        context_min: Minimum context window size in tokens
+        limit: Maximum number of models to return per provider
+    """
+    try:
+        models_by_provider = {}
+        providers = {}
+        
+        # Fetch models from OpenRouter API (from source)
+        if OPENROUTER_API_KEY:
+            try:
+                headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}"}
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+                
+                connector = aiohttp.TCPConnector(ssl=ssl_context)
+                async with aiohttp.ClientSession(connector=connector) as session:
+                    async with session.get(
+                        f"{OPENROUTER_API_BASE}/models",
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=15)
+                    ) as response:
+                        if response.status == 200:
+                            openrouter_data = await response.json()
+                            openrouter_models = openrouter_data.get("data", [])
+                            
+                            provider = "openrouter"
+                            models_by_provider[provider] = []
+                            
+                            for model_data in openrouter_models:
+                                model_id = model_data.get("id", "")
+                                if not model_id:
+                                    continue
+                                
+                                # Extract pricing info
+                                pricing = model_data.get("pricing", {})
+                                prompt_price = pricing.get("prompt", "0")
+                                completion_price = pricing.get("completion", "0")
+                                is_free = prompt_price == "0" and completion_price == "0"
+                                
+                                # Filter by free_only if specified
+                                if free_only and not is_free:
+                                    continue
+                                
+                                # Extract context length
+                                context_length = model_data.get("context_length", 0)
+                                
+                                # Filter by context_min if specified
+                                if context_min is not None and context_length < context_min:
+                                    continue
+                                
+                                # Extract model info
+                                model_name = model_data.get("name", model_id)
+                                description = model_data.get("description", "")
+                                architecture = model_data.get("architecture", {})
+                                top_provider = model_data.get("top_provider", {})
+                                
+                                model_info = {
+                                    "id": model_id,
+                                    "name": model_name,
+                                    "description": description,
+                                    "context_length": context_length,
+                                    "pricing": {
+                                        "prompt": prompt_price,
+                                        "completion": completion_price,
+                                        "free": is_free
+                                    },
+                                    "architecture": architecture,
+                                    "top_provider": top_provider.get("name", ""),
+                                    "capabilities": []
+                                }
+                                
+                                models_by_provider[provider].append(model_info)
+                            
+                            # Apply limit if specified
+                            if limit is not None and limit > 0:
+                                models_by_provider[provider] = models_by_provider[provider][:limit]
+                            
+                            providers[provider] = {"status": "available"}
+                            logger.info(f"✅ Fetched {len(models_by_provider[provider])} models from OpenRouter API")
+                        else:
+                            logger.warning(f"OpenRouter API returned status {response.status}")
+                            providers["openrouter"] = {"status": "unavailable"}
+            except Exception as e:
+                logger.error(f"Failed to fetch models from OpenRouter API: {e}")
+                providers["openrouter"] = {"status": "error"}
+        else:
+            providers["openrouter"] = {"status": "unavailable", "reason": "API key not set"}
+        
+        # Return models from source APIs
+        return {
+            "models": models_by_provider,
+            "providers": providers
+        }
+    except Exception as e:
+        logger.error(f"Error fetching models: {e}")
+        return {
+            "models": {},
+            "providers": {}
+        }
 
 @app.post("/analyze", response_model=AIAnalysisResponse)
 async def analyze_text(request: AIAnalysisRequest):
