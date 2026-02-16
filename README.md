@@ -144,6 +144,12 @@ docker compose -f docker-compose.blue.yml logs -f
 - `GET /api/status/{submission_id}` - Check processing status
 - `GET /api/results/{submission_id}` - Get final results
 - `GET /health` - Health check
+- `POST /api/shop-assistant/transcribe` - Shop-assistant ASR (voice to text)
+- `POST /api/shop-assistant/refine-query` - Shop-assistant COMMUNICATION agent (refine user text)
+-,`POST /api/shop-assistant/search` - Shop-assistant SEARCH agent (external search)
+-,`POST /api/shop-assistant/format-presentation` - Shop-assistant PRESENTATION agent (format results)
+-,`POST /api/shop-assistant/compare-prices` - Shop-assistant COMPARISON agent (price/priorities comparison)
+-,`POST /api/shop-assistant/extract-location` - Shop-assistant LOCATION agent (delivery region)
 
 ## Integration
 

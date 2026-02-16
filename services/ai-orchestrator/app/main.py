@@ -62,6 +62,7 @@ from .workflow_persistence import workflow_persistence
 from .workflow_recovery import workflow_recovery_manager, RecoveryStrategy
 from .error_handling import error_recovery_manager
 from .project_url_generator import project_url_generator
+from . import shop_assistant_agents as shop_agents
 
 # Configure logging with centralized external logging service
 # Import logger from shared directory
@@ -126,9 +127,10 @@ async def lifespan(app: FastAPI):
             logger.info(f"Auto-recovered {len(recovered_workflows)} interrupted workflows")
         
         logger.info("Multi-agent orchestrator initialized successfully")
+        shop_agents.set_logger(logger)
     except Exception as e:
         logger.error(f"Failed to initialize multi-agent system: {e}")
-    
+
     yield
     
     # Shutdown
@@ -215,6 +217,46 @@ class SubmissionRequest(BaseModel):
     requirements: Optional[str] = None
     contact_info: Dict[str, Any] = {}
 
+# Shop-assistant agents: request/response models
+class ShopTranscribeRequest(BaseModel):
+    voice_file_url: str
+
+class ShopRefineQueryRequest(BaseModel):
+    user_text: str
+    previous_params: Optional[Dict[str, Any]] = None
+    role: str = "default"
+    prompt_content: Optional[str] = None
+    model: Optional[str] = None
+
+class ShopSearchRequest(BaseModel):
+    query_text: str
+    limit: int = 20
+
+class ShopFormatPresentationRequest(BaseModel):
+    results: List[Dict[str, Any]]
+    query_text: str
+    role: str = "default"
+    prompt_content: Optional[str] = None
+    model: Optional[str] = None
+
+
+class ShopCompareRequest(BaseModel):
+    results: List[Dict[str, Any]]
+    query_text: str
+    role: str = "default"
+    prompt_content: Optional[str] = None
+    model: Optional[str] = None
+    priority_order: Optional[List[str]] = None
+
+
+class ShopLocationRequest(BaseModel):
+    user_text: str
+    query_text: str
+    role: str = "default"
+    prompt_content: Optional[str] = None
+    model: Optional[str] = None
+    priority_order: Optional[List[str]] = None
+
 class AIAnalysisResult(BaseModel):
     service: str
     status: str
@@ -267,6 +309,12 @@ async def root():
             "multiAgentProcess": "POST /api/multi-agent/process",
             "getWorkflowStatus": "GET /api/multi-agent/workflow/{workflow_id}",
             "getAgentsHealth": "GET /api/multi-agent/agents/health",
+            "shopAssistantTranscribe": "POST /api/shop-assistant/transcribe",
+            "shopAssistantRefineQuery": "POST /api/shop-assistant/refine-query",
+            "shopAssistantSearch": "POST /api/shop-assistant/search",
+            "shopAssistantFormatPresentation": "POST /api/shop-assistant/format-presentation",
+            "shopAssistantComparePrices": "POST /api/shop-assistant/compare-prices",
+            "shopAssistantExtractLocation": "POST /api/shop-assistant/extract-location",
         },
         "documentation": {
             "healthCheck": "GET /health - Check service health status with multi-agent system status",
@@ -402,6 +450,96 @@ async def api_info():
         ],
         "timestamp": datetime.now().isoformat(),
     }
+
+# --- Shop-assistant agents: all AI tasks run in ai-microservice ---
+@app.post("/api/shop-assistant/transcribe")
+async def shop_assistant_transcribe(req: ShopTranscribeRequest):
+    """ASR agent: transcribe audio URL to text."""
+    try:
+        result = await shop_agents.agent_transcribe(req.voice_file_url)
+        return result
+    except Exception as e:
+        logger.error("Shop-assistant transcribe failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/shop-assistant/refine-query")
+async def shop_assistant_refine_query(req: ShopRefineQueryRequest):
+    """COMMUNICATION agent: refine user text into a search query."""
+    try:
+        result = await shop_agents.agent_refine_query(
+            user_text=req.user_text,
+            previous_params=req.previous_params,
+            role=req.role,
+            prompt_content=req.prompt_content,
+            model=req.model,
+        )
+        return result
+    except Exception as e:
+        logger.warning("Shop-assistant refine-query failed: %s", e)
+        return {"query_text": req.user_text.strip(), "refined_params": req.previous_params or {}}
+
+@app.post("/api/shop-assistant/search")
+async def shop_assistant_search(req: ShopSearchRequest):
+    """SEARCH agent: run external search (Serper) and return items."""
+    try:
+        result = await shop_agents.agent_search(query_text=req.query_text, limit=req.limit)
+        return result
+    except Exception as e:
+        logger.error("Shop-assistant search failed: %s", e)
+        return {"items": []}
+
+@app.post("/api/shop-assistant/format-presentation")
+async def shop_assistant_format_presentation(req: ShopFormatPresentationRequest):
+    """PRESENTATION agent: format search results for user chat."""
+    try:
+        result = await shop_agents.agent_format_presentation(
+            results=req.results,
+            query_text=req.query_text,
+            role=req.role,
+            prompt_content=req.prompt_content,
+            model=req.model,
+        )
+        return result
+    except Exception as e:
+        logger.warning("Shop-assistant format-presentation failed: %s", e)
+        fallback = shop_agents._fallback_presentation(req.results, req.query_text)
+        return {"formatted_content": fallback}
+
+
+@app.post("/api/shop-assistant/compare-prices")
+async def shop_assistant_compare_prices(req: ShopCompareRequest):
+    """COMPARISON agent: compare prices and priorities for products."""
+    try:
+        result = await shop_agents.agent_compare_prices(
+            results=req.results,
+            query_text=req.query_text,
+            role=req.role,
+            prompt_content=req.prompt_content,
+            model=req.model,
+            priority_order=req.priority_order,
+        )
+        return result
+    except Exception as e:
+        logger.warning("Shop-assistant compare-prices failed: %s", e)
+        return {"summary": ""}
+
+
+@app.post("/api/shop-assistant/extract-location")
+async def shop_assistant_extract_location(req: ShopLocationRequest):
+    """LOCATION agent: extract delivery region / shipping location."""
+    try:
+        result = await shop_agents.agent_extract_location(
+            user_text=req.user_text,
+            query_text=req.query_text,
+            role=req.role,
+            prompt_content=req.prompt_content,
+            model=req.model,
+            priority_order=req.priority_order,
+        )
+        return result
+    except Exception as e:
+        logger.warning("Shop-assistant extract-location failed: %s", e)
+        return {"region": None, "augmented_query": None}
 
 @app.get("/health")
 async def health_check():

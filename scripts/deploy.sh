@@ -28,14 +28,33 @@ if [ ! -f "$NGINX_MICROSERVICE_DIR/scripts/blue-green/deploy-smart.sh" ]; then
 fi
 
 echo ""
+
+# Load NODE_ENV from .env file to determine environment
+NODE_ENV=""
+if [ -f "$PROJECT_DIR/.env" ]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$PROJECT_DIR/.env" 2>/dev/null || true
+    set +a
+    NODE_ENV="${NODE_ENV:-}"
+fi
+
 # Deploy only code from repository: sync with remote (discard local changes on server)
+# Only sync if NODE_ENV is set to "production"
 if [ -d ".git" ]; then
-    echo "Syncing with remote repository..."
-    git fetch origin
-    BRANCH=$(git rev-parse --abbrev-ref HEAD)
-    git reset --hard "origin/$BRANCH"
-    echo "✓ Repository synced to origin/$BRANCH"
-    echo ""
+    if [ "$NODE_ENV" = "production" ]; then
+        echo "Production environment detected (NODE_ENV=production)"
+        echo "Syncing with remote repository (discarding local changes)..."
+        git fetch origin
+        BRANCH=$(git rev-parse --abbrev-ref HEAD)
+        git reset --hard "origin/$BRANCH"
+        echo "✓ Repository synced to origin/$BRANCH"
+        echo ""
+    else
+        echo "Development environment detected (NODE_ENV=${NODE_ENV:-not set})"
+        echo "Skipping git sync - local changes will be preserved"
+        echo ""
+    fi
 fi
 
 echo "Deploying via nginx microservice..."
