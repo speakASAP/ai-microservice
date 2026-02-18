@@ -687,8 +687,8 @@ async def get_available_models(
                         # Add provider status
                         providers.update(free_ai_providers)
                         logger.info(f"Fetched {len(model_list)} models from free-ai-service (OpenRouter)")
-        except Exception as e:
-            logger.warning(f"Failed to fetch models from free-ai-service: {e}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch models from free-ai-service: {e}")
         
         # Fetch models from gemini-ai-service
         if not provider or provider == "gemini":
