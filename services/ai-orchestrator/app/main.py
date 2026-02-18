@@ -9,6 +9,7 @@ Enhanced with multi-agent workflow orchestration framework.
 import os
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List
 from enum import Enum
@@ -43,6 +44,11 @@ if shared_path is None:
 
 if shared_path not in sys.path:
     sys.path.append(shared_path)
+
+# Import shared JWT auth (verify Bearer, roles: global:superadmin, internal:ai-microservice:admin)
+auth_spec = importlib.util.spec_from_file_location("auth", os.path.join(shared_path, "auth.py"))
+auth_module = importlib.util.module_from_spec(auth_spec)
+auth_spec.loader.exec_module(auth_module)
 
 # Import NotificationServiceClient with proper path resolution
 import importlib.util
@@ -167,6 +173,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class JWTAuthMiddleware(BaseHTTPMiddleware):
+    """Verify JWT and roles (global:superadmin, internal:ai-microservice:admin) for non-public paths."""
+
+    async def dispatch(self, request, call_next):
+        path = request.url.path.rstrip("/") or "/"
+        if auth_module._is_public_path(path):
+            return await call_next(request)
+        auth_header = request.headers.get("Authorization")
+        try:
+            payload = auth_module.verify_bearer_token(auth_header or "")
+            request.state.jwt_payload = payload
+            return await call_next(request)
+        except ValueError as e:
+            from starlette.responses import JSONResponse
+            return JSONResponse(status_code=401, content={"detail": str(e)})
+
+
+app.add_middleware(JWTAuthMiddleware)
 
 # Service URLs
 # Service URLs - use environment variables with defaults from .env
