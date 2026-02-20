@@ -11,6 +11,9 @@ NGINX_MICROSERVICE_DIR="$(cd "$PROJECT_DIR/../nginx-microservice" && pwd)"
 
 cd "$PROJECT_DIR"
 
+SERVICE_NAME="ai-microservice"
+DISPLAY_NAME="$(echo "${SERVICE_NAME:0:1}" | tr 'a-z' 'A-Z')${SERVICE_NAME:1}"
+
 echo "🚀 Deploying AI Microservice"
 echo "=================================="
 
@@ -64,4 +67,4 @@ echo ""
 cd "$NGINX_MICROSERVICE_DIR" && ./scripts/blue-green/deploy-smart.sh ai-microservice
 
 echo ""
-echo "✅ Deployment completed"
+echo "✅ ${DISPLAY_NAME} deployment completed successfully!"
