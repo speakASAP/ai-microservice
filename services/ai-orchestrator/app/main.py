@@ -7,6 +7,7 @@ Enhanced with multi-agent workflow orchestration framework.
 """
 
 import os
+import importlib.util
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -51,7 +52,6 @@ auth_module = importlib.util.module_from_spec(auth_spec)
 auth_spec.loader.exec_module(auth_module)
 
 # Import NotificationServiceClient with proper path resolution
-import importlib.util
 spec = importlib.util.spec_from_file_location("http_clients", os.path.join(shared_path, "http_clients.py"))
 http_clients_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(http_clients_module)
