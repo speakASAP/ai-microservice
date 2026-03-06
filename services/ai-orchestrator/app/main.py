@@ -69,7 +69,7 @@ from .workflow_recovery import workflow_recovery_manager, RecoveryStrategy
 from .error_handling import error_recovery_manager
 from .project_url_generator import project_url_generator
 from . import shop_assistant_agents as shop_agents
-from . import email_triage_agents as email_triage
+from . import email_triage_agents
 
 # Configure logging with centralized external logging service
 # Import logger from shared directory
@@ -78,6 +78,8 @@ logger_spec = importlib.util.spec_from_file_location("logger", os.path.join(shar
 logger_module = importlib.util.module_from_spec(logger_spec)
 logger_spec.loader.exec_module(logger_module)
 logger = logger_module.setup_logger(__name__, service_name="ai-orchestrator")
+shop_agents.set_logger(logger)
+email_triage_agents.set_logger(logger)
 
 # Configure Uvicorn logging to use centralized logger
 import logging
@@ -285,6 +287,17 @@ class ShopLocationRequest(BaseModel):
     model: Optional[str] = None
     priority_order: Optional[List[str]] = None
 
+
+class EmailTriageClassifyRequest(BaseModel):
+    """Payload for classifier: normalized email or raw fields."""
+    payload: Optional[Dict[str, Any]] = None
+    message_id: Optional[str] = None
+    tenant_id: Optional[str] = None
+    subject: Optional[str] = None
+    body_plain: Optional[str] = None
+    body_html: Optional[str] = None
+
+
 class AIAnalysisResult(BaseModel):
     service: str
     status: str
@@ -479,6 +492,21 @@ async def api_info():
                     "agent_metrics": "object with metrics for each agent",
                 },
             },
+            {
+                "method": "POST",
+                "path": "/api/email-triage/ingest",
+                "description": "Email-triage ingest: validate and normalize payload per email-schema",
+                "contentType": "application/json",
+                "response": "{ success, payload } or { success: false, error, escalation_reason }",
+            },
+            {
+                "method": "POST",
+                "path": "/api/email-triage/classify",
+                "description": "Email-triage classifier: intent + confidence per intent-taxonomy",
+                "contentType": "application/json",
+                "requestBody": "{ payload?: normalized email, or message_id, tenant_id, subject, body_plain, body_html }",
+                "response": "{ success, intent, confidence, raw_scores }",
+            },
         ],
         "timestamp": datetime.now().isoformat(),
     }
@@ -581,7 +609,7 @@ async def email_triage_ingest(body: Dict[str, Any]):
     Ingest: validate and normalize email payload per email-schema.
     Returns { success: true, payload } or 400 with error, escalation_reason.
     """
-    normalized, error, escalation_reason = email_triage.validate_and_normalize(body)
+    normalized, error, escalation_reason = email_triage_agents.validate_and_normalize(body)
     if error is not None:
         logger.info("Email-triage ingest rejected: %s", error)
         from starlette.responses import JSONResponse
@@ -602,7 +630,7 @@ async def email_triage_classify(body: Dict[str, Any]):
     Body: { payload: <normalized email> } or raw email fields.
     """
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else body
-    result = email_triage.classify_payload(payload)
+    result = email_triage_agents.classify_payload(payload)
     return {
         "success": True,
         "intent": result["intent"],
@@ -620,7 +648,7 @@ async def email_triage_extract(body: Dict[str, Any]):
     """
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else body
     intent = body.get("intent") if isinstance(body.get("intent"), str) else None
-    result = email_triage.extract_payload(payload, intent=intent)
+    result = email_triage_agents.extract_payload(payload, intent=intent)
     return {"success": True, **result}
 
 
@@ -645,7 +673,7 @@ async def email_triage_decide(body: Dict[str, Any]):
             content={"error": "confidence is required", "escalation_reason": "incomplete_data"},
         )
     entities = body.get("entities") if isinstance(body.get("entities"), dict) else None
-    result = email_triage.decide_action(intent=intent, confidence=float(confidence), entities=entities)
+    result = email_triage_agents.decide_action(intent=intent, confidence=float(confidence), entities=entities)
     return {"success": True, **result}
 
 

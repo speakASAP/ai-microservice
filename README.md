@@ -14,6 +14,7 @@ Centralized AI processing service for the Statex microservices ecosystem. Provid
 - ✅ **AI Workers** - Background AI processing
 - ✅ **Gemini AI Service** - Google Gemini AI integration
 - ✅ **Data Viz Service** - Data visualization
+- ✅ **Email-triage agents** - Ingest (validate/normalize) and Classifier (intent + confidence) for [agentic-email-processing-system](../agentic-email-processing-system/)
 - ✅ **Shared Database** - All AI agents data stored in shared database-server
 - ✅ **Centralized Logging** - All logs sent to logging-microservice
 - ✅ **Blue/Green Deployment** - Zero-downtime deployments
@@ -150,21 +151,11 @@ docker compose -f docker-compose.blue.yml logs -f
 -,`POST /api/shop-assistant/format-presentation` - Shop-assistant PRESENTATION agent (format results)
 -,`POST /api/shop-assistant/compare-prices` - Shop-assistant COMPARISON agent (price/priorities comparison)
 -,`POST /api/shop-assistant/extract-location` - Shop-assistant LOCATION agent (delivery region)
-- `POST /api/email-triage/ingest` - Email triage Ingest (validate/normalize per email-schema)
-- `POST /api/email-triage/classify` - Email triage Classifier (intent + confidence; agentic-email-processing-system)
-- `POST /api/email-triage/extract` - Email triage Extractor (entities from payload; Phase 2)
-- `POST /api/email-triage/decide` - Email triage Action/Decider (action per routing-rules; Phase 2)
+- `POST /api/email-triage/ingest` - Email-triage Ingest (validate/normalize per email-schema)
+- `POST /api/email-triage/classify` - Email-triage Classifier (intent + confidence; agentic-email-processing-system)
+- `POST /api/email-triage/extract` - Email-triage Extractor (entities from payload)
+- `POST /api/email-triage/decide` - Email-triage Action/Decider (action per routing-rules)
 
-## Integration
-
-Applications use the AI microservice via HTTP:
-
-```python
-# Production
-AI_SERVICE_URL=https://ai.statex.cz
-
-# Docker Network
-AI_SERVICE_URL=http://ai-microservice:3380
 ```
 
 ## Shared Services
