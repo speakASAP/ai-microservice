@@ -1,6 +1,7 @@
 """
-Email-triage agents: Ingest (validate/normalize) and Classifier (intent + confidence).
-Contracts: docs/contracts/email-schema.md, intent-taxonomy.md (agentic-email-processing-system).
+Email-triage agents: Ingest, Classifier, Extractor, Action/Decider.
+Contracts: docs/contracts (agentic-email-processing-system): email-schema, intent-taxonomy,
+extractor-contract, action-set, routing-rules, escalation-contract.
 """
 
 import os
@@ -201,3 +202,109 @@ def classify_payload(payload: Dict[str, Any], threshold: Optional[float] = None)
         "confidence": top_score,
         "raw_scores": raw_scores,
     }
+
+
+# --- Extractor (Phase 2): entities from normalized payload; no PII in output ---
+# Simple regex-based extraction; shape per extractor-contract
+_AMOUNT_RE = re.compile(r"\b(\d+(?:[.,]\d{2})?)\s*(\€|eur|euro|chf|usd|\$|kč|czk)?\b", re.I)
+_DATE_RE = re.compile(r"\b(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})\b|\b(20\d{2})[./-](\d{1,2})[./-](\d{1,2})\b")
+_CONTRACT_REF = re.compile(r"\b(vertrag|contract|auftrag|order)\s*#?\s*([A-Z0-9-]+)\b", re.I)
+_PRODUCT_REF = re.compile(r"\b(artikel|article|produkt|product)\s*#?\s*([A-Z0-9-]+)\b", re.I)
+
+
+def extract_payload(payload: Dict[str, Any], intent: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Extractor: extract entities from normalized email per extractor-contract.
+    Returns { message_id, entities, summary? }. No PII in entities or summary.
+    """
+    message_id = (payload.get("message_id") or "").strip() or "unknown"
+    text = _text_from_payload(payload)
+
+    entities: Dict[str, Any] = {
+        "product_refs": [],
+        "amounts": [],
+        "dates": [],
+        "contract_refs": [],
+    }
+
+    for m in _AMOUNT_RE.finditer(text):
+        value_str = m.group(1).replace(",", ".")
+        unit = (m.group(2) or "").strip().upper() or None
+        try:
+            value = float(value_str)
+            entities["amounts"].append({"value": value, "unit": unit})
+        except ValueError:
+            pass
+
+    for m in _DATE_RE.finditer(text):
+        entities["dates"].append(m.group(0))
+
+    for m in _CONTRACT_REF.finditer(text):
+        entities["contract_refs"].append(m.group(2))
+
+    for m in _PRODUCT_REF.finditer(text):
+        entities["product_refs"].append(m.group(2))
+
+    summary_parts = []
+    if entities["amounts"]:
+        summary_parts.append("amount reference")
+    if entities["contract_refs"]:
+        summary_parts.append("contract reference")
+    if intent:
+        summary_parts.append(f"intent:{intent}")
+    summary = "; ".join(summary_parts) if summary_parts else None
+
+    return {
+        "message_id": message_id,
+        "entities": entities,
+        "summary": summary,
+    }
+
+
+# --- Action/Decider (Phase 2): intent + confidence + optional entities -> action per routing-rules ---
+ACTIONS = ["auto_respond", "route_to_queue", "escalate"]
+
+
+def _get_auto_respond_enabled() -> bool:
+    v = os.getenv("AUTO_RESPOND_ENABLED", "").strip().lower()
+    return v in ("1", "true", "yes")
+
+
+def decide_action(
+    intent: str,
+    confidence: float,
+    threshold: Optional[float] = None,
+    entities: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Decider: choose action per action-set and routing-rules.
+    Returns { action, escalation_reason?, queue? }.
+    unknown/multi_intent/below threshold/contract -> escalate; else route_to_queue with queue by intent.
+    """
+    if threshold is None:
+        threshold = _get_confidence_threshold()
+    entities = entities or {}
+
+    if intent in ("unknown", "multi_intent"):
+        reason = "ambiguous_intent" if intent == "unknown" else "multi_intent"
+        return {"action": "escalate", "escalation_reason": reason, "queue": None}
+
+    if confidence < threshold:
+        return {"action": "escalate", "escalation_reason": "low_confidence", "queue": None}
+
+    if intent == "contract":
+        return {"action": "escalate", "escalation_reason": "contract_change", "queue": None}
+
+    queue_by_intent = {
+        "support": "support",
+        "sales": "sales",
+        "technical": "technical",
+        "billing": "billing",
+        "spam": "spam_review",
+    }
+    queue = queue_by_intent.get(intent, "support")
+
+    if _get_auto_respond_enabled() and intent == "support" and confidence >= 0.85:
+        return {"action": "auto_respond", "escalation_reason": None, "queue": None}
+
+    return {"action": "route_to_queue", "escalation_reason": None, "queue": queue}

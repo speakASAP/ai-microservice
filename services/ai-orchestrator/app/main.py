@@ -345,6 +345,8 @@ async def root():
             "shopAssistantExtractLocation": "POST /api/shop-assistant/extract-location",
             "emailTriageIngest": "POST /api/email-triage/ingest",
             "emailTriageClassify": "POST /api/email-triage/classify",
+            "emailTriageExtract": "POST /api/email-triage/extract",
+            "emailTriageDecide": "POST /api/email-triage/decide",
         },
         "documentation": {
             "healthCheck": "GET /health - Check service health status with multi-agent system status",
@@ -607,6 +609,44 @@ async def email_triage_classify(body: Dict[str, Any]):
         "confidence": result["confidence"],
         "raw_scores": result.get("raw_scores"),
     }
+
+
+@app.post("/api/email-triage/extract")
+async def email_triage_extract(body: Dict[str, Any]):
+    """
+    Extractor: entities from normalized payload per extractor-contract.
+    Body: { payload: <normalized email>, intent?: <classified intent> }.
+    Returns { success: true, message_id, entities, summary? }.
+    """
+    payload = body.get("payload") if isinstance(body.get("payload"), dict) else body
+    intent = body.get("intent") if isinstance(body.get("intent"), str) else None
+    result = email_triage.extract_payload(payload, intent=intent)
+    return {"success": True, **result}
+
+
+@app.post("/api/email-triage/decide")
+async def email_triage_decide(body: Dict[str, Any]):
+    """
+    Action/Decider: intent + confidence + optional entities -> action per routing-rules.
+    Body: { intent, confidence, entities?: {...} }. Returns { success: true, action, escalation_reason?, queue? }.
+    """
+    intent = body.get("intent")
+    confidence = body.get("confidence")
+    if intent is None or not isinstance(intent, str):
+        from starlette.responses import JSONResponse
+        return JSONResponse(
+            status_code=400,
+            content={"error": "intent is required", "escalation_reason": "incomplete_data"},
+        )
+    if confidence is None or not isinstance(confidence, (int, float)):
+        from starlette.responses import JSONResponse
+        return JSONResponse(
+            status_code=400,
+            content={"error": "confidence is required", "escalation_reason": "incomplete_data"},
+        )
+    entities = body.get("entities") if isinstance(body.get("entities"), dict) else None
+    result = email_triage.decide_action(intent=intent, confidence=float(confidence), entities=entities)
+    return {"success": True, **result}
 
 
 @app.get("/health")
