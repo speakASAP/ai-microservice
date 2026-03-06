@@ -150,6 +150,8 @@ docker compose -f docker-compose.blue.yml logs -f
 -,`POST /api/shop-assistant/format-presentation` - Shop-assistant PRESENTATION agent (format results)
 -,`POST /api/shop-assistant/compare-prices` - Shop-assistant COMPARISON agent (price/priorities comparison)
 -,`POST /api/shop-assistant/extract-location` - Shop-assistant LOCATION agent (delivery region)
+- `POST /api/email-triage/ingest` - Email triage Ingest (validate/normalize per email-schema)
+- `POST /api/email-triage/classify` - Email triage Classifier (intent + confidence; agentic-email-processing-system)
 
 ## Integration
 

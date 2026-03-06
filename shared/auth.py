@@ -38,6 +38,9 @@ def _is_public_path(path: str) -> bool:
     # Optional: treat /models as public for catalog; protect the rest
     if path == "/models":
         return True
+    # Email-triage: internal service-to-service (agentic-email-processing-system)
+    if path.startswith("/api/email-triage"):
+        return True
     return False
 
 

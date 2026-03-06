@@ -69,6 +69,7 @@ from .workflow_recovery import workflow_recovery_manager, RecoveryStrategy
 from .error_handling import error_recovery_manager
 from .project_url_generator import project_url_generator
 from . import shop_assistant_agents as shop_agents
+from . import email_triage_agents as email_triage
 
 # Configure logging with centralized external logging service
 # Import logger from shared directory
@@ -134,6 +135,7 @@ async def lifespan(app: FastAPI):
         
         logger.info("Multi-agent orchestrator initialized successfully")
         shop_agents.set_logger(logger)
+        email_triage.set_logger(logger)
     except Exception as e:
         logger.error(f"Failed to initialize multi-agent system: {e}")
 
@@ -341,6 +343,8 @@ async def root():
             "shopAssistantFormatPresentation": "POST /api/shop-assistant/format-presentation",
             "shopAssistantComparePrices": "POST /api/shop-assistant/compare-prices",
             "shopAssistantExtractLocation": "POST /api/shop-assistant/extract-location",
+            "emailTriageIngest": "POST /api/email-triage/ingest",
+            "emailTriageClassify": "POST /api/email-triage/classify",
         },
         "documentation": {
             "healthCheck": "GET /health - Check service health status with multi-agent system status",
@@ -566,6 +570,44 @@ async def shop_assistant_extract_location(req: ShopLocationRequest):
     except Exception as e:
         logger.warning("Shop-assistant extract-location failed: %s", e)
         return {"region": None, "augmented_query": None}
+
+
+# --- Email-triage agents (agentic-email-processing-system) ---
+@app.post("/api/email-triage/ingest")
+async def email_triage_ingest(body: Dict[str, Any]):
+    """
+    Ingest: validate and normalize email payload per email-schema.
+    Returns { success: true, payload } or 400 with error, escalation_reason.
+    """
+    normalized, error, escalation_reason = email_triage.validate_and_normalize(body)
+    if error is not None:
+        logger.info("Email-triage ingest rejected: %s", error)
+        from starlette.responses import JSONResponse
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": error,
+                "escalation_reason": escalation_reason or "incomplete_data",
+            },
+        )
+    return {"success": True, "payload": normalized}
+
+
+@app.post("/api/email-triage/classify")
+async def email_triage_classify(body: Dict[str, Any]):
+    """
+    Classify: intent + confidence per intent-taxonomy.
+    Body: { payload: <normalized email> } or raw email fields.
+    """
+    payload = body.get("payload") if isinstance(body.get("payload"), dict) else body
+    result = email_triage.classify_payload(payload)
+    return {
+        "success": True,
+        "intent": result["intent"],
+        "confidence": result["confidence"],
+        "raw_scores": result.get("raw_scores"),
+    }
+
 
 @app.get("/health")
 async def health_check():
