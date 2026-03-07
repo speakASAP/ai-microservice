@@ -160,7 +160,13 @@ class CentralizedLogger:
         self.logger.warning(message)
         self._send_to_centralized("WARNING", message, **kwargs)
     
-    def error(self, message: str, **kwargs):
+    def error(self, message: str, *args, **kwargs):
+        # Stdlib-style: logger.error("msg: %s", e) -> format message with args
+        if args:
+            message = message % args
+        # If exception was passed as last positional, add to kwargs for stack capture
+        if args and isinstance(args[-1], Exception) and "error" not in kwargs:
+            kwargs = dict(kwargs, error=args[-1])
         # Automatically capture stack trace for errors if Exception is provided
         error_kwargs = dict(kwargs)
         if isinstance(message, Exception):

@@ -128,7 +128,7 @@ async def _background_startup():
             logger.info("Auto-recovered interrupted workflows", count=len(recovered_workflows))
         logger.info("Background startup (Redis + recovery) completed")
     except Exception as e:
-        logger.error("Background startup failed: %s", e)
+        logger.error("Background startup failed", error=str(e))
 
 
 @asynccontextmanager
@@ -140,7 +140,7 @@ async def lifespan(app: FastAPI):
         logger.info("Multi-agent orchestrator ready (email-triage and health accept requests)")
         asyncio.create_task(_background_startup())
     except Exception as e:
-        logger.error("Lifespan startup failed: %s", e)
+        logger.error("Lifespan startup failed", error=str(e))
 
     yield
     
@@ -524,7 +524,7 @@ async def shop_assistant_transcribe(req: ShopTranscribeRequest):
         result = await shop_agents.agent_transcribe(req.voice_file_url)
         return result
     except Exception as e:
-        logger.error("Shop-assistant transcribe failed: %s", e)
+        logger.error("Shop-assistant transcribe failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/shop-assistant/refine-query")
@@ -540,7 +540,7 @@ async def shop_assistant_refine_query(req: ShopRefineQueryRequest):
         )
         return result
     except Exception as e:
-        logger.error("Shop-assistant refine-query failed: %s", e)
+        logger.error("Shop-assistant refine-query failed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Refine-query failed: {str(e)}")
 
 @app.post("/api/shop-assistant/search")
@@ -550,7 +550,7 @@ async def shop_assistant_search(req: ShopSearchRequest):
         result = await shop_agents.agent_search(query_text=req.query_text, limit=req.limit)
         return result
     except Exception as e:
-        logger.error("Shop-assistant search failed: %s", e)
+        logger.error("Shop-assistant search failed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 @app.post("/api/shop-assistant/format-presentation")
@@ -566,7 +566,7 @@ async def shop_assistant_format_presentation(req: ShopFormatPresentationRequest)
         )
         return result
     except Exception as e:
-        logger.error("Shop-assistant format-presentation failed: %s", e)
+        logger.error("Shop-assistant format-presentation failed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Format-presentation failed: {str(e)}")
 
 
@@ -584,7 +584,7 @@ async def shop_assistant_compare_prices(req: ShopCompareRequest):
         )
         return result
     except Exception as e:
-        logger.error("Shop-assistant compare-prices failed: %s", e)
+        logger.error("Shop-assistant compare-prices failed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Compare-prices failed: {str(e)}")
 
 
@@ -602,7 +602,7 @@ async def shop_assistant_extract_location(req: ShopLocationRequest):
         )
         return result
     except Exception as e:
-        logger.error("Shop-assistant extract-location failed: %s", e)
+        logger.error("Shop-assistant extract-location failed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Extract-location failed: {str(e)}")
 
 
