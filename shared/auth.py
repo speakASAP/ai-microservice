@@ -38,6 +38,9 @@ def _is_public_path(path: str) -> bool:
     # Health endpoints (including /health/email-triage for Docker healthcheck)
     if path.startswith("/health"):
         return True
+    # Multi-agent agents health (for monitoring and test-ai-services script)
+    if path == "/api/multi-agent/agents/health":
+        return True
     # Optional: treat /models as public for catalog; protect the rest
     if path == "/models":
         return True

@@ -125,6 +125,16 @@ cd ai-microservice
 ./scripts/status.sh
 ```
 
+### Test AI Services (health and LLM accessibility)
+
+Runs health checks for all AI agents (orchestrator, free-ai-service, nlp, asr, document-ai, prototype-generator, template-repository, ai-workers, gemini-ai-service, data-viz-service), verifies OpenRouter accessibility via free-ai-service `/models`, and a minimal POST `/analyze` to confirm LLM response:
+
+```bash
+./scripts/test-ai-services.py
+```
+
+From host use default `localhost`; override with `AI_SERVICE_HOST=localhost`. Ports are read from `.env` (defaults: 3380–3389). Exit code 0 if all checks pass, 1 otherwise.
+
 ### Stop Services
 
 ```bash
