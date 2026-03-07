@@ -17,6 +17,8 @@ INTENTS_ALL = INTENTS_PRIMARY + ["unknown", "multi_intent"]
 DEFAULT_CONFIDENCE_THRESHOLD = 0.75
 
 # Keywords (DE/EN) per primary intent — prototype; align with intent-taxonomy
+# support: general "please check / something wrong with my account" (dashboard, portal, access, check)
+# technical: connectivity, outage, router, API/error — not generic account/dashboard wording
 KEYWORDS = {
     "billing": re.compile(
         r"\b(rechnung|invoice|zahlung|payment|kosten|preis|refund|rückerstattung|abbuchung|debit)\b",
@@ -27,7 +29,7 @@ KEYWORDS = {
         re.I,
     ),
     "technical": re.compile(
-        r"\b(verbindung|connection|internet|störung|outage|fehler|error|router|modem|technisch)\b",
+        r"\b(verbindung|connection|internet|störung|outage|fehler|error|router|modem|technisch|api|endpoint)\b",
         re.I,
     ),
     "sales": re.compile(
@@ -39,7 +41,7 @@ KEYWORDS = {
         re.I,
     ),
     "support": re.compile(
-        r"\b(hilfe|help|frage|question|problem|beschwerde|complaint|support)\b",
+        r"\b(hilfe|help|frage|question|problem|beschwerde|complaint|support|check|dashboard|portal|account|access|empty|unable|not working|doesn't work|doesnt work)\b",
         re.I,
     ),
 }
