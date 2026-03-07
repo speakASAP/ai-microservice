@@ -337,7 +337,7 @@ class WorkflowEngine:
                 
             except asyncio.TimeoutError:
                 error_msg = f"Task {task.task_id} timed out after {task.timeout}s"
-                logger.warning(f"{error_msg} (attempt {attempt + 1}/{task.max_retries + 1})")
+                logger.error(f"{error_msg} (attempt {attempt + 1}/{task.max_retries + 1})")
                 
                 if attempt == task.max_retries:
                     result = AgentResult(

@@ -609,9 +609,13 @@ async def email_triage_ingest(body: Dict[str, Any]):
     Ingest: validate and normalize email payload per email-schema.
     Returns { success: true, payload } or 400 with error, escalation_reason.
     """
+    t0 = time.perf_counter()
+    msg_id = (str(body.get("message_id")).strip() or None) if body.get("message_id") is not None else None
+    logger.info("Email-triage ingest request received", extra={"message_id": msg_id})
     normalized, error, escalation_reason = email_triage_agents.validate_and_normalize(body)
+    duration_ms = round((time.perf_counter() - t0) * 1000)
     if error is not None:
-        logger.info("Email-triage ingest rejected: %s", error)
+        logger.info("Email-triage ingest rejected: %s (duration_ms=%s)", error, duration_ms, extra={"message_id": msg_id, "duration_ms": duration_ms})
         from starlette.responses import JSONResponse
         return JSONResponse(
             status_code=400,
@@ -620,6 +624,7 @@ async def email_triage_ingest(body: Dict[str, Any]):
                 "escalation_reason": escalation_reason or "incomplete_data",
             },
         )
+    logger.info("Email-triage ingest success (duration_ms=%s)", duration_ms, extra={"message_id": msg_id, "duration_ms": duration_ms})
     return {"success": True, "payload": normalized}
 
 
@@ -629,8 +634,13 @@ async def email_triage_classify(body: Dict[str, Any]):
     Classify: intent + confidence per intent-taxonomy.
     Body: { payload: <normalized email> } or raw email fields.
     """
+    t0 = time.perf_counter()
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else body
+    msg_id = str(payload.get("message_id")) if isinstance(payload, dict) and payload.get("message_id") is not None else None
+    logger.info("Email-triage classify request received", extra={"message_id": msg_id})
     result = email_triage_agents.classify_payload(payload)
+    duration_ms = round((time.perf_counter() - t0) * 1000)
+    logger.info("Email-triage classify success intent=%s (duration_ms=%s)", result.get("intent"), duration_ms, extra={"message_id": msg_id, "intent": result.get("intent"), "duration_ms": duration_ms})
     return {
         "success": True,
         "intent": result["intent"],
@@ -797,6 +807,8 @@ async def get_available_models(
                         # Add provider status
                         providers.update(free_ai_providers)
                         logger.info(f"Fetched {len(model_list)} models from free-ai-service (OpenRouter)")
+            except httpx.TimeoutException as e:
+                logger.error(f"Timeout fetching models from free-ai-service (connectivity or slow execution): {e}")
             except Exception as e:
                 logger.warning(f"Failed to fetch models from free-ai-service: {e}")
         
@@ -855,6 +867,9 @@ async def get_available_models(
                         
                         providers[gemini_provider] = {"status": "available"}
                         logger.info(f"Fetched {gemini_count} models from gemini-ai-service")
+            except httpx.TimeoutException as e:
+                logger.error(f"Timeout fetching models from gemini-ai-service (connectivity or slow execution): {e}")
+                providers["gemini"] = {"status": "error"}
             except Exception as e:
                 logger.warning(f"Failed to fetch models from gemini-ai-service: {e}")
                 providers["gemini"] = {"status": "error"}
