@@ -6,19 +6,27 @@ Provides base classes for agent coordination and workflow state management.
 """
 
 import asyncio
+import importlib.util
+import os
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from enum import Enum
+from pathlib import Path
 from typing import Dict, List, Optional, Any, Callable, Union
 from pydantic import BaseModel, Field
-import logging
 import json
 import time
 import httpx
-import os
 
-logger = logging.getLogger(__name__)
+# Centralized logger for all logs to logging-microservice
+_workflow_shared = Path(__file__).resolve().parent.parent.parent.parent / "shared"
+if not _workflow_shared.exists():
+    _workflow_shared = Path("/app") / "shared"
+_logger_spec = importlib.util.spec_from_file_location("logger", str(_workflow_shared / "logger.py"))
+_logger_module = importlib.util.module_from_spec(_logger_spec)
+_logger_spec.loader.exec_module(_logger_module)
+logger = _logger_module.setup_logger(__name__, service_name="ai-orchestrator")
 
 class TaskStatus(str, Enum):
     PENDING = "pending"
@@ -106,7 +114,7 @@ class AgentInterface(ABC):
             self.last_health_check = datetime.now()
             return True
         except Exception as e:
-            logger.error(f"Health check failed for {self.agent_name}: {e}")
+            logger.error("Workflow engine agent health check failed", agent_name=self.agent_name, agent_type=self.agent_type, error=str(e))
             self.is_healthy = False
             return False
     
@@ -115,7 +123,7 @@ class AgentInterface(ABC):
         try:
             submission_id = task.input_data.get("submission_id")
             if not submission_id:
-                logger.warning(f"No submission_id found for {self.agent_type} agent")
+                logger.warning("Workflow engine _save_agent_result: no submission_id", agent_type=self.agent_type, task_id=task.task_id)
                 return
             
             # Get submission service URL
@@ -143,12 +151,12 @@ class AgentInterface(ABC):
                 )
                 
                 if response.status_code == 200:
-                    logger.info(f"Saved {self.agent_type} result for submission {submission_id}")
+                    logger.info("Workflow engine _save_agent_result success", agent_type=self.agent_type, submission_id=submission_id)
                 else:
-                    logger.warning(f"Failed to save {self.agent_type} result: {response.status_code}")
-                    
+                    logger.warning("Workflow engine _save_agent_result failed", agent_type=self.agent_type, submission_id=submission_id, status_code=response.status_code)
+
         except Exception as e:
-            logger.error(f"Error saving {self.agent_type} result: {e}")
+            logger.error("Workflow engine _save_agent_result error", agent_type=self.agent_type, submission_id=task.input_data.get("submission_id"), error=str(e))
 
 class WorkflowEngine:
     """Main workflow engine for orchestrating multi-agent tasks"""
@@ -165,12 +173,12 @@ class WorkflowEngine:
     def register_agent(self, agent: AgentInterface):
         """Register an AI agent with the workflow engine"""
         self.agents[agent.agent_type] = agent
-        logger.info(f"Registered agent: {agent.agent_name} ({agent.agent_type})")
+        logger.info("Workflow engine registered agent", agent_name=agent.agent_name, agent_type=agent.agent_type)
     
     def register_workflow(self, workflow_type: str, workflow_func: Callable):
         """Register a workflow definition"""
         self.workflow_definitions[workflow_type] = workflow_func
-        logger.info(f"Registered workflow: {workflow_type}")
+        logger.info("Workflow engine registered workflow", workflow_type=workflow_type)
     
     async def create_workflow(self, submission_id: str, workflow_type: str, 
                             input_data: Dict[str, Any]) -> WorkflowState:
@@ -182,41 +190,47 @@ class WorkflowEngine:
         )
         
         self.workflows[workflow_state.workflow_id] = workflow_state
-        logger.info(f"Created workflow {workflow_state.workflow_id} for submission {submission_id}")
-        
+        logger.info("Workflow engine create_workflow", workflow_id=workflow_state.workflow_id, submission_id=submission_id, workflow_type=workflow_type)
+
         return workflow_state
     
     async def execute_workflow(self, workflow_id: str) -> WorkflowState:
         """Execute a workflow by its ID"""
         if workflow_id not in self.workflows:
             raise ValueError(f"Workflow {workflow_id} not found")
-        
+
         workflow_state = self.workflows[workflow_id]
         workflow_func = self.workflow_definitions.get(workflow_state.workflow_type)
-        
+
         if not workflow_func:
             raise ValueError(f"Workflow type {workflow_state.workflow_type} not registered")
-        
+
+        logger.info("Workflow engine execute_workflow started", workflow_id=workflow_id, submission_id=workflow_state.submission_id, workflow_type=workflow_state.workflow_type)
+        start_sec = time.time()
         try:
             workflow_state.status = WorkflowStatus.RUNNING
             workflow_state.start_time = datetime.now()
-            
+
             # Execute the workflow function
             tasks = await workflow_func(workflow_state.metadata)
-            
+            logger.info("Workflow engine workflow_func returned tasks", workflow_id=workflow_id, task_count=len(tasks), task_agent_types=[t.agent_type for t in tasks])
+
             # Execute tasks in parallel with dependency management
             await self._execute_tasks_with_dependencies(workflow_id, tasks)
-            
+
             # Update workflow status
             workflow_state.status = WorkflowStatus.COMPLETED
             workflow_state.end_time = datetime.now()
             workflow_state.progress = 1.0
-            
+            duration_sec = time.time() - start_sec
+            logger.info("Workflow engine execute_workflow completed", workflow_id=workflow_id, submission_id=workflow_state.submission_id, status="COMPLETED", duration_sec=round(duration_sec, 2), completed_tasks=len(workflow_state.completed_tasks), failed_tasks=len(workflow_state.failed_tasks))
+
         except Exception as e:
-            logger.error(f"Workflow {workflow_id} failed: {e}")
+            duration_sec = time.time() - start_sec
+            logger.error("Workflow engine execute_workflow failed", workflow_id=workflow_id, submission_id=workflow_state.submission_id, error=str(e), duration_sec=round(duration_sec, 2))
             workflow_state.status = WorkflowStatus.FAILED
             workflow_state.end_time = datetime.now()
-            
+
         return workflow_state
     
     async def _execute_tasks_with_dependencies(self, workflow_id: str, tasks: List[AgentTask]):
@@ -246,9 +260,9 @@ class WorkflowEngine:
                 task_coroutine = self._execute_single_task(workflow_id, task)
                 running_task = asyncio.create_task(task_coroutine)
                 running_tasks[task.task_id] = running_task
-                
+
                 workflow_state.running_tasks.append(task.task_id)
-                logger.info(f"Started task {task.task_id} ({task.agent_type})")
+                logger.info("Workflow engine task started", workflow_id=workflow_id, task_id=task.task_id, agent_type=task.agent_type, submission_id=workflow_state.submission_id)
             
             # Wait for at least one task to complete
             if running_tasks:
@@ -274,8 +288,8 @@ class WorkflowEngine:
                         workflow_state.running_tasks.remove(completed_task_id)
                         workflow_state.completed_tasks.append(completed_task_id)
                         workflow_state.progress = len(completed_tasks) / len(tasks)
-                        
-                        logger.info(f"Completed task {completed_task_id}")
+
+                        logger.info("Workflow engine task completed", workflow_id=workflow_id, task_id=completed_task_id, submission_id=workflow_state.submission_id, progress_pct=round(100 * len(completed_tasks) / len(tasks), 1))
             
             # Small delay to prevent busy waiting
             await asyncio.sleep(0.1)
@@ -283,10 +297,13 @@ class WorkflowEngine:
     async def _execute_single_task(self, workflow_id: str, task: AgentTask) -> AgentResult:
         """Execute a single agent task with timeout and retry logic"""
         workflow_state = self.workflows[workflow_id]
+        submission_id = workflow_state.submission_id
+        logger.info("Workflow engine _execute_single_task started", workflow_id=workflow_id, task_id=task.task_id, agent_type=task.agent_type, submission_id=submission_id, timeout=task.timeout)
         agent = self.agents.get(task.agent_type)
-        
+
         if not agent:
             error_msg = f"Agent type {task.agent_type} not found"
+            logger.error("Workflow engine _execute_single_task agent not found", workflow_id=workflow_id, task_id=task.task_id, agent_type=task.agent_type, submission_id=submission_id)
             result = AgentResult(
                 task_id=task.task_id,
                 agent_type=task.agent_type,
@@ -301,6 +318,7 @@ class WorkflowEngine:
         # Check agent health
         if not await agent.health_check():
             error_msg = f"Agent {task.agent_name} is not healthy"
+            logger.warning("Workflow engine _execute_single_task agent unhealthy", workflow_id=workflow_id, task_id=task.task_id, agent_type=task.agent_type, submission_id=submission_id)
             result = AgentResult(
                 task_id=task.task_id,
                 agent_type=task.agent_type,
@@ -333,11 +351,13 @@ class WorkflowEngine:
                 task.completed_at = datetime.now()
                 
                 workflow_state.agent_results[task.task_id] = result
+                duration_sec = time.time() - start_time
+                logger.info("Workflow engine _execute_single_task success", workflow_id=workflow_id, task_id=task.task_id, agent_type=task.agent_type, submission_id=submission_id, duration_sec=round(duration_sec, 2))
                 return result
-                
+
             except asyncio.TimeoutError:
                 error_msg = f"Task {task.task_id} timed out after {task.timeout}s"
-                logger.error(f"{error_msg} (attempt {attempt + 1}/{task.max_retries + 1})")
+                logger.error("Workflow engine _execute_single_task timeout", workflow_id=workflow_id, task_id=task.task_id, agent_type=task.agent_type, submission_id=submission_id, attempt=attempt + 1, max_retries=task.max_retries + 1, timeout=task.timeout)
                 
                 if attempt == task.max_retries:
                     result = AgentResult(
@@ -355,7 +375,7 @@ class WorkflowEngine:
                 
             except Exception as e:
                 error_msg = f"Task {task.task_id} failed: {str(e)}"
-                logger.error(f"{error_msg} (attempt {attempt + 1}/{task.max_retries + 1})")
+                logger.error("Workflow engine _execute_single_task exception", workflow_id=workflow_id, task_id=task.task_id, agent_type=task.agent_type, submission_id=submission_id, error=str(e), attempt=attempt + 1, max_retries=task.max_retries + 1)
                 
                 if attempt == task.max_retries:
                     result = AgentResult(
@@ -395,7 +415,7 @@ class WorkflowEngine:
                 if task_id in self.running_tasks:
                     self.running_tasks[task_id].cancel()
             
-            logger.info(f"Cancelled workflow {workflow_id}")
+            logger.info("Workflow engine cancel_workflow", workflow_id=workflow_id)
             return True
         
         return False
@@ -412,7 +432,7 @@ class WorkflowEngine:
         
         for workflow_id in workflows_to_remove:
             del self.workflows[workflow_id]
-            logger.info(f"Cleaned up workflow {workflow_id}")
+            logger.info("Workflow engine cleanup_completed_workflows removed", workflow_id=workflow_id)
         
         return len(workflows_to_remove)
 

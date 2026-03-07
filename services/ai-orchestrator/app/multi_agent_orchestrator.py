@@ -7,6 +7,7 @@ multiple AI agents for business analysis and offer generation.
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Union
 import httpx
@@ -55,7 +56,11 @@ from .business_analysis_aggregator import business_analysis_aggregator, Business
 from .project_url_generator import project_url_generator, ProjectURLs
 from .offer_formatter import offer_formatter, FormattedOffer
 
-logger = logging.getLogger(__name__)
+# Centralized logger (same as main.py) for all logs to logging-microservice
+_logger_spec = importlib.util.spec_from_file_location("logger", os.path.join(shared_dir, "logger.py"))
+_logger_module = importlib.util.module_from_spec(_logger_spec)
+_logger_spec.loader.exec_module(_logger_module)
+logger = _logger_module.setup_logger(__name__, service_name="ai-orchestrator")
 
 def get_session_directory(submission_id: str, user_id: str, session_id: str = None) -> str:
     """Get the session directory path for a submission"""
@@ -192,15 +197,18 @@ class NLPAgent(AgentInterface):
     
     async def execute_task(self, task: AgentTask) -> AgentResult:
         """Execute NLP analysis task with error handling and recovery"""
+        submission_id = task.input_data.get("submission_id", "unknown")
+        start = time.perf_counter()
+        logger.info("AI agent NLP execute_task started", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, service_url=self.service_url, read_from_disk=task.input_data.get("read_from_disk"))
         context = ErrorContext(
-            submission_id=task.input_data.get("submission_id", "unknown"),
+            submission_id=submission_id,
             agent_type=self.agent_type,
             task_id=task.task_id,
             service_url=self.service_url,
             operation="nlp_analysis",
             input_data=task.input_data
         )
-        
+
         async def nlp_operation():
             # Read from disk if requested
             if task.input_data.get("read_from_disk"):
@@ -234,13 +242,15 @@ class NLPAgent(AgentInterface):
                     "analysis_type": "business_analysis",
                     "user_name": "NLP Agent"
                 }
-            
+
+            text_len = len(nlp_request.get("text_content", ""))
+            logger.info("AI agent NLP calling service", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, url=f"{self.service_url}/analyze", text_content_len=text_len)
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     f"{self.service_url}/analyze",
                     json=nlp_request
                 )
-                
+
                 if response.status_code == 200:
                     response_data = response.json()
                     analysis_data = response_data.get("analysis", {})
@@ -266,7 +276,9 @@ class NLPAgent(AgentInterface):
                     
                     # Save agent result to file
                     await self._save_agent_result(task, transformed_result)
-                    
+
+                    duration_ms = int((time.perf_counter() - start) * 1000)
+                    logger.info("AI agent NLP execute_task success", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, status="COMPLETED", confidence=response_data.get("confidence"), processing_time=response_data.get("processing_time"), duration_ms=duration_ms, model_used=response_data.get("model_used"))
                     return AgentResult(
                         task_id=task.task_id,
                         agent_type=self.agent_type,
@@ -282,11 +294,13 @@ class NLPAgent(AgentInterface):
                         request=response.request,
                         response=response
                     )
-        
+
         try:
             # Execute the operation directly
             return await nlp_operation()
         except Exception as e:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            logger.error("AI agent NLP execute_task failed", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, error=str(e), duration_ms=duration_ms)
             # If all recovery attempts fail, return failed result
             return AgentResult(
                 task_id=task.task_id,
@@ -315,15 +329,18 @@ class ASRAgent(AgentInterface):
     
     async def execute_task(self, task: AgentTask) -> AgentResult:
         """Execute ASR transcription task with error handling and recovery"""
+        submission_id = task.input_data.get("submission_id", "unknown")
+        start = time.perf_counter()
+        logger.info("AI agent ASR execute_task started", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, service_url=self.service_url, read_from_disk=task.input_data.get("read_from_disk"))
         context = ErrorContext(
-            submission_id=task.input_data.get("submission_id", "unknown"),
+            submission_id=submission_id,
             agent_type=self.agent_type,
             task_id=task.task_id,
             service_url=self.service_url,
             operation="asr_transcription",
             input_data=task.input_data
         )
-        
+
         async def asr_operation():
             # Read from disk if requested
             if task.input_data.get("read_from_disk"):
@@ -357,19 +374,23 @@ class ASRAgent(AgentInterface):
                     asr_request = task.input_data
             else:
                 asr_request = task.input_data
-            
+
+            logger.info("AI agent ASR calling service", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, url=f"{self.service_url}/api/transcribe")
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     f"{self.service_url}/api/transcribe",
                     json=asr_request
                 )
-                
+
                 if response.status_code == 200:
                     result_data = response.json()
-                    
+                    transcript_len = len(result_data.get("transcript") or result_data.get("text") or "")
+
                     # Save agent result to file
                     await self._save_agent_result(task, result_data)
-                    
+
+                    duration_ms = int((time.perf_counter() - start) * 1000)
+                    logger.info("AI agent ASR execute_task success", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, status="COMPLETED", transcript_len=transcript_len, duration_ms=duration_ms)
                     return AgentResult(
                         task_id=task.task_id,
                         agent_type=self.agent_type,
@@ -385,11 +406,13 @@ class ASRAgent(AgentInterface):
                         request=response.request,
                         response=response
                     )
-        
+
         try:
             # Execute the operation directly
             return await asr_operation()
         except Exception as e:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            logger.error("AI agent ASR execute_task failed", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, error=str(e), duration_ms=duration_ms)
             # If all recovery attempts fail, return failed result
             return AgentResult(
                 task_id=task.task_id,
@@ -418,6 +441,9 @@ class DocumentAgent(AgentInterface):
     
     async def execute_task(self, task: AgentTask) -> AgentResult:
         """Execute document analysis task"""
+        submission_id = task.input_data.get("submission_id", "unknown")
+        start = time.perf_counter()
+        logger.info("AI agent Document execute_task started", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, service_url=self.service_url, read_from_disk=task.input_data.get("read_from_disk"))
         try:
             # Read from disk if requested
             if task.input_data.get("read_from_disk"):
@@ -450,19 +476,23 @@ class DocumentAgent(AgentInterface):
                     doc_request = task.input_data
             else:
                 doc_request = task.input_data
-            
+
+            file_count = len(doc_request.get("file_urls") or [])
+            logger.info("AI agent Document calling service", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, url=f"{self.service_url}/api/analyze-documents", file_count=file_count)
             async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(
                     f"{self.service_url}/api/analyze-documents",
                     json=doc_request
                 )
-                
+
                 if response.status_code == 200:
                     result_data = response.json()
-                    
+
                     # Save agent result to file
                     await self._save_agent_result(task, result_data)
-                    
+
+                    duration_ms = int((time.perf_counter() - start) * 1000)
+                    logger.info("AI agent Document execute_task success", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, status="COMPLETED", duration_ms=duration_ms)
                     return AgentResult(
                         task_id=task.task_id,
                         agent_type=self.agent_type,
@@ -473,6 +503,8 @@ class DocumentAgent(AgentInterface):
                         processing_time=result_data.get("processing_time", 0)
                     )
                 else:
+                    duration_ms = int((time.perf_counter() - start) * 1000)
+                    logger.error("AI agent Document execute_task service error", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, status_code=response.status_code, duration_ms=duration_ms)
                     return AgentResult(
                         task_id=task.task_id,
                         agent_type=self.agent_type,
@@ -480,8 +512,10 @@ class DocumentAgent(AgentInterface):
                         status=TaskStatus.FAILED,
                         error_message=f"Document AI service error: {response.status_code}"
                     )
-                    
+
         except Exception as e:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            logger.error("AI agent Document execute_task failed", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, error=str(e), duration_ms=duration_ms)
             return AgentResult(
                 task_id=task.task_id,
                 agent_type=self.agent_type,
@@ -509,19 +543,25 @@ class PrototypeAgent(AgentInterface):
     
     async def execute_task(self, task: AgentTask) -> AgentResult:
         """Execute prototype generation task"""
+        submission_id = task.input_data.get("submission_id", "unknown")
+        start = time.perf_counter()
+        logger.info("AI agent Prototype execute_task started", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, service_url=self.service_url)
         try:
+            logger.info("AI agent Prototype calling service", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, url=f"{self.service_url}/api/generate-prototype")
             async with httpx.AsyncClient(timeout=180.0) as client:
                 response = await client.post(
                     f"{self.service_url}/api/generate-prototype",
                     json=task.input_data
                 )
-                
+
                 if response.status_code == 200:
                     result_data = response.json()
-                    
+
                     # Save agent result to file
                     await self._save_agent_result(task, result_data)
-                    
+
+                    duration_ms = int((time.perf_counter() - start) * 1000)
+                    logger.info("AI agent Prototype execute_task success", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, status="COMPLETED", duration_ms=duration_ms)
                     return AgentResult(
                         task_id=task.task_id,
                         agent_type=self.agent_type,
@@ -532,6 +572,8 @@ class PrototypeAgent(AgentInterface):
                         processing_time=result_data.get("processing_time", 0)
                     )
                 else:
+                    duration_ms = int((time.perf_counter() - start) * 1000)
+                    logger.error("AI agent Prototype execute_task service error", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, status_code=response.status_code, duration_ms=duration_ms)
                     return AgentResult(
                         task_id=task.task_id,
                         agent_type=self.agent_type,
@@ -539,8 +581,10 @@ class PrototypeAgent(AgentInterface):
                         status=TaskStatus.FAILED,
                         error_message=f"Prototype service error: {response.status_code}"
                     )
-                    
+
         except Exception as e:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            logger.error("AI agent Prototype execute_task failed", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, error=str(e), duration_ms=duration_ms)
             return AgentResult(
                 task_id=task.task_id,
                 agent_type=self.agent_type,
@@ -568,15 +612,18 @@ class GeminiAgent(AgentInterface):
     
     async def execute_task(self, task: AgentTask) -> AgentResult:
         """Execute Gemini AI analysis task with error handling and recovery"""
+        submission_id = task.input_data.get("submission_id", "unknown")
+        start = time.perf_counter()
+        logger.info("AI agent Gemini execute_task started", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, service_url=self.service_url, read_from_disk=task.input_data.get("read_from_disk"))
         context = ErrorContext(
-            submission_id=task.input_data.get("submission_id", "unknown"),
+            submission_id=submission_id,
             agent_type=self.agent_type,
             task_id=task.task_id,
             service_url=self.service_url,
             operation="gemini_analysis",
             input_data=task.input_data
         )
-        
+
         async def gemini_operation():
             # Read from disk if requested
             if task.input_data.get("read_from_disk"):
@@ -610,13 +657,15 @@ class GeminiAgent(AgentInterface):
                     "analysis_type": "business_analysis",
                     "user_name": "Gemini Agent"
                 }
-            
+
+            text_len = len(gemini_request.get("text_content", ""))
+            logger.info("AI agent Gemini calling service", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, url=f"{self.service_url}/analyze", text_content_len=text_len)
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     f"{self.service_url}/analyze",
                     json=gemini_request
                 )
-                
+
                 if response.status_code == 200:
                     response_data = response.json()
                     analysis_data = response_data.get("analysis", {})
@@ -642,7 +691,9 @@ class GeminiAgent(AgentInterface):
                     
                     # Save agent result to file
                     await self._save_agent_result(task, transformed_result)
-                    
+
+                    duration_ms = int((time.perf_counter() - start) * 1000)
+                    logger.info("AI agent Gemini execute_task success", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, status="COMPLETED", confidence=response_data.get("confidence"), processing_time=response_data.get("processing_time"), duration_ms=duration_ms, model_used=response_data.get("model_used"))
                     return AgentResult(
                         task_id=task.task_id,
                         agent_type=self.agent_type,
@@ -658,11 +709,13 @@ class GeminiAgent(AgentInterface):
                         request=response.request,
                         response=response
                     )
-        
+
         try:
             # Execute the operation directly
             return await gemini_operation()
         except Exception as e:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            logger.error("AI agent Gemini execute_task failed", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, error=str(e), duration_ms=duration_ms)
             # If all recovery attempts fail, return failed result
             return AgentResult(
                 task_id=task.task_id,
@@ -691,15 +744,18 @@ class DataVizAgent(AgentInterface):
     
     async def execute_task(self, task: AgentTask) -> AgentResult:
         """Execute data visualization task with error handling and recovery"""
+        submission_id = task.input_data.get("submission_id", "unknown")
+        start = time.perf_counter()
+        logger.info("AI agent DataViz execute_task started", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, service_url=self.service_url)
         context = ErrorContext(
-            submission_id=task.input_data.get("submission_id", "unknown"),
+            submission_id=submission_id,
             agent_type=self.agent_type,
             task_id=task.task_id,
             service_url=self.service_url,
             operation="data_visualization",
             input_data=task.input_data
         )
-        
+
         async def data_viz_operation():
             # Prepare request data
             data_viz_request = {
@@ -708,13 +764,14 @@ class DataVizAgent(AgentInterface):
                 "session_id": task.input_data.get("session_id", ""),
                 "analysis_type": "data_analysis"
             }
-            
+
+            logger.info("AI agent DataViz calling service", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, url=f"{self.service_url}/analyze")
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     f"{self.service_url}/analyze",
                     json=data_viz_request
                 )
-                
+
                 if response.status_code == 200:
                     response_data = response.json()
                     visualization_data = response_data.get("visualization_data", {})
@@ -735,7 +792,9 @@ class DataVizAgent(AgentInterface):
                     
                     # Save agent result to file
                     await self._save_agent_result(task, transformed_result)
-                    
+
+                    duration_ms = int((time.perf_counter() - start) * 1000)
+                    logger.info("AI agent DataViz execute_task success", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, status="COMPLETED", duration_ms=duration_ms)
                     return AgentResult(
                         task_id=task.task_id,
                         agent_type=self.agent_type,
@@ -751,11 +810,13 @@ class DataVizAgent(AgentInterface):
                         request=response.request,
                         response=response
                     )
-        
+
         try:
             # Execute the operation directly
             return await data_viz_operation()
         except Exception as e:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            logger.error("AI agent DataViz execute_task failed", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, error=str(e), duration_ms=duration_ms)
             # If all recovery attempts fail, return failed result
             return AgentResult(
                 task_id=task.task_id,
@@ -784,6 +845,9 @@ class SummarizerAgent(AgentInterface):
     
     async def execute_task(self, task: AgentTask) -> AgentResult:
         """Execute summarization task"""
+        submission_id = task.input_data.get("submission_id", "unknown")
+        start = time.perf_counter()
+        logger.info("AI agent Summarizer execute_task started", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, service_url=self.service_url)
         try:
             # Read individual agent result files
             collected_data = await self._read_agent_result_files(task)
@@ -792,6 +856,8 @@ class SummarizerAgent(AgentInterface):
             summary_prompt = self._create_summary_prompt(collected_data)
             
             # Use the free-ai-service for summarization
+            prompt_len = len(summary_prompt)
+            logger.info("AI agent Summarizer calling service", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, url=f"{self.service_url}/analyze", summary_prompt_len=prompt_len)
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     f"{self.service_url}/analyze",
@@ -801,7 +867,7 @@ class SummarizerAgent(AgentInterface):
                         "user_name": "AI Summarizer"
                     }
                 )
-                
+
                 if response.status_code == 200:
                     result_data = response.json()
                     
@@ -827,7 +893,9 @@ class SummarizerAgent(AgentInterface):
                     
                     # Save agent result to file
                     await self._save_agent_result(task, summary_result)
-                    
+
+                    duration_ms = int((time.perf_counter() - start) * 1000)
+                    logger.info("AI agent Summarizer execute_task success", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, status="COMPLETED", summary_len=len(summary_text), duration_ms=duration_ms, model_used=result_data.get("model_used"))
                     return AgentResult(
                         task_id=task.task_id,
                         agent_type=self.agent_type,
@@ -838,6 +906,8 @@ class SummarizerAgent(AgentInterface):
                         processing_time=result_data.get("processing_time", 0)
                     )
                 else:
+                    duration_ms = int((time.perf_counter() - start) * 1000)
+                    logger.error("AI agent Summarizer execute_task service error", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, status_code=response.status_code, duration_ms=duration_ms)
                     return AgentResult(
                         task_id=task.task_id,
                         agent_type=self.agent_type,
@@ -845,8 +915,10 @@ class SummarizerAgent(AgentInterface):
                         status=TaskStatus.FAILED,
                         error_message=f"Summarizer service error: {response.status_code}"
                     )
-                    
+
         except Exception as e:
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            logger.error("AI agent Summarizer execute_task failed", agent_type=self.agent_type, task_id=task.task_id, submission_id=submission_id, error=str(e), duration_ms=duration_ms)
             return AgentResult(
                 task_id=task.task_id,
                 agent_type=self.agent_type,
@@ -1012,11 +1084,13 @@ class MultiAgentOrchestrator:
     async def process_multi_agent_request(self, request: MultiAgentRequest) -> WorkflowResult:
         """Process a multi-agent request through the workflow engine with comprehensive error handling"""
         workflow_state = None
+        workflow_start = time.perf_counter()
+        logger.info("Multi-agent workflow process_multi_agent_request started", submission_id=request.submission_id, user_id=request.user_id, workflow_type=request.workflow_type)
         try:
             # Connect to persistence if not already connected
             if not self.persistence.redis_client:
                 await self.persistence.connect()
-            
+
             # Create workflow
             workflow_state = await self.workflow_engine.create_workflow(
                 submission_id=request.submission_id,
@@ -1031,13 +1105,16 @@ class MultiAgentOrchestrator:
                 CheckpointType.WORKFLOW_PHASE,
                 {"phase": "workflow_started", "request_type": request.workflow_type}
             )
-            
+            logger.info("Multi-agent workflow created, executing", workflow_id=workflow_state.workflow_id, submission_id=request.submission_id)
+
             # Execute workflow with error handling
             start_time = datetime.now()
-            
+
             try:
                 completed_workflow = await self.workflow_engine.execute_workflow(workflow_state.workflow_id)
                 processing_time = (datetime.now() - start_time).total_seconds()
+                total_ms = int((time.perf_counter() - workflow_start) * 1000)
+                logger.info("Multi-agent workflow execute_workflow completed", workflow_id=completed_workflow.workflow_id, submission_id=request.submission_id, processing_time_sec=processing_time, duration_ms=total_ms)
                 
                 # Create completion checkpoint
                 await workflow_recovery_manager.create_checkpoint(
@@ -1089,11 +1166,13 @@ class MultiAgentOrchestrator:
                 offer_details = await self._generate_simple_offer_fallback(request.submission_id, business_analysis_result)
             
             # Create result
-            successful_agents = len([r for r in completed_workflow.agent_results.values() 
+            successful_agents = len([r for r in completed_workflow.agent_results.values()
                                   if r.status == TaskStatus.COMPLETED])
-            failed_agents = len([r for r in completed_workflow.agent_results.values() 
+            failed_agents = len([r for r in completed_workflow.agent_results.values()
                                if r.status == TaskStatus.FAILED])
-            
+            total_ms = int((time.perf_counter() - workflow_start) * 1000)
+            logger.info("Multi-agent workflow process_multi_agent_request success", workflow_id=completed_workflow.workflow_id, submission_id=request.submission_id, total_agents=len(completed_workflow.agent_results), successful_agents=successful_agents, failed_agents=failed_agents, duration_ms=total_ms)
+
             result = WorkflowResult(
                 submission_id=request.submission_id,
                 workflow_id=completed_workflow.workflow_id,
@@ -1121,9 +1200,10 @@ class MultiAgentOrchestrator:
                 # Don't fail the entire workflow for notification errors
             
             return result
-            
+
         except Exception as e:
-            logger.error(f"Multi-agent processing failed for {request.submission_id}: {e}")
+            duration_ms = int((time.perf_counter() - workflow_start) * 1000)
+            logger.error("Multi-agent workflow process_multi_agent_request failed", submission_id=request.submission_id, workflow_id=workflow_state.workflow_id if workflow_state else None, error=str(e), duration_ms=duration_ms)
             
             # Mark workflow as failed if we have a workflow state
             if workflow_state:

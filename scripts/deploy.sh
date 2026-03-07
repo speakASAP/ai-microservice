@@ -56,7 +56,7 @@ if [ -d ".git" ]; then
 fi
 
 echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║         AI Microservice - Production Deployment           ║${NC}"
+echo -e "${BLUE}║          AI Microservice - Production Deployment           ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -194,8 +194,8 @@ if [ $DEPLOY_EXIT_CODE -eq 0 ]; then
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║      ✅ AI microservice deployment completed successfully! ║${NC}"
-    echo -e "${GREEN}║     Total deployment time: ${TOTAL_DURATION_FORMATTED}s                    ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}Total deployment time: ${TOTAL_DURATION_FORMATTED}s${NC}"
     echo ""
     echo "Check status with:"
     echo "  cd $NGINX_MICROSERVICE_PATH"

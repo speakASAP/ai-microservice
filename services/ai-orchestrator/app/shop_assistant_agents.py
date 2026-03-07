@@ -4,6 +4,7 @@ All agent logic runs in ai-microservice; shop-assistant calls these endpoints on
 """
 
 import os
+import time
 from typing import Any, Dict, List, Optional
 import httpx
 
@@ -66,7 +67,12 @@ def _get_search_config() -> tuple:
 async def agent_transcribe(voice_file_url: str) -> Dict[str, Any]:
     """ASR agent: transcribe audio URL to text. Proxies to ASR service."""
     asr_url = _get_asr_url()
+    start = time.perf_counter()
+    if logger:
+        logger.info("Shop-assistant ASR transcribe started", agent="ASR", voice_file_url_len=len(voice_file_url or ""), asr_url=asr_url)
     if not voice_file_url:
+        if logger:
+            logger.info("Shop-assistant ASR transcribe skipped - no voice URL", agent="ASR", duration_ms=0)
         return {"transcript": ""}
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -77,10 +83,14 @@ async def agent_transcribe(voice_file_url: str) -> Dict[str, Any]:
             r.raise_for_status()
             data = r.json()
             transcript = data.get("transcript") or data.get("text") or ""
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            if logger:
+                logger.info("Shop-assistant ASR transcribe success", agent="ASR", transcript_len=len(transcript), duration_ms=duration_ms, asr_url=asr_url)
             return {"transcript": transcript}
     except Exception as e:
+        duration_ms = int((time.perf_counter() - start) * 1000)
         if logger:
-            logger.error("Shop-assistant ASR transcribe failed: %s", e)
+            logger.error("Shop-assistant ASR transcribe failed", agent="ASR", error=str(e), duration_ms=duration_ms, asr_url=asr_url)
         raise
 
 
@@ -95,8 +105,13 @@ async def agent_refine_query(
     COMMUNICATION agent: refine raw user text into a search-friendly query.
     Uses NLP (free-ai) content_generation. Optional prompt_content/model override from admin.
     """
+    start = time.perf_counter()
     nlp_url = _get_nlp_url()
+    if logger:
+        logger.info("Shop-assistant COMMUNICATION refine_query started", agent="COMMUNICATION", user_text_len=len(user_text or ""), model=model, nlp_url=nlp_url, has_custom_prompt=bool(prompt_content))
     if not user_text or not user_text.strip():
+        if logger:
+            logger.info("Shop-assistant COMMUNICATION refine_query skipped - empty input", agent="COMMUNICATION", duration_ms=0)
         return {"query_text": "", "refined_params": previous_params or {}}
 
     if prompt_content:
@@ -139,13 +154,17 @@ async def agent_refine_query(
             if isinstance(content, list):
                 content = content[0] if content else ""
             query_text = (content if isinstance(content, str) else str(content))[:200].strip() or user_text.strip()
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            if logger:
+                logger.info("Shop-assistant COMMUNICATION refine_query success", agent="COMMUNICATION", query_text_len=len(query_text), duration_ms=duration_ms, nlp_url=nlp_url)
             return {
                 "query_text": query_text,
                 "refined_params": previous_params or {},
             }
     except Exception as e:
+        duration_ms = int((time.perf_counter() - start) * 1000)
         if logger:
-            logger.warning("Shop-assistant refine-query failed, using raw text: %s", e)
+            logger.warning("Shop-assistant refine-query failed, using raw text", agent="COMMUNICATION", error=str(e), duration_ms=duration_ms, nlp_url=nlp_url)
         return {"query_text": user_text.strip(), "refined_params": previous_params or {}}
 
 
@@ -154,10 +173,13 @@ async def agent_search(query_text: str, limit: int = 20) -> Dict[str, Any]:
     SEARCH agent: run external search (Serper) and return product-like items.
     Requires SEARCH_API_URL and SEARCH_API_KEY in .env.
     """
+    start = time.perf_counter()
     search_url, api_key = _get_search_config()
+    if logger:
+        logger.info("Shop-assistant SEARCH started", agent="SEARCH", query_text=query_text[:80] if query_text else "", limit=limit, has_url=bool(search_url), has_key=bool(api_key))
     if not search_url or not api_key:
         if logger:
-            logger.warning("SEARCH_API_URL or SEARCH_API_KEY not set, returning empty results")
+            logger.warning("Shop-assistant SEARCH skipped - SEARCH_API_URL or SEARCH_API_KEY not set", agent="SEARCH", duration_ms=0)
         return {"items": []}
 
     serper_url = search_url if "serper" in search_url else "https://google.serper.dev/search"
@@ -182,12 +204,14 @@ async def agent_search(query_text: str, limit: int = 20) -> Dict[str, Any]:
                     "snippet": row.get("snippet"),
                 }
                 items.append(item)
+            duration_ms = int((time.perf_counter() - start) * 1000)
             if logger:
-                logger.info("Shop-assistant SEARCH completed: query=%s, count=%s", query_text[:80], len(items))
+                logger.info("Shop-assistant SEARCH success", agent="SEARCH", query_text=query_text[:80], items_count=len(items), duration_ms=duration_ms, serper_url=serper_url)
             return {"items": items}
     except Exception as e:
+        duration_ms = int((time.perf_counter() - start) * 1000)
         if logger:
-            logger.error("Shop-assistant SEARCH failed: %s", e)
+            logger.error("Shop-assistant SEARCH failed", agent="SEARCH", error=str(e), duration_ms=duration_ms, query_text=query_text[:80])
         return {"items": []}
 
 
@@ -214,7 +238,10 @@ async def agent_format_presentation(
     PRESENTATION agent: format search results for user chat (dialog/tables/photos).
     Uses NLP content_generation. Optional prompt_content/model override from admin.
     """
+    start = time.perf_counter()
     nlp_url = _get_nlp_url()
+    if logger:
+        logger.info("Shop-assistant PRESENTATION format_presentation started", agent="PRESENTATION", results_count=len(results or []), query_text_len=len(query_text or ""), model=model, nlp_url=nlp_url)
     search_results_text = "\n".join(
         f"{i+1}. {r.get('title','')}{' — ' + str(r.get('price','')) if r.get('price') else ''}"
         f"{' (' + str(r.get('source','')) + ')' if r.get('source') else ''}"
@@ -261,12 +288,14 @@ async def agent_format_presentation(
             formatted = (content if isinstance(content, str) else str(content)).strip()
             if not formatted:
                 formatted = _fallback_presentation(results, query_text)
+            duration_ms = int((time.perf_counter() - start) * 1000)
             if logger:
-                logger.info("Shop-assistant PRESENTATION format success, length=%s", len(formatted))
+                logger.info("Shop-assistant PRESENTATION format success", agent="PRESENTATION", formatted_len=len(formatted), duration_ms=duration_ms, nlp_url=nlp_url)
             return {"formatted_content": formatted}
     except Exception as e:
+        duration_ms = int((time.perf_counter() - start) * 1000)
         if logger:
-            logger.warning("Shop-assistant format-presentation failed, using fallback: %s", e)
+            logger.warning("Shop-assistant format-presentation failed, using fallback", agent="PRESENTATION", error=str(e), duration_ms=duration_ms, nlp_url=nlp_url)
         return {"formatted_content": _fallback_presentation(results, query_text)}
 
 
@@ -282,7 +311,10 @@ async def agent_compare_prices(
     COMPARISON agent: compare prices (and other priorities) for search results.
     Uses NLP content_generation with optional prompt_content/model override from admin.
     """
+    start = time.perf_counter()
     nlp_url = _get_nlp_url()
+    if logger:
+        logger.info("Shop-assistant COMPARISON compare_prices started", agent="COMPARISON", results_count=len(results or []), query_text_len=len(query_text or ""), model=model, nlp_url=nlp_url)
     search_results_text = "\n".join(
         f"{i+1}. {r.get('title','')}"
         f"{' — ' + str(r.get('price','')) if r.get('price') else ''}"
@@ -330,12 +362,14 @@ async def agent_compare_prices(
             if isinstance(content, list):
                 content = content[0] if content else ""
             summary = (content if isinstance(content, str) else str(content)).strip()
+            duration_ms = int((time.perf_counter() - start) * 1000)
             if logger:
-                logger.info("Shop-assistant COMPARISON success, length=%s", len(summary))
+                logger.info("Shop-assistant COMPARISON success", agent="COMPARISON", summary_len=len(summary), duration_ms=duration_ms, nlp_url=nlp_url)
             return {"summary": summary}
     except Exception as e:
+        duration_ms = int((time.perf_counter() - start) * 1000)
         if logger:
-            logger.warning("Shop-assistant COMPARISON failed: %s", e)
+            logger.warning("Shop-assistant COMPARISON failed", agent="COMPARISON", error=str(e), duration_ms=duration_ms, nlp_url=nlp_url)
         return {"summary": ""}
 
 
@@ -351,7 +385,10 @@ async def agent_extract_location(
     LOCATION agent: extract or validate delivery region / shipping location.
     Returns short region phrase and augmented_query (suffix for search) when applicable.
     """
+    start = time.perf_counter()
     nlp_url = _get_nlp_url()
+    if logger:
+        logger.info("Shop-assistant LOCATION extract_location started", agent="LOCATION", user_text_len=len(user_text or ""), query_text_len=len(query_text or ""), model=model, nlp_url=nlp_url)
     priority_order_str = ", ".join(priority_order) if priority_order else "not specified"
 
     if prompt_content:
@@ -399,11 +436,13 @@ async def agent_extract_location(
             if reply and len(reply) < 150:
                 region = reply
                 augmented_query = reply
+            duration_ms = int((time.perf_counter() - start) * 1000)
             if logger:
-                logger.info("Shop-assistant LOCATION success, reply_length=%s", len(reply))
+                logger.info("Shop-assistant LOCATION success", agent="LOCATION", reply_len=len(reply), region=region, duration_ms=duration_ms, nlp_url=nlp_url)
             return {"region": region, "augmented_query": augmented_query}
     except Exception as e:
+        duration_ms = int((time.perf_counter() - start) * 1000)
         if logger:
-            logger.warning("Shop-assistant LOCATION failed: %s", e)
+            logger.warning("Shop-assistant LOCATION failed", agent="LOCATION", error=str(e), duration_ms=duration_ms, nlp_url=nlp_url)
         return {"region": None, "augmented_query": None}
 
