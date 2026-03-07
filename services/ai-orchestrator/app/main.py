@@ -136,7 +136,7 @@ async def lifespan(app: FastAPI):
     """Lifespan event handler for startup and shutdown. Email-triage is ready immediately; Redis/recovery run in background."""
     try:
         shop_agents.set_logger(logger)
-        email_triage.set_logger(logger)
+        email_triage_agents.set_logger(logger)
         logger.info("Multi-agent orchestrator ready (email-triage and health accept requests)")
         asyncio.create_task(_background_startup())
     except Exception as e:
@@ -613,6 +613,7 @@ async def email_triage_ingest(body: Dict[str, Any]):
     Ingest: validate and normalize email payload per email-schema.
     Returns { success: true, payload } or 400 with error, escalation_reason.
     """
+    logger.info("Email-triage ingest request received", message_id=body.get("message_id") if isinstance(body, dict) else None)
     if body is None or not isinstance(body, dict):
         from starlette.responses import JSONResponse
         return JSONResponse(
