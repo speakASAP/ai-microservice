@@ -609,13 +609,19 @@ async def email_triage_ingest(body: Dict[str, Any]):
     Ingest: validate and normalize email payload per email-schema.
     Returns { success: true, payload } or 400 with error, escalation_reason.
     """
+    if body is None or not isinstance(body, dict):
+        from starlette.responses import JSONResponse
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Payload must be an object", "escalation_reason": "incomplete_data"},
+        )
     t0 = time.perf_counter()
     msg_id = (str(body.get("message_id")).strip() or None) if body.get("message_id") is not None else None
-    logger.info("Email-triage ingest request received", extra={"message_id": msg_id})
+    logger.info("Email-triage ingest request received", message_id=msg_id)
     normalized, error, escalation_reason = email_triage_agents.validate_and_normalize(body)
     duration_ms = round((time.perf_counter() - t0) * 1000)
     if error is not None:
-        logger.info("Email-triage ingest rejected: %s (duration_ms=%s)", error, duration_ms, extra={"message_id": msg_id, "duration_ms": duration_ms})
+        logger.info("Email-triage ingest rejected", message_id=msg_id, duration_ms=duration_ms, error=error)
         from starlette.responses import JSONResponse
         return JSONResponse(
             status_code=400,
@@ -624,7 +630,7 @@ async def email_triage_ingest(body: Dict[str, Any]):
                 "escalation_reason": escalation_reason or "incomplete_data",
             },
         )
-    logger.info("Email-triage ingest success (duration_ms=%s)", duration_ms, extra={"message_id": msg_id, "duration_ms": duration_ms})
+    logger.info("Email-triage ingest success", message_id=msg_id, duration_ms=duration_ms)
     return {"success": True, "payload": normalized}
 
 
@@ -637,10 +643,10 @@ async def email_triage_classify(body: Dict[str, Any]):
     t0 = time.perf_counter()
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else body
     msg_id = str(payload.get("message_id")) if isinstance(payload, dict) and payload.get("message_id") is not None else None
-    logger.info("Email-triage classify request received", extra={"message_id": msg_id})
+    logger.info("Email-triage classify request received", message_id=msg_id)
     result = email_triage_agents.classify_payload(payload)
     duration_ms = round((time.perf_counter() - t0) * 1000)
-    logger.info("Email-triage classify success intent=%s (duration_ms=%s)", result.get("intent"), duration_ms, extra={"message_id": msg_id, "intent": result.get("intent"), "duration_ms": duration_ms})
+    logger.info("Email-triage classify success", message_id=msg_id, intent=result.get("intent"), duration_ms=duration_ms)
     return {
         "success": True,
         "intent": result["intent"],
