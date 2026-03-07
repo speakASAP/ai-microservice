@@ -184,11 +184,11 @@ START_TIME=$(get_timestamp_seconds)
         fi
     done
 }
-DEPLOY_EXIT_CODE=${PIPESTATUS[0]}
+DEPLOY_EXIT_CODE=${PIPESTATUS[0]:-1}
 END_TIME=$(get_timestamp_seconds)
 TOTAL_DURATION=$(awk "BEGIN {printf \"%.2f\", $END_TIME - $START_TIME}")
 
-if [ $DEPLOY_EXIT_CODE -eq 0 ]; then
+if [ "${DEPLOY_EXIT_CODE}" -eq 0 ]; then
     TOTAL_DURATION_FORMATTED=$(awk "BEGIN {printf \"%.2f\", $TOTAL_DURATION}")
     print_phase_summary 2>&1
     echo ""
