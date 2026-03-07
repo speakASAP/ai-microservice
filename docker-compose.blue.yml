@@ -33,8 +33,8 @@ services:
     deploy:
       resources:
         limits:
+          cpus: '0.5'
           memory: 200M
-        cpus: '0.5'
         reservations:
           memory: 50M
     healthcheck:
