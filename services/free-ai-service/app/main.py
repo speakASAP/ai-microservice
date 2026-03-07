@@ -126,6 +126,9 @@ class AnalysisType(str, Enum):
     TECHNICAL_ANALYSIS = "technical_analysis"
     CONTENT_GENERATION = "content_generation"
     SENTIMENT_ANALYSIS = "sentiment_analysis"
+    # Email-triage (agentic-email-processing-system): Classifier and Decider via LLM
+    EMAIL_CLASSIFY = "email_classify"
+    EMAIL_DECIDE = "email_decide"
 
 class AIAnalysisRequest(BaseModel):
     text_content: str
@@ -174,6 +177,16 @@ class FreeAIService:
                 "openrouter": ["google/gemini-2.0-flash-exp:free", "openai/gpt-oss-20b:free", "anthropic/claude-3.5-sonnet", "openai/gpt-4o"],
                 "ollama": ["llama2:7b"],
                 "huggingface": ["cardiffnlp/twitter-roberta-base-sentiment-latest", "distilbert-base-uncased"]
+            },
+            AnalysisType.EMAIL_CLASSIFY: {
+                "openrouter": ["google/gemini-2.0-flash-exp:free", "openai/gpt-oss-20b:free", "anthropic/claude-3.5-sonnet", "openai/gpt-4o", "meta-llama/llama-3.1-70b-instruct"],
+                "ollama": ["llama2:7b", "mistral:7b"],
+                "huggingface": ["microsoft/DialoGPT-medium", "gpt2"]
+            },
+            AnalysisType.EMAIL_DECIDE: {
+                "openrouter": ["google/gemini-2.0-flash-exp:free", "openai/gpt-oss-20b:free", "anthropic/claude-3.5-sonnet", "openai/gpt-4o", "meta-llama/llama-3.1-70b-instruct"],
+                "ollama": ["llama2:7b", "mistral:7b"],
+                "huggingface": ["microsoft/DialoGPT-medium", "gpt2"]
             }
         }
         
@@ -382,6 +395,20 @@ Please provide a JSON response with:
 - confidence: Float between 0 and 1
 - summary: String summary
 """
+        elif request.analysis_type == AnalysisType.EMAIL_CLASSIFY:
+            prompt = f"""Classify this business email into exactly one intent. Return only valid JSON, no other text.
+
+Email content:
+{request.text_content}
+
+Intent must be one of: support, sales, contract, technical, billing, spam, unknown, multi_intent.
+Return JSON with: "intent", "confidence" (0-1), "raw_scores" (optional object). Example: {{"intent": "support", "confidence": 0.92, "raw_scores": {{"support": 0.92, "sales": 0.1, "contract": 0.05, "technical": 0.2, "billing": 0.15, "spam": 0.02}}}}
+"""
+        elif request.analysis_type == AnalysisType.EMAIL_DECIDE:
+            prompt = f"""Given triage inputs, decide the action. Return only valid JSON. Input: {request.text_content}
+Actions: auto_respond, route_to_queue, escalate. Queues: support, sales, technical, billing, spam_review.
+Return JSON: "action", "escalation_reason" (null or string), "queue" (null or queue name). Example: {{"action": "route_to_queue", "escalation_reason": null, "queue": "support"}}
+"""
         else:
             prompt = f"""Analyze this request and provide insights:
 
@@ -427,9 +454,12 @@ Please provide a JSON response with:
                                 analysis = json.loads(json_str)
                             else:
                                 analysis = self._parse_text_response(ai_response, request.user_name, request.analysis_type)
-                        except:
+                        except Exception:
                             analysis = self._parse_text_response(ai_response, request.user_name, request.analysis_type)
-                        
+                        if request.analysis_type == AnalysisType.EMAIL_CLASSIFY:
+                            analysis = self._normalize_email_classify(analysis)
+                        elif request.analysis_type == AnalysisType.EMAIL_DECIDE:
+                            analysis = self._normalize_email_decide(analysis)
                         analysis["ai_service"] = "Ollama"
                         analysis["model_used"] = model
                         return analysis
@@ -451,8 +481,13 @@ Please provide a JSON response with:
             if HUGGINGFACE_API_KEY:
                 headers["Authorization"] = f"Bearer {HUGGINGFACE_API_KEY}"
             
-            # Create a focused prompt for business analysis
-            prompt = f"Business Analysis Request from {request.user_name}: {request.text_content[:400]}"
+            # Email-triage: use same prompts as OpenRouter for JSON output
+            if request.analysis_type == AnalysisType.EMAIL_CLASSIFY:
+                prompt = f"""Classify this email. Return only JSON with intent, confidence, raw_scores. Intents: support, sales, contract, technical, billing, spam, unknown, multi_intent.\n\nEmail:\n{request.text_content[:2000]}"""
+            elif request.analysis_type == AnalysisType.EMAIL_DECIDE:
+                prompt = f"""Decide action. Return only JSON with action (auto_respond|route_to_queue|escalate), escalation_reason, queue.\n\nInput:\n{request.text_content[:1000]}"""
+            else:
+                prompt = f"Business Analysis Request from {request.user_name}: {request.text_content[:400]}"
             
             async with aiohttp.ClientSession() as session:
                 payload = {
@@ -483,8 +518,7 @@ Please provide a JSON response with:
                                 ai_response = result[0]["text"]
                         elif isinstance(result, dict):
                             ai_response = result.get("generated_text", result.get("text", ""))
-                        
-                        analysis = self._parse_text_response(ai_response, request.user_name, request.analysis_type)
+                        analysis = self._parse_response_for_type(ai_response, request)
                         analysis["ai_service"] = "Hugging Face"
                         analysis["model_used"] = model
                         return analysis
@@ -502,7 +536,7 @@ Please provide a JSON response with:
                             if retry_response.status == 200:
                                 result = await retry_response.json()
                                 ai_response = result[0].get("generated_text", "") if isinstance(result, list) else ""
-                                analysis = self._parse_text_response(ai_response, request.user_name, request.analysis_type)
+                                analysis = self._parse_response_for_type(ai_response, request)
                                 analysis["ai_service"] = "Hugging Face"
                                 analysis["model_used"] = model
                                 return analysis
@@ -552,6 +586,45 @@ Please provide a JSON response with:
 - technology_stack: Object with recommended technologies
 - confidence: Float between 0 and 1
 - summary: String summary
+"""
+        elif request.analysis_type == AnalysisType.EMAIL_CLASSIFY:
+            prompt = f"""Classify this business email into exactly one intent. Return only valid JSON, no other text.
+
+Email content:
+{request.text_content}
+
+Intent must be one of: support, sales, contract, technical, billing, spam, unknown, multi_intent.
+- support: general customer support
+- sales: product/offer/pricing inquiry
+- contract: contract question or change
+- technical: technical problem or question
+- billing: billing or payment issue
+- spam: spam or irrelevant
+- unknown: cannot determine
+- multi_intent: clearly multiple intents
+
+Return JSON with these keys only:
+- "intent": one of the values above
+- "confidence": number between 0 and 1
+- "raw_scores": object with keys support, sales, contract, technical, billing, spam and number values 0-1 for each (optional; if missing we use intent and confidence only)
+
+Example: {{"intent": "support", "confidence": 0.92, "raw_scores": {{"support": 0.92, "sales": 0.1, "contract": 0.05, "technical": 0.2, "billing": 0.15, "spam": 0.02}}}}
+"""
+        elif request.analysis_type == AnalysisType.EMAIL_DECIDE:
+            prompt = f"""Given triage inputs, decide the action. Return only valid JSON, no other text.
+
+Input (JSON):
+{request.text_content}
+
+Actions: auto_respond (only for high-confidence support when safe), route_to_queue (assign to a queue), escalate (human review).
+Queues: support, sales, technical, billing, spam_review. Always escalate for intent unknown, multi_intent, or contract.
+
+Return JSON with:
+- "action": one of auto_respond, route_to_queue, escalate
+- "escalation_reason": null or string (e.g. ambiguous_intent, low_confidence, contract_change) only when action is escalate
+- "queue": null or one of support, sales, technical, billing, spam_review (when action is route_to_queue)
+
+Example: {{"action": "route_to_queue", "escalation_reason": null, "queue": "support"}}
 """
         else:
             prompt = f"""Analyze this request and provide insights:
@@ -613,9 +686,13 @@ Please provide a JSON response with:
                                 analysis = json.loads(json_str)
                             else:
                                 analysis = self._parse_text_response(ai_response, request.user_name, request.analysis_type)
-                        except:
+                        except Exception:
                             analysis = self._parse_text_response(ai_response, request.user_name, request.analysis_type)
-                        
+                        # Normalize email-triage responses to contract shape
+                        if request.analysis_type == AnalysisType.EMAIL_CLASSIFY:
+                            analysis = self._normalize_email_classify(analysis)
+                        elif request.analysis_type == AnalysisType.EMAIL_DECIDE:
+                            analysis = self._normalize_email_decide(analysis)
                         analysis["ai_service"] = "OpenRouter"
                         analysis["model_used"] = model
                         return analysis
@@ -627,6 +704,55 @@ Please provide a JSON response with:
             raise e
     
     # Mock AI methods removed - only real AI providers are supported
+
+    _EMAIL_INTENTS = frozenset({"support", "sales", "contract", "technical", "billing", "spam", "unknown", "multi_intent"})
+    _EMAIL_ACTIONS = frozenset({"auto_respond", "route_to_queue", "escalate"})
+    _EMAIL_QUEUES = frozenset({"support", "sales", "technical", "billing", "spam_review"})
+
+    def _normalize_email_classify(self, raw: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate and normalize LLM output to classifier contract. Raises if invalid."""
+        intent = (raw.get("intent") or "").strip().lower()
+        if intent not in self._EMAIL_INTENTS:
+            raise ValueError(f"Invalid intent: {intent}; must be one of {sorted(self._EMAIL_INTENTS)}")
+        try:
+            confidence = float(raw.get("confidence", 0))
+        except (TypeError, ValueError):
+            confidence = 0.0
+        confidence = max(0.0, min(1.0, confidence))
+        raw_scores = raw.get("raw_scores")
+        if not isinstance(raw_scores, dict):
+            raw_scores = {k: 0.2 for k in ["support", "sales", "contract", "technical", "billing", "spam"]}
+        return {"intent": intent, "confidence": confidence, "raw_scores": raw_scores}
+
+    def _normalize_email_decide(self, raw: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate and normalize LLM output to decider contract. Raises if invalid."""
+        action = (raw.get("action") or "").strip().lower()
+        if action not in self._EMAIL_ACTIONS:
+            raise ValueError(f"Invalid action: {action}; must be one of {sorted(self._EMAIL_ACTIONS)}")
+        escalation_reason = raw.get("escalation_reason")
+        if escalation_reason is not None and not isinstance(escalation_reason, str):
+            escalation_reason = str(escalation_reason)
+        queue = raw.get("queue")
+        if queue is not None:
+            queue = str(queue).strip().lower()
+            if queue not in self._EMAIL_QUEUES:
+                queue = "support"
+        return {"action": action, "escalation_reason": escalation_reason, "queue": queue}
+
+    def _parse_response_for_type(self, ai_response: str, request: AIAnalysisRequest) -> Dict[str, Any]:
+        """Parse AI response; for email-triage types try JSON and normalize, else generic parse."""
+        if request.analysis_type in (AnalysisType.EMAIL_CLASSIFY, AnalysisType.EMAIL_DECIDE):
+            try:
+                json_start = ai_response.find('{')
+                json_end = ai_response.rfind('}') + 1
+                if json_start != -1 and json_end != -1:
+                    analysis = json.loads(ai_response[json_start:json_end])
+                    if request.analysis_type == AnalysisType.EMAIL_CLASSIFY:
+                        return self._normalize_email_classify(analysis)
+                    return self._normalize_email_decide(analysis)
+            except (json.JSONDecodeError, ValueError):
+                pass
+        return self._parse_text_response(ai_response, request.user_name, request.analysis_type)
     
     def _parse_text_response(self, text: str, user_name: str, analysis_type: AnalysisType) -> Dict[str, Any]:
         """Parse text response from AI into structured format"""

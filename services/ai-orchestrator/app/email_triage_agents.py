@@ -157,6 +157,11 @@ def validate_and_normalize(raw: Any) -> Tuple[Optional[Dict[str, Any]], Optional
     return normalized, None, None
 
 
+def get_email_text_for_llm(payload: Dict[str, Any]) -> str:
+    """Public helper: combined subject + body text for LLM (classify/decide)."""
+    return _text_from_payload(payload)
+
+
 def _text_from_payload(payload: Dict[str, Any]) -> str:
     """Build combined text from subject + body_plain or stripped body_html."""
     parts = []

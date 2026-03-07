@@ -18,6 +18,7 @@ from enum import Enum
 import uvicorn
 import uuid
 import asyncio
+import json
 import httpx
 from datetime import datetime
 import logging
@@ -213,6 +214,10 @@ document_ai_host = os.getenv("DOCUMENT_AI_HOST", "document-ai")
 prototype_gen_host = os.getenv("PROTOTYPE_GENERATOR_HOST", "prototype-generator")
 
 NLP_SERVICE_URL = os.getenv("NLP_SERVICE_URL", f"http://{free_ai_host}:{free_ai_port}")  # Use free-ai-service
+FREE_AI_SERVICE_URL = (os.getenv("FREE_AI_SERVICE_URL") or NLP_SERVICE_URL).rstrip("/")
+# Optional: use LLM (free-ai-service OpenRouter) for email-triage Classifier and Decider; when false or on failure, use rule-based agents
+EMAIL_TRIAGE_LLM_CLASSIFIER = os.getenv("EMAIL_TRIAGE_LLM_CLASSIFIER", "").strip().lower() in ("true", "1", "yes")
+EMAIL_TRIAGE_LLM_DECIDER = os.getenv("EMAIL_TRIAGE_LLM_DECIDER", "").strip().lower() in ("true", "1", "yes")
 GEMINI_AI_SERVICE_URL = os.getenv("GEMINI_AI_SERVICE_URL", f"http://{gemini_ai_host}:{gemini_ai_port}")
 ASR_SERVICE_URL = os.getenv("ASR_SERVICE_URL", f"http://{asr_host}:{asr_port}")
 DOCUMENT_AI_URL = os.getenv("DOCUMENT_AI_URL", f"http://{document_ai_host}:{document_ai_port}")
@@ -638,21 +643,65 @@ async def email_triage_ingest(body: Dict[str, Any]):
 async def email_triage_classify(body: Dict[str, Any]):
     """
     Classify: intent + confidence per intent-taxonomy.
-    Body: { payload: <normalized email> } or raw email fields.
+    Body: { payload: <normalized email>, use_llm?: bool }.
+    use_llm true = use LLM (OpenRouter); false = rule-based; omitted = use env EMAIL_TRIAGE_LLM_CLASSIFIER.
     """
     t0 = time.perf_counter()
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else body
     msg_id = str(payload.get("message_id")) if isinstance(payload, dict) and payload.get("message_id") is not None else None
-    logger.info("Email-triage classify request received", message_id=msg_id)
-    result = await asyncio.to_thread(email_triage_agents.classify_payload, payload)
+    use_llm_request = body.get("use_llm")
+    use_llm = bool(use_llm_request) if use_llm_request is not None else EMAIL_TRIAGE_LLM_CLASSIFIER
+    logger.info("Email-triage classify request received", message_id=msg_id, use_llm=use_llm)
+    result = None
+    if use_llm and FREE_AI_SERVICE_URL:
+        try:
+            text_content = email_triage_agents.get_email_text_for_llm(payload)
+            if not text_content.strip():
+                raise ValueError("Empty email text for LLM classify")
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                r = await client.post(
+                    f"{FREE_AI_SERVICE_URL}/analyze",
+                    json={"text_content": text_content, "analysis_type": "email_classify", "user_name": "email-triage"},
+                )
+                r.raise_for_status()
+                data = r.json()
+                if data.get("success") and isinstance(data.get("analysis"), dict):
+                    a = data["analysis"]
+                    model_used = data.get("model_used") or a.get("model_used")
+                    result = {
+                        "intent": a.get("intent"),
+                        "confidence": float(a.get("confidence", 0)),
+                        "raw_scores": a.get("raw_scores"),
+                        "model_used": model_used,
+                        "llm_output": {"intent": a.get("intent"), "confidence": a.get("confidence"), "raw_scores": a.get("raw_scores")},
+                    }
+                    if result["intent"] and 0 <= result["confidence"] <= 1:
+                        logger.info(
+                            "Email-triage classify via LLM",
+                            message_id=msg_id,
+                            intent=result["intent"],
+                            confidence=result["confidence"],
+                            model_used=model_used,
+                            llm_output=result["llm_output"],
+                        )
+        except Exception as e:
+            logger.warning("Email-triage LLM classify failed, falling back to rule-based", message_id=msg_id, error=str(e))
+    if result is None:
+        result = await asyncio.to_thread(email_triage_agents.classify_payload, payload)
+        logger.info("Email-triage classify via rule-based", message_id=msg_id, intent=result.get("intent"))
     duration_ms = round((time.perf_counter() - t0) * 1000)
     logger.info("Email-triage classify success", message_id=msg_id, intent=result.get("intent"), duration_ms=duration_ms)
-    return {
+    out = {
         "success": True,
         "intent": result["intent"],
         "confidence": result["confidence"],
         "raw_scores": result.get("raw_scores"),
     }
+    if result.get("model_used") is not None:
+        out["model_used"] = result["model_used"]
+    if result.get("llm_output") is not None:
+        out["llm_output"] = result["llm_output"]
+    return out
 
 
 @app.post("/api/email-triage/extract")
@@ -672,7 +721,8 @@ async def email_triage_extract(body: Dict[str, Any]):
 async def email_triage_decide(body: Dict[str, Any]):
     """
     Action/Decider: intent + confidence + optional entities -> action per routing-rules.
-    Body: { intent, confidence, entities?: {...} }. Returns { success: true, action, escalation_reason?, queue? }.
+    Body: { intent, confidence, entities?: {...}, use_llm?: bool }. Returns { success: true, action, escalation_reason?, queue? }.
+    use_llm true = LLM; false = rule-based; omitted = use env EMAIL_TRIAGE_LLM_DECIDER.
     """
     intent = body.get("intent")
     confidence = body.get("confidence")
@@ -689,10 +739,51 @@ async def email_triage_decide(body: Dict[str, Any]):
             content={"error": "confidence is required", "escalation_reason": "incomplete_data"},
         )
     entities = body.get("entities") if isinstance(body.get("entities"), dict) else None
-    result = await asyncio.to_thread(
-        email_triage_agents.decide_action, intent, float(confidence), None, entities
-    )
-    return {"success": True, **result}
+    conf_float = float(confidence)
+    use_llm_request = body.get("use_llm")
+    use_llm = bool(use_llm_request) if use_llm_request is not None else EMAIL_TRIAGE_LLM_DECIDER
+    result = None
+    if use_llm and FREE_AI_SERVICE_URL:
+        try:
+            text_content = json.dumps({"intent": intent, "confidence": conf_float, "entities": entities or {}})
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                r = await client.post(
+                    f"{FREE_AI_SERVICE_URL}/analyze",
+                    json={"text_content": text_content, "analysis_type": "email_decide", "user_name": "email-triage"},
+                )
+                r.raise_for_status()
+                data = r.json()
+                if data.get("success") and isinstance(data.get("analysis"), dict):
+                    a = data["analysis"]
+                    model_used = data.get("model_used") or a.get("model_used")
+                    result = {
+                        "action": a.get("action"),
+                        "escalation_reason": a.get("escalation_reason"),
+                        "queue": a.get("queue"),
+                        "model_used": model_used,
+                        "llm_output": {"action": a.get("action"), "escalation_reason": a.get("escalation_reason"), "queue": a.get("queue")},
+                    }
+                    if result["action"] in ("auto_respond", "route_to_queue", "escalate"):
+                        logger.info(
+                            "Email-triage decide via LLM",
+                            intent=intent,
+                            action=result["action"],
+                            model_used=model_used,
+                            llm_output=result["llm_output"],
+                        )
+        except Exception as e:
+            logger.warning("Email-triage LLM decide failed, falling back to rule-based", intent=intent, error=str(e))
+    if result is None:
+        result = await asyncio.to_thread(
+            email_triage_agents.decide_action, intent, conf_float, None, entities
+        )
+        logger.info("Email-triage decide via rule-based", intent=intent, action=result.get("action"))
+    out = {"success": True, **result}
+    if result.get("model_used") is not None:
+        out["model_used"] = result["model_used"]
+    if result.get("llm_output") is not None:
+        out["llm_output"] = result["llm_output"]
+    return out
 
 
 @app.get("/health")
