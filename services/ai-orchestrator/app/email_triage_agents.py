@@ -196,6 +196,8 @@ def classify_payload(payload: Dict[str, Any], threshold: Optional[float] = None)
         threshold = _get_confidence_threshold()
     _log("Email-triage Classifier: classify_payload started", message_id=message_id, threshold=threshold)
     text = _text_from_payload(payload)
+    text_len = len(text)
+    _log("Email-triage Classifier: text for classification", message_id=message_id, text_length=text_len)
     if not text:
         _log("Email-triage Classifier: no text - returning unknown", message_id=message_id, intent="unknown", confidence=0.0)
         return {
@@ -211,11 +213,25 @@ def classify_payload(payload: Dict[str, Any], threshold: Optional[float] = None)
         match_counts[intent] = len(matches)
         raw_scores[intent] = min(0.5 + len(matches) * 0.15, 0.95) if matches else 0.2
 
+    _log(
+        "Email-triage Classifier: keyword match counts and scores",
+        message_id=message_id,
+        match_counts=match_counts,
+        raw_scores=raw_scores,
+    )
+
     entries = [(k, v) for k, v in raw_scores.items() if v > 0.2]
     by_score = sorted(entries, key=lambda x: (-x[1], -match_counts[x[0]]))
 
     if not by_score:
-        _log("Email-triage Classifier: no scores - unknown", message_id=message_id, intent="unknown", confidence=0.2, raw_scores=raw_scores)
+        _log(
+            "Email-triage Classifier: no keyword matches above baseline - unknown",
+            message_id=message_id,
+            intent="unknown",
+            confidence=0.2,
+            raw_scores=raw_scores,
+            match_counts=match_counts,
+        )
         return {
             "intent": "unknown",
             "confidence": 0.2,
@@ -231,17 +247,53 @@ def classify_payload(payload: Dict[str, Any], threshold: Optional[float] = None)
     if top_score >= threshold and second_score >= threshold:
         if top_matches > second_matches:
             out = {"intent": top_intent, "confidence": top_score, "raw_scores": raw_scores}
-            _log("Email-triage Classifier: tie broken by match count", message_id=message_id, intent=top_intent, confidence=top_score, top_matches=top_matches, second_matches=second_matches, raw_scores=raw_scores)
+            _log(
+                "Email-triage Classifier: tie broken by match count",
+                message_id=message_id,
+                intent=top_intent,
+                confidence=top_score,
+                top_matches=top_matches,
+                second_intent=second_intent,
+                second_matches=second_matches,
+                raw_scores=raw_scores,
+            )
             return out
         out = {"intent": "multi_intent", "confidence": (top_score + second_score) / 2, "raw_scores": raw_scores}
-        _log("Email-triage Classifier: multi_intent", message_id=message_id, intent=out["intent"], confidence=out["confidence"], top_intent=top_intent, top_score=top_score, second_score=second_score, raw_scores=raw_scores)
+        _log(
+            "Email-triage Classifier: multi_intent",
+            message_id=message_id,
+            intent=out["intent"],
+            confidence=out["confidence"],
+            top_intent=top_intent,
+            top_score=top_score,
+            second_intent=second_intent,
+            second_score=second_score,
+            raw_scores=raw_scores,
+        )
         return out
     if top_score < threshold:
         out = {"intent": "unknown", "confidence": top_score, "raw_scores": raw_scores}
-        _log("Email-triage Classifier: below threshold - unknown", message_id=message_id, intent=out["intent"], confidence=top_score, top_intent=top_intent, threshold=threshold, raw_scores=raw_scores)
+        _log(
+            "Email-triage Classifier: below threshold - unknown",
+            message_id=message_id,
+            intent=out["intent"],
+            confidence=top_score,
+            top_intent=top_intent,
+            threshold=threshold,
+            raw_scores=raw_scores,
+            match_counts=match_counts,
+            reason="top_score_below_threshold",
+        )
         return out
     out = {"intent": top_intent, "confidence": top_score, "raw_scores": raw_scores}
-    _log("Email-triage Classifier: classified", message_id=message_id, intent=top_intent, confidence=top_score, raw_scores=raw_scores)
+    _log(
+        "Email-triage Classifier: classified",
+        message_id=message_id,
+        intent=top_intent,
+        confidence=top_score,
+        raw_scores=raw_scores,
+        match_counts=match_counts,
+    )
     return out
 
 

@@ -164,8 +164,8 @@ async def agent_refine_query(
     except Exception as e:
         duration_ms = int((time.perf_counter() - start) * 1000)
         if logger:
-            logger.warning("Shop-assistant refine-query failed, using raw text", agent="COMMUNICATION", error=str(e), duration_ms=duration_ms, nlp_url=nlp_url)
-        return {"query_text": user_text.strip(), "refined_params": previous_params or {}}
+            logger.error("Shop-assistant refine-query failed", agent="COMMUNICATION", error=str(e), duration_ms=duration_ms, nlp_url=nlp_url)
+        raise RuntimeError(f"Refine-query failed: {e}") from e
 
 
 async def agent_search(query_text: str, limit: int = 20) -> Dict[str, Any]:
@@ -179,8 +179,8 @@ async def agent_search(query_text: str, limit: int = 20) -> Dict[str, Any]:
         logger.info("Shop-assistant SEARCH started", agent="SEARCH", query_text=query_text[:80] if query_text else "", limit=limit, has_url=bool(search_url), has_key=bool(api_key))
     if not search_url or not api_key:
         if logger:
-            logger.warning("Shop-assistant SEARCH skipped - SEARCH_API_URL or SEARCH_API_KEY not set", agent="SEARCH", duration_ms=0)
-        return {"items": []}
+            logger.error("Shop-assistant SEARCH failed - SEARCH_API_URL or SEARCH_API_KEY not set", agent="SEARCH", duration_ms=0)
+        raise RuntimeError("SEARCH_API_URL or SEARCH_API_KEY not set; cannot run search")
 
     serper_url = search_url if "serper" in search_url else "https://google.serper.dev/search"
     try:
@@ -212,7 +212,7 @@ async def agent_search(query_text: str, limit: int = 20) -> Dict[str, Any]:
         duration_ms = int((time.perf_counter() - start) * 1000)
         if logger:
             logger.error("Shop-assistant SEARCH failed", agent="SEARCH", error=str(e), duration_ms=duration_ms, query_text=query_text[:80])
-        return {"items": []}
+        raise RuntimeError(f"Search failed: {e}") from e
 
 
 def _fallback_presentation(results: List[Dict], query_text: str) -> str:
@@ -287,7 +287,9 @@ async def agent_format_presentation(
                 content = content[0] if content else ""
             formatted = (content if isinstance(content, str) else str(content)).strip()
             if not formatted:
-                formatted = _fallback_presentation(results, query_text)
+                if logger:
+                    logger.error("Shop-assistant PRESENTATION failed: NLP returned empty content", agent="PRESENTATION", duration_ms=int((time.perf_counter() - start) * 1000), nlp_url=nlp_url)
+                raise ValueError("NLP content_generation returned empty formatted content")
             duration_ms = int((time.perf_counter() - start) * 1000)
             if logger:
                 logger.info("Shop-assistant PRESENTATION format success", agent="PRESENTATION", formatted_len=len(formatted), duration_ms=duration_ms, nlp_url=nlp_url)
@@ -295,8 +297,8 @@ async def agent_format_presentation(
     except Exception as e:
         duration_ms = int((time.perf_counter() - start) * 1000)
         if logger:
-            logger.warning("Shop-assistant format-presentation failed, using fallback", agent="PRESENTATION", error=str(e), duration_ms=duration_ms, nlp_url=nlp_url)
-        return {"formatted_content": _fallback_presentation(results, query_text)}
+            logger.error("Shop-assistant format-presentation failed", agent="PRESENTATION", error=str(e), duration_ms=duration_ms, nlp_url=nlp_url)
+        raise RuntimeError(f"Format-presentation failed: {e}") from e
 
 
 async def agent_compare_prices(
@@ -369,8 +371,8 @@ async def agent_compare_prices(
     except Exception as e:
         duration_ms = int((time.perf_counter() - start) * 1000)
         if logger:
-            logger.warning("Shop-assistant COMPARISON failed", agent="COMPARISON", error=str(e), duration_ms=duration_ms, nlp_url=nlp_url)
-        return {"summary": ""}
+            logger.error("Shop-assistant COMPARISON failed", agent="COMPARISON", error=str(e), duration_ms=duration_ms, nlp_url=nlp_url)
+        raise RuntimeError(f"Compare-prices failed: {e}") from e
 
 
 async def agent_extract_location(
@@ -443,6 +445,6 @@ async def agent_extract_location(
     except Exception as e:
         duration_ms = int((time.perf_counter() - start) * 1000)
         if logger:
-            logger.warning("Shop-assistant LOCATION failed", agent="LOCATION", error=str(e), duration_ms=duration_ms, nlp_url=nlp_url)
-        return {"region": None, "augmented_query": None}
+            logger.error("Shop-assistant LOCATION failed", agent="LOCATION", error=str(e), duration_ms=duration_ms, nlp_url=nlp_url)
+        raise RuntimeError(f"Extract-location failed: {e}") from e
 

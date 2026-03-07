@@ -535,8 +535,8 @@ async def shop_assistant_refine_query(req: ShopRefineQueryRequest):
         )
         return result
     except Exception as e:
-        logger.warning("Shop-assistant refine-query failed: %s", e)
-        return {"query_text": req.user_text.strip(), "refined_params": req.previous_params or {}}
+        logger.error("Shop-assistant refine-query failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Refine-query failed: {str(e)}")
 
 @app.post("/api/shop-assistant/search")
 async def shop_assistant_search(req: ShopSearchRequest):
@@ -546,7 +546,7 @@ async def shop_assistant_search(req: ShopSearchRequest):
         return result
     except Exception as e:
         logger.error("Shop-assistant search failed: %s", e)
-        return {"items": []}
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 @app.post("/api/shop-assistant/format-presentation")
 async def shop_assistant_format_presentation(req: ShopFormatPresentationRequest):
@@ -561,9 +561,8 @@ async def shop_assistant_format_presentation(req: ShopFormatPresentationRequest)
         )
         return result
     except Exception as e:
-        logger.warning("Shop-assistant format-presentation failed: %s", e)
-        fallback = shop_agents._fallback_presentation(req.results, req.query_text)
-        return {"formatted_content": fallback}
+        logger.error("Shop-assistant format-presentation failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Format-presentation failed: {str(e)}")
 
 
 @app.post("/api/shop-assistant/compare-prices")
@@ -580,8 +579,8 @@ async def shop_assistant_compare_prices(req: ShopCompareRequest):
         )
         return result
     except Exception as e:
-        logger.warning("Shop-assistant compare-prices failed: %s", e)
-        return {"summary": ""}
+        logger.error("Shop-assistant compare-prices failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Compare-prices failed: {str(e)}")
 
 
 @app.post("/api/shop-assistant/extract-location")
@@ -598,8 +597,8 @@ async def shop_assistant_extract_location(req: ShopLocationRequest):
         )
         return result
     except Exception as e:
-        logger.warning("Shop-assistant extract-location failed: %s", e)
-        return {"region": None, "augmented_query": None}
+        logger.error("Shop-assistant extract-location failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"Extract-location failed: {str(e)}")
 
 
 # --- Email-triage agents (agentic-email-processing-system) ---
@@ -817,8 +816,10 @@ async def get_available_models(
                         logger.info(f"Fetched {len(model_list)} models from free-ai-service (OpenRouter)")
             except httpx.TimeoutException as e:
                 logger.error(f"Timeout fetching models from free-ai-service (connectivity or slow execution): {e}")
+                raise
             except Exception as e:
-                logger.warning(f"Failed to fetch models from free-ai-service: {e}")
+                logger.error(f"Failed to fetch models from free-ai-service: {e}")
+                raise
         
         # Fetch models from gemini-ai-service
         if not provider or provider == "gemini":
@@ -877,10 +878,10 @@ async def get_available_models(
                         logger.info(f"Fetched {gemini_count} models from gemini-ai-service")
             except httpx.TimeoutException as e:
                 logger.error(f"Timeout fetching models from gemini-ai-service (connectivity or slow execution): {e}")
-                providers["gemini"] = {"status": "error"}
+                raise
             except Exception as e:
-                logger.warning(f"Failed to fetch models from gemini-ai-service: {e}")
-                providers["gemini"] = {"status": "error"}
+                logger.error(f"Failed to fetch models from gemini-ai-service: {e}")
+                raise
         
         return {
             "models": models_by_provider,
@@ -889,11 +890,7 @@ async def get_available_models(
         }
     except Exception as e:
         logger.error(f"Error fetching available models: {e}")
-        return {
-            "models": {},
-            "providers": {},
-            "modelList": []
-        }
+        raise
 
 @app.get("/metrics")
 async def metrics():
