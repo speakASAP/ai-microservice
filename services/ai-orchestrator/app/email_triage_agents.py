@@ -16,32 +16,53 @@ INTENTS_PRIMARY = ["support", "sales", "contract", "technical", "billing", "spam
 INTENTS_ALL = INTENTS_PRIMARY + ["unknown", "multi_intent"]
 DEFAULT_CONFIDENCE_THRESHOLD = 0.75
 
-# Keywords (DE/EN) per primary intent — prototype; align with intent-taxonomy
-# support: general "please check / something wrong with my account" (dashboard, portal, access, check)
-# technical: connectivity, outage, router, API/error — not generic account/dashboard wording
+# Keywords (DE/EN) per primary intent — from sample_intent_dataset.json (50 labeled emails).
+# Same word may appear in multiple categories; classifier counts matches per category and picks highest.
 KEYWORDS = {
     "billing": re.compile(
-        r"\b(rechnung|invoice|zahlung|payment|kosten|preis|refund|rückerstattung|abbuchung|debit)\b",
+        r"\b(rechnung|invoice|zahlung|payment|kosten|preis|refund|rückerstattung|abbuchung|debit|"
+        r"charges|active|verify|credit|card|retry|accounting|copy|charged|subscription|duplicate|twice|"
+        r"billing|address|invoices|VAT|finance|downgrade|enterprise|plan|steps|bank|transfer|confirmation|reflected)\b",
         re.I,
     ),
     "contract": re.compile(
-        r"\b(vertrag|contract|kündigung|cancel|änderung|change|agb|terms)\b",
+        r"\b(vertrag|contract|kündigung|cancel|änderung|change|agb|terms|"
+        r"renewal|notice|automatic|months|amendment|subsidiaries|agreement|additional|existing|"
+        r"data|processing|DPA|GDPR|compliance|legal|standard|termination|clause|section|reviewing|"
+        r"clarify|conditions|SLA|uptime|guarantees|procurement|approval|start|date|signed|period|begins|"
+        r"entity|merged|organization|update|liability|limitations|situations|covered)\b",
         re.I,
     ),
     "technical": re.compile(
-        r"\b(verbindung|connection|internet|störung|outage|fehler|error|router|modem|technisch|api|endpoint)\b",
+        r"\b(verbindung|connection|internet|störung|outage|fehler|error|router|modem|technisch|"
+        r"API|endpoint|integration|responses|webhook|triggering|events|configured|trigger|"
+        r"authentication|key|token|rotated|requests|rejected|troubleshoot|workflow|stuck|processing|"
+        r"automation|completes|latency|response|dashboard|load|upload|file|failing|size|limit|"
+        r"Slack|notifications|broke|AI|classification|misclassified|spam|retrain|model|SSO|login|redirect|"
+        r"export|data|job|failed|dataset|investigate|account)\b",
         re.I,
     ),
     "sales": re.compile(
-        r"\b(angebot|offer|kaufen|buy|tarif|plan|bestellen|order)\b",
+        r"\b(angebot|offer|kaufen|buy|tarif|plan|bestellen|order|"
+        r"pricing|enterprise|evaluating|employees|demo|product|webinar|volume|discounts|deployments|"
+        r"onboard|comparing|platform|alternatives|capabilities|ServiceNow|evaluation|confirm|incident|"
+        r"startup|trial|access|test|security|certifications|SOC2|ISO27001|certified|automation|"
+        r"email|processing|ticket|routing|tiers|information)\b",
         re.I,
     ),
     "spam": re.compile(
-        r"\b(casino|lottery|winner|click here|unsubscribe|opt.?out)\b",
+        r"\b(casino|lottery|winner|click here|unsubscribe|opt.?out|"
+        r"money|rich|opportunity|reply|SEO|website|Google|guaranteed|crypto|investment|trading|returns|"
+        r"newsletter|subscription|confirmation|test|message|monitoring|office)\b",
         re.I,
     ),
     "support": re.compile(
-        r"\b(hilfe|help|frage|question|problem|beschwerde|complaint|support|check|dashboard|portal|account|access|empty|unable|not working|doesn't work|doesnt work)\b",
+        r"\b(hilfe|help|frage|question|problem|beschwerde|complaint|support|check|dashboard|portal|account|"
+        r"access|empty|unable|not working|doesn't work|doesnt work|"
+        r"logged|page|permissions|admin|reporting|restore|guide|removed|unlock|reset|export|reports|"
+        r"analytics|excel|onboarding|documentation|configure|workflows|invitations|invitation|expired|link|"
+        r"invite|integration|setup|assist|connect|instructions|mobile|app|login|logs|training|session|"
+        r"automation|features|adopted|struggling|schedule)\b",
         re.I,
     ),
 }
@@ -184,12 +205,14 @@ def classify_payload(payload: Dict[str, Any], threshold: Optional[float] = None)
         }
 
     raw_scores: Dict[str, float] = {}
+    match_counts: Dict[str, int] = {}
     for intent, pattern in KEYWORDS.items():
         matches = pattern.findall(text)
+        match_counts[intent] = len(matches)
         raw_scores[intent] = min(0.5 + len(matches) * 0.15, 0.95) if matches else 0.2
 
     entries = [(k, v) for k, v in raw_scores.items() if v > 0.2]
-    by_score = sorted(entries, key=lambda x: -x[1])
+    by_score = sorted(entries, key=lambda x: (-x[1], -match_counts[x[0]]))
 
     if not by_score:
         _log("Email-triage Classifier: no scores - unknown", message_id=message_id, intent="unknown", confidence=0.2, raw_scores=raw_scores)
@@ -200,9 +223,16 @@ def classify_payload(payload: Dict[str, Any], threshold: Optional[float] = None)
         }
 
     top_intent, top_score = by_score[0]
-    second_score = by_score[1][1] if len(by_score) > 1 else 0.0
+    second_intent, second_score = by_score[1] if len(by_score) > 1 else (None, 0.0)
+    top_matches = match_counts.get(top_intent, 0)
+    second_matches = match_counts.get(second_intent, 0) if second_intent else 0
 
+    # When two intents tie on score, prefer the one with more keyword matches (best match to email content).
     if top_score >= threshold and second_score >= threshold:
+        if top_matches > second_matches:
+            out = {"intent": top_intent, "confidence": top_score, "raw_scores": raw_scores}
+            _log("Email-triage Classifier: tie broken by match count", message_id=message_id, intent=top_intent, confidence=top_score, top_matches=top_matches, second_matches=second_matches, raw_scores=raw_scores)
+            return out
         out = {"intent": "multi_intent", "confidence": (top_score + second_score) / 2, "raw_scores": raw_scores}
         _log("Email-triage Classifier: multi_intent", message_id=message_id, intent=out["intent"], confidence=out["confidence"], top_intent=top_intent, top_score=top_score, second_score=second_score, raw_scores=raw_scores)
         return out

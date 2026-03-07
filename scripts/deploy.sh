@@ -116,7 +116,7 @@ start_phase() {
     local phase_name="$1"
     local timestamp=$(get_timestamp_seconds)
     echo "$phase_name|START|$timestamp" >> "$PHASE_TIMING_FILE"
-    echo -e "${YELLOW}⏱️  PHASE START: $phase_name${NC}" >&2; echo -e "${YELLOW}⏱️  PHASE START: $phase_name${NC}"
+    echo -e "${YELLOW}⏱️  PHASE START: $phase_name${NC}"
 }
 end_phase() {
     local phase_name="$1"
@@ -126,7 +126,7 @@ end_phase() {
     if [ -n "$start_line" ]; then
         local start_time=$(echo "$start_line" | cut -d'|' -f3)
         local duration=$(awk "BEGIN {printf \"%.2f\", $timestamp - $start_time}")
-        echo -e "${GREEN}⏱️  PHASE END: $phase_name (duration: ${duration}s)${NC}" >&2; echo -e "${GREEN}⏱️  PHASE END: $phase_name (duration: ${duration}s)${NC}"
+        echo -e "${GREEN}⏱️  PHASE END: $phase_name (duration: ${duration}s)${NC}"
     fi
 }
 print_phase_summary() {

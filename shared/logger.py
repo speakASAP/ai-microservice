@@ -121,15 +121,15 @@ class CentralizedLogger:
                 "metadata": metadata
             }
             
-            # Send asynchronously (fire and forget) if event loop exists
+            # Send asynchronously (fire and forget) only when event loop is running.
+            # Do not call run_until_complete when loop is not running — it can block
+            # and delay acceptance of the next request (e.g. second email timing out).
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
                     asyncio.create_task(self._async_send(log_data))
-                else:
-                    loop.run_until_complete(self._async_send(log_data))
+                # else: skip centralized send to avoid blocking; local logger already ran
             except RuntimeError:
-                # No event loop, skip centralized logging
                 pass
             
         except Exception:
