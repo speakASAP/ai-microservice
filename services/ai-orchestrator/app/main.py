@@ -117,31 +117,30 @@ for logger_name in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
 
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Lifespan event handler for startup and shutdown"""
-    # Startup
+async def _background_startup():
+    """Run Redis connect and workflow recovery in background so server can accept requests immediately."""
     try:
-        # Connect to Redis for workflow persistence
         await workflow_persistence.connect()
-        
-        # Register prototype workflow
         from .workflows.prototype_workflow import register_prototype_workflow
         register_prototype_workflow(multi_agent_orchestrator.workflow_engine)
-        
-        # Note: Agent registration with coordinator will be handled separately
-        # to avoid startup issues
-        
-        # Recover any interrupted workflows using the enhanced recovery manager
         recovered_workflows = await workflow_recovery_manager.auto_recover_interrupted_workflows()
         if recovered_workflows:
-            logger.info(f"Auto-recovered {len(recovered_workflows)} interrupted workflows")
-        
-        logger.info("Multi-agent orchestrator initialized successfully")
+            logger.info("Auto-recovered interrupted workflows", count=len(recovered_workflows))
+        logger.info("Background startup (Redis + recovery) completed")
+    except Exception as e:
+        logger.error("Background startup failed: %s", e)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler for startup and shutdown. Email-triage is ready immediately; Redis/recovery run in background."""
+    try:
         shop_agents.set_logger(logger)
         email_triage.set_logger(logger)
+        logger.info("Multi-agent orchestrator ready (email-triage and health accept requests)")
+        asyncio.create_task(_background_startup())
     except Exception as e:
-        logger.error(f"Failed to initialize multi-agent system: {e}")
+        logger.error("Lifespan startup failed: %s", e)
 
     yield
     
@@ -614,6 +613,7 @@ async def email_triage_ingest(body: Dict[str, Any]):
     Ingest: validate and normalize email payload per email-schema.
     Returns { success: true, payload } or 400 with error, escalation_reason.
     """
+    logger.info("Email-triage ingest entry", body_keys=list(body.keys()) if isinstance(body, dict) else None)
     if body is None or not isinstance(body, dict):
         from starlette.responses import JSONResponse
         return JSONResponse(

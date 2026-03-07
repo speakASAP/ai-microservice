@@ -5,6 +5,7 @@ Manages workflow state storage and recovery using Redis for crash recovery
 and state persistence across service restarts.
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timedelta
@@ -30,27 +31,26 @@ class WorkflowPersistence:
         self.cleanup_key = f"{self.key_prefix}cleanup"
         
     async def connect(self):
-        """Connect to Redis"""
+        """Connect to Redis (sync calls run in thread to avoid blocking event loop)."""
         try:
-            self.redis_client = redis.from_url(
+            self.redis_client = await asyncio.to_thread(
+                redis.from_url,
                 self.redis_url,
                 decode_responses=True,
                 socket_connect_timeout=5,
                 socket_timeout=5
             )
-            # Test connection
             await self._ping()
             logger.info("Connected to Redis for workflow persistence")
         except Exception as e:
             logger.error(f"Failed to connect to Redis: {e}")
             self.redis_client = None
-    
+
     async def _ping(self):
-        """Test Redis connection"""
+        """Test Redis connection (sync ping in thread)."""
         if self.redis_client:
             try:
-                # Use sync ping for redis-py
-                self.redis_client.ping()
+                await asyncio.to_thread(self.redis_client.ping)
                 return True
             except Exception as e:
                 logger.error(f"Redis ping failed: {e}")
