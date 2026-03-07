@@ -193,7 +193,7 @@ if [ "${DEPLOY_EXIT_CODE}" -eq 0 ]; then
     print_phase_summary 2>&1
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║      ✅ AI microservice deployment completed successfully! ║${NC}"
+    echo -e "${GREEN}║    ✅ AI microservice deployment completed successfully!   ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
     echo -e "${GREEN}Total deployment time: ${TOTAL_DURATION_FORMATTED}s${NC}"
     echo ""
@@ -210,7 +210,7 @@ else
     print_phase_summary
     echo ""
     echo -e "${RED}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${RED}║             ❌ AI microservice deployment failed!          ║${NC}"
+    echo -e "${RED}║           ❌ AI microservice deployment failed!            ║${NC}"
     echo -e "${RED}╚════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo "Please check the error messages above and:"
