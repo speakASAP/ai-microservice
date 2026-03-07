@@ -27,12 +27,14 @@ services:
       - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
     restart: unless-stopped
     networks:
-      - nginx-network
+      nginx-network:
+        aliases:
+          - ai-microservice
     deploy:
       resources:
         limits:
           memory: 200M
-          cpus: '0.5'
+        cpus: '0.5'
         reservations:
           memory: 50M
     healthcheck:

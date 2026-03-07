@@ -22,7 +22,9 @@ services:
       - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
     restart: unless-stopped
     networks:
-      - nginx-network
+      nginx-network:
+        aliases:
+          - ai-microservice
     deploy:
       resources:
         limits:
