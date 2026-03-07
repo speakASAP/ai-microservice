@@ -13,16 +13,22 @@ Usage:
   From repo root: python3 scripts/test-ai-services.py
 
 Loads .env from ai-microservice project root for port and host overrides.
+
+For post-deploy (e.g. after deploy.sh): set AI_ORCHESTRATOR_BASE_URL to the deployed
+orchestrator URL (e.g. https://ai.statex.cz). Then only orchestrator and email-triage
+pipeline tests run; per-service health and OpenRouter/analyze are skipped (internal).
 Exit code: 0 if all checks pass, 1 otherwise.
 """
 
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Optional, Tuple
+from datetime import datetime, timezone
 
 # Timeout per request (do not increase; check logs if something hangs)
 REQUEST_TIMEOUT = 15
@@ -58,6 +64,11 @@ def get_port(key: str, default: str) -> str:
 def get_host() -> str:
     """Base host for services (localhost from host, or service name in Docker)."""
     return os.environ.get("AI_SERVICE_HOST", "localhost")
+
+
+def get_orchestrator_base_url() -> Optional[str]:
+    """If set (e.g. https://ai.statex.cz), use for orchestrator and skip internal service checks."""
+    return os.environ.get("AI_ORCHESTRATOR_BASE_URL") or None
 
 
 def url_get(url: str, timeout: int = REQUEST_TIMEOUT) -> Tuple[int, bytes, Optional[str]]:
@@ -109,30 +120,139 @@ def check(name: str, ok: bool, detail: str = "") -> bool:
     return ok
 
 
-def main() -> int:
-    load_dotenv()
-    host = get_host()
+# Email-triage intent/action sets (aligned with email_triage_agents and AEPS)
+INTENT_TAXONOMY = ["support", "sales", "contract", "technical", "billing", "spam", "unknown", "multi_intent"]
+ACTION_SET = ["auto_respond", "route_to_queue", "escalate"]
 
-    ports = {
-        "orchestrator": get_port("AI_ORCHESTRATOR_PORT", "3380"),
-        "nlp": get_port("NLP_SERVICE_PORT", "3381"),
-        "asr": get_port("ASR_SERVICE_PORT", "3382"),
-        "document_ai": get_port("DOCUMENT_AI_PORT", "3383"),
-        "prototype_generator": get_port("PROTOTYPE_GENERATOR_PORT", "3384"),
-        "template_repository": get_port("TEMPLATE_REPOSITORY_PORT", "3385"),
-        "free_ai": get_port("FREE_AI_SERVICE_PORT", "3386"),
-        "ai_workers": get_port("AI_WORKERS_PORT", "3387"),
-        "gemini_ai": get_port("GEMINI_AI_SERVICE_PORT", "3388"),
-        "data_viz": get_port("DATA_VIZ_SERVICE_PORT", "3389"),
+
+def run_email_triage_pipeline(base_orchestrator: str) -> int:
+    """Run full email-triage pipeline: ingest → classify → extract → decide. Returns number of failures."""
+    failed = 0
+    raw_email = {
+        "message_id": "test-pipeline-" + str(int(time.time())),
+        "tenant_id": "test-tenant",
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "sender": "test@example.com",
+        "recipients": ["support@example.com"],
+        "subject": "Unable to access my dashboard",
+        "body_plain": "Hi, I logged in but my dashboard is empty. Can you check? Thanks.",
+        "attachments": [],
     }
 
-    base_orchestrator = f"http://{host}:{ports['orchestrator']}"
-    base_free_ai = f"http://{host}:{ports['free_ai']}"
+    print("[Email-triage full pipeline]")
+    # 1. Ingest
+    status, body, err = url_post_json(f"{base_orchestrator}/api/email-triage/ingest", raw_email)
+    if not check("POST /api/email-triage/ingest", status == 200, err or f"status={status}"):
+        failed += 1
+        return failed
+    try:
+        j = json.loads(body.decode("utf-8"))
+        if not j.get("success") or not j.get("payload"):
+            check("Ingest success + payload", False, str(j.get("error", ""))[:60])
+            failed += 1
+            return failed
+        payload = j["payload"]
+    except json.JSONDecodeError as e:
+        check("Ingest response JSON", False, str(e))
+        failed += 1
+        return failed
+
+    # 2. Classify
+    status, body, err = url_post_json(f"{base_orchestrator}/api/email-triage/classify", {"payload": payload})
+    if not check("POST /api/email-triage/classify", status == 200, err or f"status={status}"):
+        failed += 1
+        return failed
+    try:
+        j = json.loads(body.decode("utf-8"))
+        if not j.get("success") or not isinstance(j.get("intent"), str):
+            check("Classify success + intent", False, "")
+            failed += 1
+            return failed
+        intent = j["intent"]
+        confidence = float(j.get("confidence", 0))
+        if intent not in INTENT_TAXONOMY:
+            check("Classify intent in taxonomy", False, intent)
+            failed += 1
+        else:
+            check("Classify intent in taxonomy", True, intent)
+    except (json.JSONDecodeError, TypeError) as e:
+        check("Classify response JSON", False, str(e))
+        failed += 1
+        return failed
+
+    # 3. Extract
+    status, body, err = url_post_json(f"{base_orchestrator}/api/email-triage/extract", {"payload": payload, "intent": intent})
+    if not check("POST /api/email-triage/extract", status == 200, err or f"status={status}"):
+        failed += 1
+        return failed
+    try:
+        j = json.loads(body.decode("utf-8"))
+        if not j.get("success") or not isinstance(j.get("entities"), dict):
+            check("Extract success + entities", False, "")
+            failed += 1
+            return failed
+        entities = j.get("entities", {})
+        check("Extract success + entities", True, "")
+    except json.JSONDecodeError as e:
+        check("Extract response JSON", False, str(e))
+        failed += 1
+        return failed
+
+    # 4. Decide
+    status, body, err = url_post_json(
+        f"{base_orchestrator}/api/email-triage/decide",
+        {"intent": intent, "confidence": confidence, "entities": entities},
+    )
+    if not check("POST /api/email-triage/decide", status == 200, err or f"status={status}"):
+        failed += 1
+        return failed
+    try:
+        j = json.loads(body.decode("utf-8"))
+        if not j.get("success") or not isinstance(j.get("action"), str):
+            check("Decide success + action", False, "")
+            failed += 1
+            return failed
+        action = j["action"]
+        if action not in ACTION_SET:
+            check("Decide action in set", False, action)
+            failed += 1
+        else:
+            check("Decide action in set", True, action)
+    except json.JSONDecodeError as e:
+        check("Decide response JSON", False, str(e))
+        failed += 1
+    return failed
+
+
+def main() -> int:
+    load_dotenv()
+    base_url_override = get_orchestrator_base_url()
+    if base_url_override:
+        base_orchestrator = base_url_override.rstrip("/")
+        host = " (base URL)"
+        skip_internal = True
+    else:
+        host = get_host()
+        ports = {
+            "orchestrator": get_port("AI_ORCHESTRATOR_PORT", "3380"),
+            "nlp": get_port("NLP_SERVICE_PORT", "3381"),
+            "asr": get_port("ASR_SERVICE_PORT", "3382"),
+            "document_ai": get_port("DOCUMENT_AI_PORT", "3383"),
+            "prototype_generator": get_port("PROTOTYPE_GENERATOR_PORT", "3384"),
+            "template_repository": get_port("TEMPLATE_REPOSITORY_PORT", "3385"),
+            "free_ai": get_port("FREE_AI_SERVICE_PORT", "3386"),
+            "ai_workers": get_port("AI_WORKERS_PORT", "3387"),
+            "gemini_ai": get_port("GEMINI_AI_SERVICE_PORT", "3388"),
+            "data_viz": get_port("DATA_VIZ_SERVICE_PORT", "3389"),
+        }
+        base_orchestrator = f"http://{host}:{ports['orchestrator']}"
+        base_free_ai = f"http://{host}:{ports['free_ai']}"
+        skip_internal = False
 
     failed = 0
 
     print("AI Microservice – health and LLM accessibility tests")
-    print(f"Host: {host}  Timeout: {REQUEST_TIMEOUT}s")
+    print(f"Orchestrator: {base_orchestrator}  Timeout: {REQUEST_TIMEOUT}s")
     print("")
 
     # --- Orchestrator ---
@@ -150,7 +270,6 @@ def main() -> int:
             pass
 
     status, body, err = url_get(f"{base_orchestrator}/api/multi-agent/agents/health")
-    # 200 = OK; 401 = auth required (endpoint exists, script may run without JWT)
     if not check(
         "GET /api/multi-agent/agents/health",
         status in (200, 401),
@@ -162,79 +281,98 @@ def main() -> int:
     if not check("GET /health/email-triage", status == 200, err or f"status={status}"):
         failed += 1
 
-    print("")
-
-    # --- Per-service health ---
-    print("[Service health]")
-    services = [
-        ("NLP", f"http://{host}:{ports['nlp']}/health"),
-        ("ASR", f"http://{host}:{ports['asr']}/health"),
-        ("Document AI", f"http://{host}:{ports['document_ai']}/health"),
-        ("Prototype Generator", f"http://{host}:{ports['prototype_generator']}/health"),
-        ("Template Repository", f"http://{host}:{ports['template_repository']}/health"),
-        ("Free AI Service", f"{base_free_ai}/health"),
-        ("AI Workers", f"http://{host}:{ports['ai_workers']}/health"),
-        ("Gemini AI Service", f"http://{host}:{ports['gemini_ai']}/health"),
-        ("Data Viz Service", f"http://{host}:{ports['data_viz']}/health"),
-    ]
-    for name, url in services:
-        status, _, err = url_get(url)
-        if not check(f"{name} GET /health", status == 200, err or f"status={status}"):
-            failed += 1
-
-    print("")
-
-    # --- OpenRouter via free-ai-service /models ---
-    print("[OpenRouter / free-ai-service models]")
-    status, body, err = url_get(f"{base_free_ai}/models")
-    if not check("Free AI GET /models", status == 200, err or f"status={status}"):
+    # --- Email-triage ready (same as check-ai-connectivity) ---
+    status, body, err = url_get(f"{base_orchestrator}/api/email-triage/ready")
+    if not check("GET /api/email-triage/ready", status == 200, err or f"status={status}"):
         failed += 1
+
+    # --- Email-triage full pipeline (ingest → classify → extract → decide) ---
+    failed += run_email_triage_pipeline(base_orchestrator)
+
+    print("")
+
+    if skip_internal:
+        print("[Skipping internal service health and OpenRouter (base URL mode)]")
+        print("")
     else:
-        try:
-            j = json.loads(body.decode("utf-8"))
-            models = j.get("models") or {}
-            providers = j.get("providers") or {}
-            openrouter_models = models.get("openrouter", [])
-            openrouter_status = (providers.get("openrouter") or {}).get("status", "unknown")
-            if openrouter_status == "available" and len(openrouter_models) > 0:
-                check("OpenRouter accessible and provides models", True, f"models={len(openrouter_models)}")
-            elif openrouter_status == "unavailable" or (providers.get("openrouter") or {}).get("reason"):
-                reason = (providers.get("openrouter") or {}).get("reason", openrouter_status)
-                check("OpenRouter accessible and provides models", False, reason)
+        # --- Per-service health ---
+        ports = {
+            "nlp": get_port("NLP_SERVICE_PORT", "3381"),
+            "asr": get_port("ASR_SERVICE_PORT", "3382"),
+            "document_ai": get_port("DOCUMENT_AI_PORT", "3383"),
+            "prototype_generator": get_port("PROTOTYPE_GENERATOR_PORT", "3384"),
+            "template_repository": get_port("TEMPLATE_REPOSITORY_PORT", "3385"),
+            "free_ai": get_port("FREE_AI_SERVICE_PORT", "3386"),
+            "ai_workers": get_port("AI_WORKERS_PORT", "3387"),
+            "gemini_ai": get_port("GEMINI_AI_SERVICE_PORT", "3388"),
+            "data_viz": get_port("DATA_VIZ_SERVICE_PORT", "3389"),
+        }
+        print("[Service health]")
+        services = [
+            ("NLP", f"http://{host}:{ports['nlp']}/health"),
+            ("ASR", f"http://{host}:{ports['asr']}/health"),
+            ("Document AI", f"http://{host}:{ports['document_ai']}/health"),
+            ("Prototype Generator", f"http://{host}:{ports['prototype_generator']}/health"),
+            ("Template Repository", f"http://{host}:{ports['template_repository']}/health"),
+            ("Free AI Service", f"http://{host}:{ports['free_ai']}/health"),
+            ("AI Workers", f"http://{host}:{ports['ai_workers']}/health"),
+            ("Gemini AI Service", f"http://{host}:{ports['gemini_ai']}/health"),
+            ("Data Viz Service", f"http://{host}:{ports['data_viz']}/health"),
+        ]
+        for name, url in services:
+            status, _, err = url_get(url)
+            if not check(f"{name} GET /health", status == 200, err or f"status={status}"):
                 failed += 1
-            else:
-                check("OpenRouter accessible and provides models", len(openrouter_models) > 0, str(providers))
-                if len(openrouter_models) == 0:
+
+        print("")
+        print("[OpenRouter / free-ai-service models]")
+        status, body, err = url_get(f"{base_free_ai}/models")
+        if not check("Free AI GET /models", status == 200, err or f"status={status}"):
+            failed += 1
+        else:
+            try:
+                j = json.loads(body.decode("utf-8"))
+                models = j.get("models") or {}
+                providers = j.get("providers") or {}
+                openrouter_models = models.get("openrouter", [])
+                openrouter_status = (providers.get("openrouter") or {}).get("status", "unknown")
+                if openrouter_status == "available" and len(openrouter_models) > 0:
+                    check("OpenRouter accessible and provides models", True, f"models={len(openrouter_models)}")
+                elif openrouter_status == "unavailable" or (providers.get("openrouter") or {}).get("reason"):
+                    reason = (providers.get("openrouter") or {}).get("reason", openrouter_status)
+                    check("OpenRouter accessible and provides models", False, reason)
                     failed += 1
-        except json.JSONDecodeError as e:
-            check("OpenRouter /models response JSON", False, str(e))
-            failed += 1
-
-    print("")
-
-    # --- Optional: minimal LLM request (free-ai-service /analyze) ---
-    print("[LLM response check – Free AI /analyze]")
-    analyze_url = f"{base_free_ai}/analyze"
-    payload = {
-        "text_content": "Say OK in one word.",
-        "analysis_type": "business_analysis",
-        "user_name": "test-script",
-    }
-    status, body, err = url_post_json(analyze_url, payload)
-    if not check("POST /analyze", status == 200, err or f"status={status}"):
-        failed += 1
-    else:
-        try:
-            j = json.loads(body.decode("utf-8"))
-            if not j.get("success", False):
-                err_msg = j.get("error", "success=false")
-                check("POST /analyze success=true", False, err_msg[:80] if err_msg else "success=false")
+                else:
+                    check("OpenRouter accessible and provides models", len(openrouter_models) > 0, str(providers))
+                    if len(openrouter_models) == 0:
+                        failed += 1
+            except json.JSONDecodeError as e:
+                check("OpenRouter /models response JSON", False, str(e))
                 failed += 1
-            else:
-                check("POST /analyze success=true", True, f"provider={j.get('provider_used', '?')}")
-        except json.JSONDecodeError as e:
-            check("POST /analyze response JSON", False, str(e))
+
+        print("")
+        print("[LLM response check – Free AI /analyze]")
+        analyze_url = f"{base_free_ai}/analyze"
+        payload = {
+            "text_content": "Say OK in one word.",
+            "analysis_type": "business_analysis",
+            "user_name": "test-script",
+        }
+        status, body, err = url_post_json(analyze_url, payload)
+        if not check("POST /analyze", status == 200, err or f"status={status}"):
             failed += 1
+        else:
+            try:
+                j = json.loads(body.decode("utf-8"))
+                if not j.get("success", False):
+                    err_msg = j.get("error", "success=false")
+                    check("POST /analyze success=true", False, err_msg[:80] if err_msg else "success=false")
+                    failed += 1
+                else:
+                    check("POST /analyze success=true", True, f"provider={j.get('provider_used', '?')}")
+            except json.JSONDecodeError as e:
+                check("POST /analyze response JSON", False, str(e))
+                failed += 1
 
     print("")
     if failed:
