@@ -87,11 +87,26 @@ class CentralizedLogger:
         }
         return level_map.get(level.upper(), "info")
 
+    def _sync_log(self, level: str, message: str):
+        """Run stdlib logging (console/file) in thread to avoid blocking event loop on slow I/O."""
+        try:
+            loop = asyncio.get_event_loop()
+            if not loop.is_running():
+                getattr(self.logger, level.lower(), self.logger.info)(message)
+                return
+            log_method = getattr(self.logger, level.lower(), self.logger.info)
+            if hasattr(asyncio, "to_thread"):
+                asyncio.create_task(asyncio.to_thread(log_method, message))
+            else:
+                asyncio.create_task(loop.run_in_executor(None, lambda: log_method(message)))
+        except (RuntimeError, AttributeError):
+            getattr(self.logger, level.lower(), self.logger.info)(message)
+
     def _send_to_centralized(self, level: str, message: str, **kwargs):
         """Send log to centralized logging service"""
         if not self.logging_service_url:
             return
-            
+
         try:
             # Prepare metadata with all kwargs
             metadata = dict(kwargs)
@@ -149,15 +164,15 @@ class CentralizedLogger:
             pass
     
     def debug(self, message: str, **kwargs):
-        self.logger.debug(message)
+        self._sync_log("debug", message)
         self._send_to_centralized("DEBUG", message, **kwargs)
-    
+
     def info(self, message: str, **kwargs):
-        self.logger.info(message)
+        self._sync_log("info", message)
         self._send_to_centralized("INFO", message, **kwargs)
-    
+
     def warning(self, message: str, **kwargs):
-        self.logger.warning(message)
+        self._sync_log("warning", message)
         self._send_to_centralized("WARNING", message, **kwargs)
     
     def error(self, message: str, *args, **kwargs):
@@ -174,7 +189,7 @@ class CentralizedLogger:
             error_kwargs["stack"] = "".join(traceback.format_exception(
                 type(message), message, message.__traceback__
             ))
-            self.logger.error(str(message), exc_info=True)
+            self._sync_log("error", str(message))
             self._send_to_centralized("ERROR", str(message), **error_kwargs)
         elif "error" in kwargs and isinstance(kwargs["error"], Exception):
             error_kwargs["error"] = str(kwargs["error"])
@@ -183,10 +198,10 @@ class CentralizedLogger:
                 kwargs["error"],
                 kwargs["error"].__traceback__
             ))
-            self.logger.error(message, exc_info=True)
+            self._sync_log("error", message)
             self._send_to_centralized("ERROR", message, **error_kwargs)
         else:
-            self.logger.error(message)
+            self._sync_log("error", message)
             self._send_to_centralized("ERROR", message, **kwargs)
     
     def critical(self, message: str, **kwargs):
@@ -197,7 +212,7 @@ class CentralizedLogger:
             error_kwargs["stack"] = "".join(traceback.format_exception(
                 type(message), message, message.__traceback__
             ))
-            self.logger.critical(str(message), exc_info=True)
+            self._sync_log("critical", str(message))
             self._send_to_centralized("CRITICAL", str(message), **error_kwargs)
         elif "error" in kwargs and isinstance(kwargs["error"], Exception):
             error_kwargs["error"] = str(kwargs["error"])
@@ -206,10 +221,10 @@ class CentralizedLogger:
                 kwargs["error"],
                 kwargs["error"].__traceback__
             ))
-            self.logger.critical(message, exc_info=True)
+            self._sync_log("critical", message)
             self._send_to_centralized("CRITICAL", message, **error_kwargs)
         else:
-            self.logger.critical(message)
+            self._sync_log("critical", message)
             self._send_to_centralized("CRITICAL", message, **kwargs)
 
 def setup_logger(

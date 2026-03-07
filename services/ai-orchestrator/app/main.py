@@ -613,7 +613,6 @@ async def email_triage_ingest(body: Dict[str, Any]):
     Ingest: validate and normalize email payload per email-schema.
     Returns { success: true, payload } or 400 with error, escalation_reason.
     """
-    logger.info("Email-triage ingest entry", body_keys=list(body.keys()) if isinstance(body, dict) else None)
     if body is None or not isinstance(body, dict):
         from starlette.responses import JSONResponse
         return JSONResponse(
@@ -621,10 +620,9 @@ async def email_triage_ingest(body: Dict[str, Any]):
             content={"error": "Payload must be an object", "escalation_reason": "incomplete_data"},
         )
     t0 = time.perf_counter()
-    msg_id = (str(body.get("message_id")).strip() or None) if body.get("message_id") is not None else None
-    logger.info("Email-triage ingest request received", message_id=msg_id)
     normalized, error, escalation_reason = await asyncio.to_thread(email_triage_agents.validate_and_normalize, body)
     duration_ms = round((time.perf_counter() - t0) * 1000)
+    msg_id = (str(body.get("message_id")).strip() or None) if body.get("message_id") is not None else None
     if error is not None:
         logger.info("Email-triage ingest rejected", message_id=msg_id, duration_ms=duration_ms, error=error)
         from starlette.responses import JSONResponse
@@ -636,7 +634,7 @@ async def email_triage_ingest(body: Dict[str, Any]):
             },
         )
     logger.info("Email-triage ingest success", message_id=msg_id, duration_ms=duration_ms)
-    return {"success": True, "payload": normalized}
+    return {"success": True, "payload": normalized, "duration_ms": duration_ms}
 
 
 @app.post("/api/email-triage/classify")
@@ -811,6 +809,12 @@ _EMAIL_TRIAGE_HEALTH_PAYLOAD = {
     "body_plain": "Health check",
     "attachments": [],
 }
+
+
+@app.get("/api/email-triage/ready")
+async def email_triage_ready():
+    """Instant readiness check (no Redis, no validation). Use for connectivity; expect response in <1s."""
+    return {"ready": True, "service": "email-triage"}
 
 
 @app.get("/health/email-triage")
