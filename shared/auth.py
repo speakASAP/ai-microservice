@@ -35,6 +35,9 @@ def _is_public_path(path: str) -> bool:
     # Exact match or prefix for /api (info only)
     if path in PUBLIC_PATHS:
         return True
+    # Health endpoints (including /health/email-triage for Docker healthcheck)
+    if path.startswith("/health"):
+        return True
     # Optional: treat /models as public for catalog; protect the rest
     if path == "/models":
         return True

@@ -11,6 +11,7 @@ import importlib.util
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List
 from enum import Enum
@@ -698,7 +699,7 @@ async def email_triage_decide(body: Dict[str, Any]):
 async def health_check():
     """Health check endpoint with multi-agent system status"""
     system_health = agent_coordinator.get_system_health_summary()
-    
+
     return {
         "status": "healthy" if system_health.get("overall_health") != "critical" else "degraded",
         "service": "ai-orchestrator",
@@ -706,6 +707,46 @@ async def health_check():
         "version": "2.0.0",
         "multi_agent_system": system_health
     }
+
+
+# Minimal payload used to verify email-triage ingest in healthcheck
+_EMAIL_TRIAGE_HEALTH_PAYLOAD = {
+    "message_id": "healthcheck",
+    "tenant_id": "healthcheck",
+    "timestamp": "2026-01-01T00:00:00Z",
+    "sender": "healthcheck@local",
+    "recipients": ["healthcheck@local"],
+    "subject": "Health check",
+    "body_plain": "Health check",
+    "attachments": [],
+}
+
+
+@app.get("/health/email-triage")
+async def health_check_email_triage():
+    """
+    Health check that POST /api/email-triage/ingest responds correctly.
+    Returns 200 if ingest validation succeeds, 503 otherwise.
+    Used by Docker healthcheck so the orchestrator is marked unhealthy if email-triage is broken.
+    """
+    try:
+        normalized, error, escalation_reason = await asyncio.to_thread(
+            email_triage_agents.validate_and_normalize, _EMAIL_TRIAGE_HEALTH_PAYLOAD
+        )
+        if error is not None:
+            logger.error("Health check email-triage: ingest validation failed", error=error, escalation_reason=escalation_reason)
+            return JSONResponse(
+                status_code=503,
+                content={"status": "error", "detail": error, "escalation_reason": escalation_reason},
+            )
+        return {"status": "ok", "message_id": normalized.get("message_id")}
+    except Exception as e:
+        logger.error("Health check email-triage: exception", error=str(e))
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "detail": str(e)},
+        )
+
 
 @app.get("/models")
 async def get_available_models(

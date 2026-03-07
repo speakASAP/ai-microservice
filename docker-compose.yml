@@ -32,7 +32,7 @@ services:
         reservations:
           memory: 50M
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${AI_ORCHESTRATOR_PORT:-3380}/health"]
+      test: ["CMD", "sh", "-c", "curl -sf http://localhost:${AI_ORCHESTRATOR_PORT:-3380}/health && curl -sf http://localhost:${AI_ORCHESTRATOR_PORT:-3380}/health/email-triage"]
       interval: 10s
       timeout: 10s
       retries: 2
