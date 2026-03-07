@@ -192,6 +192,20 @@ if [ "${DEPLOY_EXIT_CODE}" -eq 0 ]; then
     TOTAL_DURATION_FORMATTED=$(awk "BEGIN {printf \"%.2f\", $TOTAL_DURATION}")
     print_phase_summary 2>&1
     echo ""
+    echo -e "${BLUE}Running post-deploy tests (health + email-triage full pipeline)...${NC}"
+    cd "$PROJECT_ROOT"
+    TEST_EXIT=0
+    if [ -n "${DOMAIN:-}" ]; then
+        export AI_ORCHESTRATOR_BASE_URL="https://${DOMAIN}"
+        echo "  Using AI_ORCHESTRATOR_BASE_URL=$AI_ORCHESTRATOR_BASE_URL"
+    fi
+    if python3 scripts/test-ai-services.py; then
+        echo -e "${GREEN}✓ All tests passed.${NC}"
+    else
+        TEST_EXIT=1
+        echo -e "${RED}✗ One or more tests failed.${NC}"
+    fi
+    echo ""
     echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║    ✅ AI microservice deployment completed successfully!   ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
@@ -200,7 +214,7 @@ if [ "${DEPLOY_EXIT_CODE}" -eq 0 ]; then
     echo "Check status with:"
     echo "  cd $NGINX_MICROSERVICE_PATH"
     echo "  ./scripts/status-all-services.sh"
-    exit 0
+    exit "$TEST_EXIT"
 else
     TOTAL_DURATION_FORMATTED=$(awk "BEGIN {printf \"%.2f\", $TOTAL_DURATION}")
     echo ""

@@ -133,7 +133,7 @@ Runs health checks for all AI agents (orchestrator, free-ai-service, nlp, asr, d
 ./scripts/test-ai-services.py
 ```
 
-From host use default `localhost`; override with `AI_SERVICE_HOST=localhost`. Ports are read from `.env` (defaults: 3380–3389). Exit code 0 if all checks pass, 1 otherwise.
+From host use default `localhost`; override with `AI_SERVICE_HOST=localhost`. Ports are read from `.env` (defaults: 3380–3389). After deploy, run with `AI_ORCHESTRATOR_BASE_URL=https://ai.statex.cz` (or your `DOMAIN`) to test the deployed orchestrator and email-triage full pipeline only. Exit code 0 if all checks pass, 1 otherwise. `deploy.sh` runs this script automatically after a successful deployment.
 
 ### Stop Services
 
