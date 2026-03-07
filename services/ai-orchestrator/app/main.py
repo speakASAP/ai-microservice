@@ -618,7 +618,7 @@ async def email_triage_ingest(body: Dict[str, Any]):
     t0 = time.perf_counter()
     msg_id = (str(body.get("message_id")).strip() or None) if body.get("message_id") is not None else None
     logger.info("Email-triage ingest request received", message_id=msg_id)
-    normalized, error, escalation_reason = email_triage_agents.validate_and_normalize(body)
+    normalized, error, escalation_reason = await asyncio.to_thread(email_triage_agents.validate_and_normalize, body)
     duration_ms = round((time.perf_counter() - t0) * 1000)
     if error is not None:
         logger.info("Email-triage ingest rejected", message_id=msg_id, duration_ms=duration_ms, error=error)
@@ -644,7 +644,7 @@ async def email_triage_classify(body: Dict[str, Any]):
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else body
     msg_id = str(payload.get("message_id")) if isinstance(payload, dict) and payload.get("message_id") is not None else None
     logger.info("Email-triage classify request received", message_id=msg_id)
-    result = email_triage_agents.classify_payload(payload)
+    result = await asyncio.to_thread(email_triage_agents.classify_payload, payload)
     duration_ms = round((time.perf_counter() - t0) * 1000)
     logger.info("Email-triage classify success", message_id=msg_id, intent=result.get("intent"), duration_ms=duration_ms)
     return {
@@ -664,7 +664,7 @@ async def email_triage_extract(body: Dict[str, Any]):
     """
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else body
     intent = body.get("intent") if isinstance(body.get("intent"), str) else None
-    result = email_triage_agents.extract_payload(payload, intent=intent)
+    result = await asyncio.to_thread(email_triage_agents.extract_payload, payload, intent)
     return {"success": True, **result}
 
 
@@ -689,7 +689,9 @@ async def email_triage_decide(body: Dict[str, Any]):
             content={"error": "confidence is required", "escalation_reason": "incomplete_data"},
         )
     entities = body.get("entities") if isinstance(body.get("entities"), dict) else None
-    result = email_triage_agents.decide_action(intent=intent, confidence=float(confidence), entities=entities)
+    result = await asyncio.to_thread(
+        email_triage_agents.decide_action, intent, float(confidence), None, entities
+    )
     return {"success": True, **result}
 
 
