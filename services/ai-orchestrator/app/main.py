@@ -647,7 +647,7 @@ async def email_triage_ingest(body: Dict[str, Any]):
             },
         )
     logger.info("Email-triage ingest success", message_id=msg_id, duration_ms=duration_ms)
-    return {"success": True, "payload": normalized, "duration_ms": duration_ms}
+    return {"success": True, "payload": normalized, "duration_ms": duration_ms, "model_used": "schema-validator"}
 
 
 @app.post("/api/email-triage/classify")
@@ -701,15 +701,15 @@ async def email_triage_classify(body: Dict[str, Any]):
         result = await asyncio.to_thread(email_triage_agents.classify_payload, payload)
         logger.info("Email-triage classify via rule-based", message_id=msg_id, intent=result.get("intent"))
     duration_ms = round((time.perf_counter() - t0) * 1000)
-    logger.info("Email-triage classify success", message_id=msg_id, intent=result.get("intent"), duration_ms=duration_ms)
+    model_used_out = result.get("model_used") if result.get("model_used") is not None else "rule-based"
+    logger.info("Email-triage classify success", message_id=msg_id, intent=result.get("intent"), model_used=model_used_out, duration_ms=duration_ms)
     out = {
         "success": True,
         "intent": result["intent"],
         "confidence": result["confidence"],
         "raw_scores": result.get("raw_scores"),
+        "model_used": result.get("model_used") if result.get("model_used") is not None else "rule-based",
     }
-    if result.get("model_used") is not None:
-        out["model_used"] = result["model_used"]
     if result.get("llm_output") is not None:
         out["llm_output"] = result["llm_output"]
     return out
@@ -725,7 +725,7 @@ async def email_triage_extract(body: Dict[str, Any]):
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else body
     intent = body.get("intent") if isinstance(body.get("intent"), str) else None
     result = await asyncio.to_thread(email_triage_agents.extract_payload, payload, intent)
-    return {"success": True, **result}
+    return {"success": True, "model_used": "pattern-extractor", **result}
 
 
 @app.post("/api/email-triage/decide")
@@ -789,9 +789,8 @@ async def email_triage_decide(body: Dict[str, Any]):
             email_triage_agents.decide_action, intent, conf_float, None, entities
         )
         logger.info("Email-triage decide via rule-based", intent=intent, action=result.get("action"))
-    out = {"success": True, **result}
-    if result.get("model_used") is not None:
-        out["model_used"] = result["model_used"]
+    model_used_decide = result.get("model_used") if result.get("model_used") is not None else "rule-based"
+    out = {"success": True, "model_used": model_used_decide, **result}
     if result.get("llm_output") is not None:
         out["llm_output"] = result["llm_output"]
     return out
