@@ -169,8 +169,6 @@ _cors_origins = [
     "https://www.statex.cz",
     "https://aeps.alfares.cz",
     "http://aeps.alfares.cz",
-    "https://agentic-email-processing-system.alfares.cz",
-    "http://agentic-email-processing-system.alfares.cz",
     "https://ai.alfares.cz",
     "http://ai.alfares.cz",
     os.getenv("CORS_ORIGIN", f"http://localhost:{os.getenv('FRONTEND_PORT', '3602')}"),
