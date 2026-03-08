@@ -650,6 +650,19 @@ async def email_triage_ingest(body: Dict[str, Any]):
     return {"success": True, "payload": normalized, "duration_ms": duration_ms, "model_used": "schema-validator"}
 
 
+def _coerce_use_llm(value: Any) -> bool:
+    """Coerce request use_llm (bool, str, int) to bool so UI choice is never lost."""
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes")
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return False
+
+
 @app.post("/api/email-triage/classify")
 async def email_triage_classify(body: Dict[str, Any]):
     """
@@ -658,11 +671,19 @@ async def email_triage_classify(body: Dict[str, Any]):
     use_llm true = use LLM (OpenRouter); false = rule-based; omitted = use env EMAIL_TRIAGE_LLM_CLASSIFIER.
     """
     t0 = time.perf_counter()
+    logger.info("Email-triage classify request body keys", body_keys=list(body.keys()) if isinstance(body, dict) else [], use_llm_in_body="use_llm" in body if isinstance(body, dict) else False, point="ai_orchestrator_classify_entry")
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else body
     msg_id = str(payload.get("message_id")) if isinstance(payload, dict) and payload.get("message_id") is not None else None
     use_llm_request = body.get("use_llm")
-    use_llm = bool(use_llm_request) if use_llm_request is not None else EMAIL_TRIAGE_LLM_CLASSIFIER
-    logger.info("Email-triage classify request received", message_id=msg_id, use_llm=use_llm)
+    use_llm = _coerce_use_llm(use_llm_request) if use_llm_request is not None else EMAIL_TRIAGE_LLM_CLASSIFIER
+    logger.info(
+        "Email-triage classify request received",
+        message_id=msg_id,
+        use_llm=use_llm,
+        use_llm_raw=use_llm_request,
+        free_ai_url_set=bool(FREE_AI_SERVICE_URL),
+        point="ai_orchestrator_classify_after_coerce",
+    )
     result = None
     if use_llm and FREE_AI_SERVICE_URL:
         try:
@@ -696,13 +717,63 @@ async def email_triage_classify(body: Dict[str, Any]):
                             llm_output=result["llm_output"],
                         )
         except Exception as e:
-            logger.warning("Email-triage LLM classify failed, falling back to rule-based", message_id=msg_id, error=str(e))
+            logger.warning(
+                "Email-triage LLM classify failed, falling back to rule-based",
+                message_id=msg_id,
+                error=str(e),
+                free_ai_url=FREE_AI_SERVICE_URL[:50] + "..." if len(FREE_AI_SERVICE_URL) > 50 else FREE_AI_SERVICE_URL,
+            )
+            if use_llm:
+                logger.error(
+                    "POINT OF FAILURE: use_llm=True but classifier returning rule-based (LLM call failed); check FREE_AI_SERVICE_URL and free-ai-service/OpenRouter",
+                    message_id=msg_id,
+                    error=str(e),
+                    point="ai_orchestrator_classify_fallback",
+                )
+    elif use_llm and not FREE_AI_SERVICE_URL:
+        logger.warning(
+            "Email-triage classify: use_llm=True but FREE_AI_SERVICE_URL is not set; set FREE_AI_SERVICE_URL in ai-microservice to use OpenRouter LLM",
+            message_id=msg_id,
+        )
+        logger.error(
+            "POINT OF FAILURE: use_llm=True but FREE_AI_SERVICE_URL empty; set FREE_AI_SERVICE_URL in ai-microservice .env or docker-compose",
+            message_id=msg_id,
+            point="ai_orchestrator_classify_no_free_ai_url",
+        )
     if result is None:
         result = await asyncio.to_thread(email_triage_agents.classify_payload, payload)
         logger.info("Email-triage classify via rule-based", message_id=msg_id, intent=result.get("intent"))
+        if use_llm:
+            logger.error(
+                "POINT OF FAILURE: use_llm=True but classifier result is rule-based (parameter lost or fallback); trace use_llm from client to this point",
+                message_id=msg_id,
+                use_llm_request=use_llm_request,
+                point="ai_orchestrator_classify_returning_rule_based",
+            )
     duration_ms = round((time.perf_counter() - t0) * 1000)
     model_used_out = result.get("model_used") if result.get("model_used") is not None else "rule-based"
-    logger.info("Email-triage classify success", message_id=msg_id, intent=result.get("intent"), model_used=model_used_out, duration_ms=duration_ms)
+    logger.info(
+        "Email-triage classify success (returning)",
+        message_id=msg_id,
+        intent=result.get("intent"),
+        model_used=model_used_out,
+        use_llm_was=use_llm,
+        duration_ms=duration_ms,
+        point="ai_orchestrator_classify_return",
+    )
+    if use_llm and (not model_used_out or str(model_used_out).lower() == "rule-based"):
+        logger.error(
+            "LLM requested but classifier returned rule-based — point of failure: ai-microservice returning rule-based",
+            message_id=msg_id,
+            use_llm=use_llm,
+            model_used_out=model_used_out,
+            free_ai_url_set=bool(FREE_AI_SERVICE_URL),
+            point="ai_orchestrator_classify_raise",
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="LLM requested but classifier returned rule-based; set FREE_AI_SERVICE_URL and ensure free-ai-service is reachable",
+        )
     out = {
         "success": True,
         "intent": result["intent"],
@@ -751,8 +822,17 @@ async def email_triage_decide(body: Dict[str, Any]):
         )
     entities = body.get("entities") if isinstance(body.get("entities"), dict) else None
     conf_float = float(confidence)
+    logger.info("Email-triage decide request body keys", body_keys=list(body.keys()) if isinstance(body, dict) else [], use_llm_in_body="use_llm" in body if isinstance(body, dict) else False, point="ai_orchestrator_decide_entry")
     use_llm_request = body.get("use_llm")
-    use_llm = bool(use_llm_request) if use_llm_request is not None else EMAIL_TRIAGE_LLM_DECIDER
+    use_llm = _coerce_use_llm(use_llm_request) if use_llm_request is not None else EMAIL_TRIAGE_LLM_DECIDER
+    logger.info(
+        "Email-triage decide request received",
+        intent=intent,
+        use_llm=use_llm,
+        use_llm_raw=use_llm_request,
+        free_ai_url_set=bool(FREE_AI_SERVICE_URL),
+        point="ai_orchestrator_decide_after_coerce",
+    )
     result = None
     if use_llm and FREE_AI_SERVICE_URL:
         try:
@@ -783,13 +863,62 @@ async def email_triage_decide(body: Dict[str, Any]):
                             llm_output=result["llm_output"],
                         )
         except Exception as e:
-            logger.warning("Email-triage LLM decide failed, falling back to rule-based", intent=intent, error=str(e))
+            logger.warning(
+                "Email-triage LLM decide failed, falling back to rule-based",
+                intent=intent,
+                error=str(e),
+                free_ai_url=FREE_AI_SERVICE_URL[:50] + "..." if len(FREE_AI_SERVICE_URL) > 50 else FREE_AI_SERVICE_URL,
+            )
+            if use_llm:
+                logger.error(
+                    "POINT OF FAILURE: use_llm=True but decider returning rule-based (LLM call failed); check FREE_AI_SERVICE_URL and free-ai-service/OpenRouter",
+                    intent=intent,
+                    error=str(e),
+                    point="ai_orchestrator_decide_fallback",
+                )
+    elif use_llm and not FREE_AI_SERVICE_URL:
+        logger.warning(
+            "Email-triage decide: use_llm=True but FREE_AI_SERVICE_URL is not set; set FREE_AI_SERVICE_URL in ai-microservice to use OpenRouter LLM",
+            intent=intent,
+        )
+        logger.error(
+            "POINT OF FAILURE: use_llm=True but FREE_AI_SERVICE_URL empty; set FREE_AI_SERVICE_URL in ai-microservice .env or docker-compose",
+            intent=intent,
+            point="ai_orchestrator_decide_no_free_ai_url",
+        )
     if result is None:
         result = await asyncio.to_thread(
             email_triage_agents.decide_action, intent, conf_float, None, entities
         )
         logger.info("Email-triage decide via rule-based", intent=intent, action=result.get("action"))
+        if use_llm:
+            logger.error(
+                "POINT OF FAILURE: use_llm=True but decider result is rule-based (parameter lost or fallback); trace use_llm from client to this point",
+                intent=intent,
+                use_llm_request=use_llm_request,
+                point="ai_orchestrator_decide_returning_rule_based",
+            )
     model_used_decide = result.get("model_used") if result.get("model_used") is not None else "rule-based"
+    logger.info(
+        "Email-triage decide success (returning)",
+        intent=intent,
+        model_used=model_used_decide,
+        use_llm_was=use_llm,
+        point="ai_orchestrator_decide_return",
+    )
+    if use_llm and (not model_used_decide or str(model_used_decide).lower() == "rule-based"):
+        logger.error(
+            "LLM requested but decider returned rule-based — point of failure: ai-microservice returning rule-based",
+            intent=intent,
+            use_llm=use_llm,
+            model_used_out=model_used_decide,
+            free_ai_url_set=bool(FREE_AI_SERVICE_URL),
+            point="ai_orchestrator_decide_raise",
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="LLM requested but decider returned rule-based; set FREE_AI_SERVICE_URL and ensure free-ai-service is reachable",
+        )
     out = {"success": True, "model_used": model_used_decide, **result}
     if result.get("llm_output") is not None:
         out["llm_output"] = result["llm_output"]
