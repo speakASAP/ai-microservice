@@ -17,6 +17,12 @@ Loads .env from ai-microservice project root for port and host overrides.
 For post-deploy (e.g. after deploy.sh): set AI_ORCHESTRATOR_BASE_URL to the deployed
 orchestrator URL (e.g. https://ai.statex.cz). Then only orchestrator and email-triage
 pipeline tests run; per-service health and OpenRouter/analyze are skipped (internal).
+
+Note: The error "AI service unreachable (http://ai-microservice:3380/api/email-triage/ingest)"
+is returned by callers (e.g. agentic-email-processing-system) when they cannot reach this
+service (timeout, DNS, network). This script tests the AI service itself; to verify that
+error path, run agentic-email tests with AEPS in Docker and AI unreachable (or use
+agentic-email test-email-triage-endpoints.js which asserts 503 error shape).
 Exit code: 0 if all checks pass, 1 otherwise.
 """
 

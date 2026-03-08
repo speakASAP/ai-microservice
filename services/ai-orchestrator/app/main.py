@@ -621,8 +621,10 @@ async def email_triage_ingest(body: Dict[str, Any]):
             content={"error": "Payload must be an object", "escalation_reason": "incomplete_data"},
         )
     t0 = time.perf_counter()
-    # Ingest is rule-based only (no AI); run sync so response is immediate
-    normalized, error, escalation_reason = email_triage_agents.validate_and_normalize(body)
+    # Ingest is rule-based only (no AI); run in thread so event loop is not blocked
+    normalized, error, escalation_reason = await asyncio.to_thread(
+        email_triage_agents.validate_and_normalize, body
+    )
     duration_ms = round((time.perf_counter() - t0) * 1000)
     msg_id = (str(body.get("message_id")).strip() or None) if body.get("message_id") is not None else None
     if error is not None:
