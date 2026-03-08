@@ -217,7 +217,7 @@ if [ "${DEPLOY_EXIT_CODE}" -eq 0 ]; then
         fi
     fi
     # Verify free-ai-service is running and reachable from ai-orchestrator (same Docker network)
-    echo -e "${BLUE}Verifying free-ai-service reachable from ai-orchestrator at http://free-ai-service:3386...${NC}"
+    echo -e "${BLUE}Verifying free-ai-service reachable from ai-orchestrator (FREE_AI_SERVICE_URL)...${NC}"
     ORCHESTRATOR_CONTAINER=""
     for c in ai-microservice-orchestrator-green ai-microservice-orchestrator-blue; do
         if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${c}$"; then
@@ -226,10 +226,16 @@ if [ "${DEPLOY_EXIT_CODE}" -eq 0 ]; then
         fi
     done
     if [ -n "$ORCHESTRATOR_CONTAINER" ]; then
-        if docker exec "$ORCHESTRATOR_CONTAINER" curl -sf --connect-timeout 5 --max-time 10 "http://free-ai-service:3386/health" 2>/dev/null | grep -q "healthy"; then
-            echo -e "${GREEN}✓ Verified: $ORCHESTRATOR_CONTAINER can reach free-ai-service at http://free-ai-service:3386${NC}"
+        FREE_AI_URL=$(docker exec "$ORCHESTRATOR_CONTAINER" printenv FREE_AI_SERVICE_URL 2>/dev/null || true)
+        if [ -z "$FREE_AI_URL" ]; then
+            echo -e "${YELLOW}  Warning: FREE_AI_SERVICE_URL not set in $ORCHESTRATOR_CONTAINER (set in .env or docker-compose for email-triage LLM).${NC}"
+            FREE_AI_URL="http://ai-microservice-free-ai-service-green:3386"
+        fi
+        HEALTH_URL="${FREE_AI_URL%/}/health"
+        if docker exec "$ORCHESTRATOR_CONTAINER" curl -sf --connect-timeout 5 --max-time 10 "$HEALTH_URL" 2>/dev/null | grep -q "healthy"; then
+            echo -e "${GREEN}✓ Verified: $ORCHESTRATOR_CONTAINER can reach free-ai-service at $FREE_AI_URL${NC}"
         else
-            echo -e "${YELLOW}  Warning: $ORCHESTRATOR_CONTAINER could not reach http://free-ai-service:3386 (check free-ai-service container and network).${NC}"
+            echo -e "${YELLOW}  Warning: $ORCHESTRATOR_CONTAINER could not reach $HEALTH_URL (check free-ai-service container, OPENROUTER_API_KEY in .env, and network).${NC}"
         fi
     else
         echo -e "${YELLOW}  Skip: ai-microservice orchestrator container not found.${NC}"

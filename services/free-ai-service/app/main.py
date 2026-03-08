@@ -296,9 +296,9 @@ class FreeAIService:
             )
     
     def _is_openrouter_model_unavailable(self, exc: Exception) -> bool:
-        """True if error indicates the OpenRouter model id is unavailable (404 / renamed)."""
+        """True if error indicates we should try next model (404 renamed, 402 credits)."""
         msg = str(exc).lower()
-        return "404" in msg or "no endpoints found" in msg
+        return "404" in msg or "no endpoints found" in msg or "402" in msg or "credits" in msg
 
     async def analyze_with_fallback(self, request: AIAnalysisRequest) -> Dict[str, Any]:
         """Analyze with automatic fallback between providers"""
@@ -328,7 +328,7 @@ class FreeAIService:
                         last_err = e
                         if self._is_openrouter_model_unavailable(e):
                             logger.warning(
-                                "OpenRouter model unavailable (404), trying next preferred model",
+                                "OpenRouter model unavailable (404/402), trying next preferred model",
                                 model=m,
                                 error=str(e)[:200],
                             )
@@ -679,6 +679,8 @@ Please provide a JSON response with:
             ssl_context.verify_mode = ssl.CERT_NONE
             
             connector = aiohttp.TCPConnector(ssl=ssl_context)
+            # Use lower max_tokens for email-triage so free/limited credits stay within quota (e.g. 402)
+            max_tokens = 512 if request.analysis_type in (AnalysisType.EMAIL_CLASSIFY, AnalysisType.EMAIL_DECIDE) else 2000
             async with aiohttp.ClientSession(connector=connector) as session:
                 payload = {
                     "model": model,
@@ -689,7 +691,7 @@ Please provide a JSON response with:
                         }
                     ],
                     "temperature": 0.7,
-                    "max_tokens": 2000
+                    "max_tokens": max_tokens
                 }
                 
                 async with session.post(
