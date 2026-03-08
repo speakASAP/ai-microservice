@@ -200,7 +200,7 @@ if [ "${DEPLOY_EXIT_CODE}" -eq 0 ]; then
         echo "  Using AI_ORCHESTRATOR_BASE_URL=$AI_ORCHESTRATOR_BASE_URL"
     fi
     if python3 scripts/test-ai-services.py; then
-        echo -e "${GREEN}✓ All tests passed.${NC}"
+        echo -e "${GREEN}✓ All tests passed (public URL).${NC}"
     else
         # Public URL may return 403 (firewall/WAF). Verify service via localhost.
         LOCAL_URL="http://localhost:${AI_ORCHESTRATOR_PORT:-3380}"
@@ -214,6 +214,33 @@ if [ "${DEPLOY_EXIT_CODE}" -eq 0 ]; then
         else
             TEST_EXIT=1
             echo -e "${RED}✗ One or more tests failed (public URL and localhost).${NC}"
+        fi
+    fi
+    # Verify same-server consumers (e.g. aeps.alfares.cz) can reach AI: internal URL used by agentic-email
+    echo -e "${BLUE}Verifying AI reachable from same-server services (e.g. aeps.alfares.cz uses http://ai-microservice:3380)...${NC}"
+    AEPS_CONTAINER=""
+    for c in agentic-email-processing-system-green agentic-email-processing-system-blue agentic-email-processing-system; do
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${c}$"; then
+            AEPS_CONTAINER="$c"
+            break
+        fi
+    done
+    if [ -n "$AEPS_CONTAINER" ]; then
+        if docker exec "$AEPS_CONTAINER" wget -q -O- --timeout=5 "http://ai-microservice:3380/health" 2>/dev/null | grep -q "healthy"; then
+            echo -e "${GREEN}✓ Verified: $AEPS_CONTAINER (aeps.alfares.cz backend) can reach AI at http://ai-microservice:3380${NC}"
+        else
+            echo -e "${YELLOW}  Warning: $AEPS_CONTAINER could not reach http://ai-microservice:3380 (container may still be starting).${NC}"
+        fi
+    else
+        echo -e "${YELLOW}  Skip: agentic-email container not running; run agentic-email deploy to verify aeps.alfares.cz → AI.${NC}"
+    fi
+    # If public URL failed, check if it works from same-network container (simulates same-server caller)
+    if [ -n "${DOMAIN:-}" ] && command -v docker >/dev/null 2>&1 && docker network inspect nginx-network >/dev/null 2>&1; then
+        PUBLIC_CODE=$(docker run --rm --network nginx-network "${HEALTH_CHECK_IMAGE:-alpine/curl:latest}" curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 -k "https://${DOMAIN}/health" 2>/dev/null || echo "000")
+        if [ "$PUBLIC_CODE" = "200" ]; then
+            echo -e "${GREEN}✓ Public URL https://${DOMAIN} is reachable from same-network containers (requests from same server will work).${NC}"
+        elif [ "$PUBLIC_CODE" != "000" ]; then
+            echo -e "${YELLOW}  Public URL https://${DOMAIN} returned HTTP ${PUBLIC_CODE} from same network. Fix nginx/firewall if aeps.alfares.cz or other services call this URL.${NC}"
         fi
     fi
     echo ""

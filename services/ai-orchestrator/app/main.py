@@ -163,17 +163,28 @@ app = FastAPI(
 # Initialize notification service client
 notification_client = NotificationServiceClient()
 
-# CORS middleware
+# CORS middleware — same-domain (aeps.alfares.cz → ai.alfares.cz) and statex/localhost; no 403 for alfares.cz
+_cors_origins = [
+    "https://statex.cz",
+    "https://www.statex.cz",
+    "https://aeps.alfares.cz",
+    "http://aeps.alfares.cz",
+    "https://agentic-email-processing-system.alfares.cz",
+    "http://agentic-email-processing-system.alfares.cz",
+    "https://ai.alfares.cz",
+    "http://ai.alfares.cz",
+    os.getenv("CORS_ORIGIN", f"http://localhost:{os.getenv('FRONTEND_PORT', '3602')}"),
+    f"https://localhost:{os.getenv('FRONTEND_PORT', '3602')}",
+    f"http://127.0.0.1:{os.getenv('FRONTEND_PORT', '3602')}",
+    f"https://127.0.0.1:{os.getenv('FRONTEND_PORT', '3602')}",
+]
+_cors_extra = os.getenv("CORS_ORIGINS_EXTRA", "")
+if _cors_extra:
+    _cors_origins.extend(o.strip() for o in _cors_extra.split(",") if o.strip())
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://statex.cz",
-        "https://www.statex.cz",
-        os.getenv("CORS_ORIGIN", f"http://localhost:{os.getenv('FRONTEND_PORT', '3602')}"),
-        f"https://localhost:{os.getenv('FRONTEND_PORT', '3602')}",
-        f"http://127.0.0.1:{os.getenv('FRONTEND_PORT', '3602')}",
-        f"https://127.0.0.1:{os.getenv('FRONTEND_PORT', '3602')}"
-    ],
+    allow_origins=_cors_origins,
+    allow_origin_regex=r"^https?://([a-z0-9-]+\.)?alfares\.cz$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

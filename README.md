@@ -201,6 +201,10 @@ Switch between deployments by updating nginx configuration.
 - **Migration Plan**: See `AI_MICROSERVICE_MIGRATION_PLAN.md` in project root
 - **Main README**: See main `README.md` for ecosystem overview
 
+## Internal connectivity (ai-microservice alias)
+
+Containers on `nginx-network` (e.g. agentic-email-processing-system) call the orchestrator at `http://ai-microservice:3380`. The hostname `ai-microservice` is a Docker network alias on the **backend** service of the active blue/green stack. **Only one stack (blue or green) should be running** after deploy; deploy-smart.sh stops the inactive stack. If both stacks run, two containers share the alias and DNS may resolve to the wrong or unhealthy one, causing timeouts. If you see "AI service unreachable ... timeout" from AEPS, ensure only one ai-microservice stack is up and that `curl http://ai-microservice:3380/health` from a container on nginx-network succeeds.
+
 ## Support
 
 For issues or questions:
