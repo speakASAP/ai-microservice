@@ -178,13 +178,14 @@ class FreeAIService:
                 "ollama": ["llama2:7b"],
                 "huggingface": ["cardiffnlp/twitter-roberta-base-sentiment-latest", "distilbert-base-uncased"]
             },
+            # EMAIL_*: prefer openai/gpt-oss-20b:free first (google/gemini-2.0-flash-exp:free often 404 on OpenRouter)
             AnalysisType.EMAIL_CLASSIFY: {
-                "openrouter": ["google/gemini-2.0-flash-exp:free", "openai/gpt-oss-20b:free", "anthropic/claude-3.5-sonnet", "openai/gpt-4o", "meta-llama/llama-3.1-70b-instruct"],
+                "openrouter": ["openai/gpt-oss-20b:free", "google/gemini-2.0-flash-exp:free", "anthropic/claude-3.5-sonnet", "openai/gpt-4o", "meta-llama/llama-3.1-70b-instruct"],
                 "ollama": ["llama2:7b", "mistral:7b"],
                 "huggingface": ["microsoft/DialoGPT-medium", "gpt2"]
             },
             AnalysisType.EMAIL_DECIDE: {
-                "openrouter": ["google/gemini-2.0-flash-exp:free", "openai/gpt-oss-20b:free", "anthropic/claude-3.5-sonnet", "openai/gpt-4o", "meta-llama/llama-3.1-70b-instruct"],
+                "openrouter": ["openai/gpt-oss-20b:free", "google/gemini-2.0-flash-exp:free", "anthropic/claude-3.5-sonnet", "openai/gpt-4o", "meta-llama/llama-3.1-70b-instruct"],
                 "ollama": ["llama2:7b", "mistral:7b"],
                 "huggingface": ["microsoft/DialoGPT-medium", "gpt2"]
             }
@@ -294,6 +295,11 @@ class FreeAIService:
                 detail="No AI providers are currently available. Please check service status."
             )
     
+    def _is_openrouter_model_unavailable(self, exc: Exception) -> bool:
+        """True if error indicates the OpenRouter model id is unavailable (404 / renamed)."""
+        msg = str(exc).lower()
+        return "404" in msg or "no endpoints found" in msg
+
     async def analyze_with_fallback(self, request: AIAnalysisRequest) -> Dict[str, Any]:
         """Analyze with automatic fallback between providers"""
         
@@ -309,8 +315,27 @@ class FreeAIService:
         # Try primary provider
         try:
             if provider == "openrouter":
-                request.model = model
-                return await self.analyze_with_openrouter(request)
+                # Try preferred OpenRouter models in order; on 404 (model unavailable) try next
+                preferred = self.model_preferences.get(request.analysis_type, {}).get("openrouter", [])
+                if not preferred:
+                    preferred = [model]
+                last_err = None
+                for m in preferred:
+                    request.model = m
+                    try:
+                        return await self.analyze_with_openrouter(request)
+                    except Exception as e:
+                        last_err = e
+                        if self._is_openrouter_model_unavailable(e):
+                            logger.warning(
+                                "OpenRouter model unavailable (404), trying next preferred model",
+                                model=m,
+                                error=str(e)[:200],
+                            )
+                            continue
+                        raise
+                logger.error("All OpenRouter preferred models failed (e.g. 404)", last_error=str(last_err)[:200] if last_err else None)
+                raise last_err or HTTPException(status_code=503, detail="OpenRouter models unavailable")
             elif provider == "ollama":
                 request.model = model
                 return await self.analyze_with_ollama(request)
