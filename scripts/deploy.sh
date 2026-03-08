@@ -216,6 +216,25 @@ if [ "${DEPLOY_EXIT_CODE}" -eq 0 ]; then
             echo -e "${RED}✗ One or more tests failed (public URL and localhost).${NC}"
         fi
     fi
+    # Verify free-ai-service is running and reachable from ai-orchestrator (same Docker network)
+    echo -e "${BLUE}Verifying free-ai-service reachable from ai-orchestrator at http://free-ai-service:3386...${NC}"
+    ORCHESTRATOR_CONTAINER=""
+    for c in ai-microservice-orchestrator-green ai-microservice-orchestrator-blue; do
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${c}$"; then
+            ORCHESTRATOR_CONTAINER="$c"
+            break
+        fi
+    done
+    if [ -n "$ORCHESTRATOR_CONTAINER" ]; then
+        if docker exec "$ORCHESTRATOR_CONTAINER" curl -sf --connect-timeout 5 --max-time 10 "http://free-ai-service:3386/health" 2>/dev/null | grep -q "healthy"; then
+            echo -e "${GREEN}✓ Verified: $ORCHESTRATOR_CONTAINER can reach free-ai-service at http://free-ai-service:3386${NC}"
+        else
+            echo -e "${YELLOW}  Warning: $ORCHESTRATOR_CONTAINER could not reach http://free-ai-service:3386 (check free-ai-service container and network).${NC}"
+        fi
+    else
+        echo -e "${YELLOW}  Skip: ai-microservice orchestrator container not found.${NC}"
+    fi
+
     # Verify same-server consumers (e.g. aeps.alfares.cz) can reach AI: internal URL used by agentic-email
     echo -e "${BLUE}Verifying AI reachable from same-server services (e.g. aeps.alfares.cz uses http://ai-microservice:3380)...${NC}"
     AEPS_CONTAINER=""

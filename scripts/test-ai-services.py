@@ -7,6 +7,10 @@ document-ai, prototype-generator, template-repository, ai-workers, gemini-ai-ser
 data-viz-service), verifies responses, and checks OpenRouter accessibility via
 free-ai-service /models and optional /analyze.
 
+Free-ai-service must be running and reachable at http://free-ai-service:3386 from
+the ai-orchestrator (same Docker network). deploy.sh verifies this after deployment
+by curling http://free-ai-service:3386/health from the orchestrator container.
+
 Usage:
   From host (ports mapped): ./scripts/test-ai-services.py
   With custom base: AI_SERVICE_HOST=localhost python3 scripts/test-ai-services.py
@@ -313,6 +317,7 @@ def main() -> int:
             "gemini_ai": get_port("GEMINI_AI_SERVICE_PORT", "3388"),
             "data_viz": get_port("DATA_VIZ_SERVICE_PORT", "3389"),
         }
+        # Service health (from host). deploy.sh verifies free-ai-service at http://free-ai-service:3386 from orchestrator.
         print("[Service health]")
         services = [
             ("NLP", f"http://{host}:{ports['nlp']}/health"),
