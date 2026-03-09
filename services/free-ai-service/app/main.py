@@ -178,14 +178,14 @@ class FreeAIService:
                 "ollama": ["llama2:7b"],
                 "huggingface": ["cardiffnlp/twitter-roberta-base-sentiment-latest", "distilbert-base-uncased"]
             },
-            # EMAIL_*: prefer openai/gpt-oss-20b:free first (google/gemini-2.0-flash-exp:free often 404 on OpenRouter)
+            # EMAIL_*: openrouter/free router first (auto-selects free model); then specific free/paid
             AnalysisType.EMAIL_CLASSIFY: {
-                "openrouter": ["openai/gpt-oss-20b:free", "google/gemini-2.0-flash-exp:free", "anthropic/claude-3.5-sonnet", "openai/gpt-4o", "meta-llama/llama-3.1-70b-instruct"],
+                "openrouter": ["openrouter/free", "openai/gpt-oss-20b:free", "google/gemini-2.0-flash-exp:free", "anthropic/claude-3.5-sonnet", "openai/gpt-4o", "meta-llama/llama-3.1-70b-instruct"],
                 "ollama": ["llama2:7b", "mistral:7b"],
                 "huggingface": ["microsoft/DialoGPT-medium", "gpt2"]
             },
             AnalysisType.EMAIL_DECIDE: {
-                "openrouter": ["openai/gpt-oss-20b:free", "google/gemini-2.0-flash-exp:free", "anthropic/claude-3.5-sonnet", "openai/gpt-4o", "meta-llama/llama-3.1-70b-instruct"],
+                "openrouter": ["openrouter/free", "openai/gpt-oss-20b:free", "google/gemini-2.0-flash-exp:free", "anthropic/claude-3.5-sonnet", "openai/gpt-4o", "meta-llama/llama-3.1-70b-instruct"],
                 "ollama": ["llama2:7b", "mistral:7b"],
                 "huggingface": ["microsoft/DialoGPT-medium", "gpt2"]
             }
@@ -195,10 +195,32 @@ class FreeAIService:
         """Check which AI providers are available"""
         logger.info("🔍 Checking AI providers availability...")
         
-        # Skip Ollama and Hugging Face checks - disabled by user request
-        logger.info("⏭️ Skipping Ollama check (disabled)")
-        self.provider_status["ollama"] = "disabled"
+        # Ollama: check if OLLAMA_URL is set and reachable (fallback when OpenRouter fails)
+        ollama_url = (os.getenv("OLLAMA_URL") or "").strip()
+        if ollama_url and ollama_url.lower() != "disabled":
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        f"{ollama_url.rstrip('/')}/api/tags",
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as response:
+                        if response.status == 200:
+                            self.provider_status["ollama"] = "available"
+                            data = await response.json()
+                            models = [m.get("name", "") for m in data.get("models", [])]
+                            self.available_models["ollama"] = [{"name": n, "description": n} for n in models] if models else [{"name": "llama2:7b", "description": "Llama 2 7B"}]
+                            logger.info("✅ Ollama is available")
+                        else:
+                            self.provider_status["ollama"] = "unavailable"
+                            logger.info("⏭️ Ollama not reachable (status %s)", response.status)
+            except Exception as e:
+                self.provider_status["ollama"] = "unavailable"
+                logger.info("⏭️ Ollama check skipped or failed: %s", e)
+        else:
+            self.provider_status["ollama"] = "disabled"
+            logger.info("⏭️ Ollama disabled (OLLAMA_URL not set)")
         
+        # Hugging Face: disabled by user request
         logger.info("⏭️ Skipping Hugging Face check (disabled)")
         self.provider_status["huggingface"] = "disabled"
         
@@ -227,8 +249,9 @@ class FreeAIService:
                         if response.status == 200:
                             self.provider_status["openrouter"] = "available"
                             self.available_models["openrouter"] = [
+                                {"name": "openrouter/free", "description": "OpenRouter free router (auto-selects free model)"},
                                 {"name": "google/gemini-2.0-flash-exp:free", "description": "Google: Gemini 2.0 Flash Experimental (free)"},
-                                {"name": "openai/gpt-oss-20b:free", "description": "OpenAI: gpt-oss-20b (free)"},   
+                                {"name": "openai/gpt-oss-20b:free", "description": "OpenAI: gpt-oss-20b (free)"},
                                 {"name": "anthropic/claude-3.5-sonnet", "description": "Claude 3.5 Sonnet - Advanced reasoning"},
                                 {"name": "openai/gpt-4o", "description": "GPT-4o - Multimodal AI model"},
                                 {"name": "meta-llama/llama-3.1-70b-instruct", "description": "Llama 3.1 70B - Large language model"}
@@ -296,9 +319,9 @@ class FreeAIService:
             )
     
     def _is_openrouter_model_unavailable(self, exc: Exception) -> bool:
-        """True if error indicates we should try next model (404 renamed, 402 credits)."""
+        """True if error indicates we should try next model (404, 402 credits, 429 rate limit)."""
         msg = str(exc).lower()
-        return "404" in msg or "no endpoints found" in msg or "402" in msg or "credits" in msg
+        return "404" in msg or "no endpoints found" in msg or "402" in msg or "credits" in msg or "429" in msg or "rate limit" in msg
 
     async def analyze_with_fallback(self, request: AIAnalysisRequest) -> Dict[str, Any]:
         """Analyze with automatic fallback between providers"""
@@ -328,7 +351,7 @@ class FreeAIService:
                         last_err = e
                         if self._is_openrouter_model_unavailable(e):
                             logger.warning(
-                                "OpenRouter model unavailable (404/402), trying next preferred model",
+                                "OpenRouter model unavailable (404/402/429), trying next preferred model",
                                 model=m,
                                 error=str(e)[:200],
                             )
@@ -702,7 +725,11 @@ Please provide a JSON response with:
                 ) as response:
                     if response.status == 200:
                         result = await response.json()
-                        ai_response = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+                        effective_model = result.get("model") or model
+                        choices = result.get("choices") or []
+                        first = choices[0] if choices else None
+                        msg = (first.get("message") if isinstance(first, dict) else None) or {}
+                        ai_response = (msg.get("content") if isinstance(msg, dict) else None) or ""
                         
                         # Try to parse JSON response
                         try:
@@ -721,7 +748,12 @@ Please provide a JSON response with:
                         elif request.analysis_type == AnalysisType.EMAIL_DECIDE:
                             analysis = self._normalize_email_decide(analysis)
                         analysis["ai_service"] = "OpenRouter"
-                        analysis["model_used"] = model
+                        display_model = model
+                        if effective_model and effective_model != model:
+                            display_model = f"{model} -> {effective_model}"
+                        analysis["model_used"] = display_model
+                        analysis["openrouter_model"] = effective_model
+                        analysis["requested_model"] = model
                         return analysis
                     else:
                         error_text = await response.text()
@@ -737,10 +769,10 @@ Please provide a JSON response with:
     _EMAIL_QUEUES = frozenset({"support", "sales", "technical", "billing", "spam_review"})
 
     def _normalize_email_classify(self, raw: Dict[str, Any]) -> Dict[str, Any]:
-        """Validate and normalize LLM output to classifier contract. Raises if invalid."""
+        """Validate and normalize LLM output to classifier contract. Defaults to unknown if invalid."""
         intent = (raw.get("intent") or "").strip().lower()
         if intent not in self._EMAIL_INTENTS:
-            raise ValueError(f"Invalid intent: {intent}; must be one of {sorted(self._EMAIL_INTENTS)}")
+            intent = "unknown"
         try:
             confidence = float(raw.get("confidence", 0))
         except (TypeError, ValueError):
@@ -752,10 +784,12 @@ Please provide a JSON response with:
         return {"intent": intent, "confidence": confidence, "raw_scores": raw_scores}
 
     def _normalize_email_decide(self, raw: Dict[str, Any]) -> Dict[str, Any]:
-        """Validate and normalize LLM output to decider contract. Raises if invalid."""
+        """Validate and normalize LLM output to decider contract. Defaults to escalate if invalid."""
         action = (raw.get("action") or "").strip().lower()
         if action not in self._EMAIL_ACTIONS:
-            raise ValueError(f"Invalid action: {action}; must be one of {sorted(self._EMAIL_ACTIONS)}")
+            action = "escalate"
+            raw = dict(raw)
+            raw["escalation_reason"] = raw.get("escalation_reason") or "llm_invalid_or_empty_action"
         escalation_reason = raw.get("escalation_reason")
         if escalation_reason is not None and not isinstance(escalation_reason, str):
             escalation_reason = str(escalation_reason)
