@@ -271,11 +271,17 @@ class AiCompleteRequest(BaseModel):
     correlation_id: Optional[str] = None
 
 
-MODEL_TIER_MAP = {
-    "free": "gemini-2.5-flash-lite",
-    "cheap": "gemini-2.5-flash",
-    "smart": "gemini-2.5-pro",
-}
+FREE_MODEL_FALLBACKS = [
+    "minimax/minimax-m2.5:free",
+    "google/gemma-3-27b-it:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "google/gemma-3-12b-it:free",
+]
+
+def _free_model_list() -> list:
+    primary = os.getenv("OPENROUTER_MODEL", FREE_MODEL_FALLBACKS[0])
+    rest = [m for m in FREE_MODEL_FALLBACKS if m != primary]
+    return [primary] + rest
 
 # Shop-assistant agents: request/response models
 class ShopTranscribeRequest(BaseModel):
@@ -1157,44 +1163,68 @@ async def metrics():
 async def ai_complete(request: AiCompleteRequest, req: Request):
     """
     Generic LLM completion endpoint for business-orchestrator.
-    Accepts model_tier (free|cheap|smart), system_prompt, user_prompt.
+    Routes model_tier (free|cheap|smart) to OpenRouter free models.
     Returns the raw JSON-parsed LLM response, or {"text": "..."} for non-JSON responses.
     """
-    model_name = MODEL_TIER_MAP.get(request.model_tier, "gemini-2.5-flash-lite")
-    api_key = os.getenv("GEMINI_API_KEY", "")
+    api_key = os.getenv("OPENROUTER_API_KEY", "")
+    api_base = os.getenv("OPENROUTER_API_BASE", "https://openrouter.ai/api/v1")
     if not api_key:
-        raise HTTPException(status_code=503, detail="GEMINI_API_KEY not configured")
+        raise HTTPException(status_code=503, detail="OPENROUTER_API_KEY not configured")
 
-    contents = []
-    if request.system_prompt:
-        contents.append({"role": "user", "parts": [{"text": request.system_prompt}]})
-        contents.append({"role": "model", "parts": [{"text": "Understood. I will follow those instructions."}]})
-    contents.append({"role": "user", "parts": [{"text": request.user_prompt}]})
+    messages = [{"role": "system", "content": request.system_prompt}] if request.system_prompt else []
+    messages.append({"role": "user", "content": request.user_prompt})
 
-    payload = {
-        "contents": contents,
-        "generationConfig": {
-            "maxOutputTokens": request.max_tokens or 1000,
-            "temperature": 0.2,
-            "responseMimeType": "application/json" if request.output_schema else "text/plain",
-        },
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://orchestrator.alfares.cz",
+        "X-Title": "business-orchestrator",
     }
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+    models = _free_model_list()
+    last_error = "No models available"
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(url, json=payload)
+    async with httpx.AsyncClient(timeout=90.0) as client:
+        for model_name in models:
+            payload: Dict[str, Any] = {
+                "model": model_name,
+                "messages": messages,
+                "max_tokens": request.max_tokens or 1000,
+                "temperature": 0.2,
+            }
+            # Note: do NOT set response_format — not reliably supported across free models.
+            # JSON output is enforced via system_prompt instructions instead.
 
-    if resp.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"Gemini error {resp.status_code}: {resp.text[:200]}")
+            resp = await client.post(f"{api_base}/chat/completions", json=payload, headers=headers)
 
-    data = resp.json()
-    raw_text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+            if resp.status_code in (429, 503):
+                last_error = f"{model_name} rate-limited ({resp.status_code})"
+                continue  # try next model
 
-    try:
-        return json.loads(raw_text)
-    except (json.JSONDecodeError, ValueError):
-        return {"text": raw_text, "model_used": model_name}
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail=f"OpenRouter error {resp.status_code}: {resp.text[:300]}")
+
+            data = resp.json()
+            raw_text = (data.get("choices", [{}])[0].get("message", {}) or {}).get("content") or ""
+            used_model = data.get("model", model_name)
+
+            if not raw_text:
+                last_error = f"{model_name} returned empty content"
+                continue  # try next model
+
+            # Strip markdown code fences if present
+            stripped = raw_text.strip()
+            if stripped.startswith("```"):
+                stripped = "\n".join(stripped.split("\n")[1:])
+                if stripped.endswith("```"):
+                    stripped = stripped[:-3].strip()
+
+            try:
+                return json.loads(stripped)
+            except (json.JSONDecodeError, ValueError):
+                return {"text": raw_text, "model_used": used_model}
+
+    raise HTTPException(status_code=503, detail=f"All free models rate-limited: {last_error}")
 
 
 @app.post("/api/multi-agent/process", response_model=Dict[str, Any])
