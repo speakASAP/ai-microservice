@@ -88,6 +88,7 @@ async def ai_complete(request: AiCompleteRequest, req: Request):
 ### 4. Add `httpx` to requirements if not present
 
 Check `requirements.txt` in the ai-orchestrator service directory. If `httpx` is not listed, add:
+
 ```
 httpx>=0.27.0
 ```
@@ -107,6 +108,7 @@ curl -s -X POST http://localhost:3380/ai/complete \
 Expected: JSON response with a greeting field or `{"text": "..."}`.
 
 After verifying, restart the ai-orchestrator container:
+
 ```bash
 cd /home/ssf/Documents/Github/ai-microservice && docker compose -f docker-compose.green.yml restart ai-orchestrator-green
 # or rebuild if requirements changed:
