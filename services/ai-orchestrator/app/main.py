@@ -271,6 +271,12 @@ class AiCompleteRequest(BaseModel):
     correlation_id: Optional[str] = None
 
 
+class TranslateRequest(BaseModel):
+    text: str = Field(..., min_length=1)
+    sourceLang: Optional[str] = None
+    targetLang: str = Field(..., min_length=2, max_length=8)
+
+
 FREE_MODEL_FALLBACKS = [
     "minimax/minimax-m2.5:free",
     "google/gemma-3-27b-it:free",
@@ -1229,6 +1235,119 @@ async def ai_complete(request: AiCompleteRequest, req: Request):
                 return {"text": raw_text, "model_used": used_model}
 
     raise HTTPException(status_code=503, detail=f"All free models rate-limited: {last_error}")
+
+
+@app.post("/api/v1/translate")
+async def translate_text(request: TranslateRequest):
+    """
+    Stable translation endpoint for service-to-service integrations (e.g. SpeakASAP content-service).
+    Returns: { translatedText, sourceLang, targetLang, modelUsed, durationMs }.
+    """
+    started = time.perf_counter()
+    text = request.text.strip()
+    source_lang = (request.sourceLang or "auto").strip()
+    target_lang = request.targetLang.strip().lower()
+
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+    if not target_lang:
+      raise HTTPException(status_code=400, detail="targetLang is required")
+
+    api_key = os.getenv("OPENROUTER_API_KEY", "")
+    api_base = os.getenv("OPENROUTER_API_BASE", "https://openrouter.ai/api/v1")
+    if not api_key:
+        logger.error("Translation endpoint unavailable: OPENROUTER_API_KEY missing")
+        raise HTTPException(status_code=503, detail="Translation provider not configured")
+
+    logger.info(
+        "Translation request received",
+        source_lang=source_lang,
+        target_lang=target_lang,
+        text_length=len(text),
+    )
+
+    system_prompt = (
+        "You are a translation engine. Translate the user text exactly into the target language. "
+        "Do not explain, do not add notes, do not wrap in markdown."
+    )
+    user_prompt = (
+        f"source_language={source_lang}\n"
+        f"target_language={target_lang}\n"
+        "text:\n"
+        f"{text}"
+    )
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://ai.statex.cz",
+        "X-Title": "ai-microservice-translate",
+    }
+    models = _free_model_list()
+    timeout_seconds = float(os.getenv("AI_TRANSLATE_TIMEOUT", "30"))
+    last_error = "No translation model succeeded"
+
+    async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+        for model_name in models:
+            try:
+                payload: Dict[str, Any] = {
+                    "model": model_name,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    "max_tokens": 512,
+                    "temperature": 0.1,
+                }
+                resp = await client.post(f"{api_base}/chat/completions", json=payload, headers=headers)
+                if resp.status_code in (429, 503):
+                    last_error = f"{model_name} rate-limited ({resp.status_code})"
+                    logger.warning("Translation model rate-limited", model=model_name, status=resp.status_code)
+                    continue
+                if resp.status_code == 400:
+                    last_error = f"{model_name} rejected request"
+                    logger.warning("Translation model rejected request", model=model_name, status=resp.status_code)
+                    continue
+                if resp.status_code != 200:
+                    logger.error(
+                        "Translation provider error",
+                        model=model_name,
+                        status=resp.status_code,
+                        body=resp.text[:300],
+                    )
+                    raise HTTPException(status_code=502, detail=f"Translation provider error {resp.status_code}")
+
+                data = resp.json()
+                translated_text = (data.get("choices", [{}])[0].get("message", {}) or {}).get("content") or ""
+                if not translated_text.strip():
+                    last_error = f"{model_name} returned empty output"
+                    continue
+
+                duration_ms = round((time.perf_counter() - started) * 1000)
+                logger.info(
+                    "Translation request succeeded",
+                    model=model_name,
+                    target_lang=target_lang,
+                    duration_ms=duration_ms,
+                )
+                return {
+                    "translatedText": translated_text.strip(),
+                    "sourceLang": source_lang,
+                    "targetLang": target_lang,
+                    "modelUsed": data.get("model", model_name),
+                    "durationMs": duration_ms,
+                }
+            except httpx.TimeoutException:
+                last_error = f"{model_name} timeout"
+                logger.error("Translation model timeout", model=model_name, timeout_seconds=timeout_seconds)
+            except HTTPException:
+                raise
+            except Exception as exc:
+                last_error = str(exc)
+                logger.error("Translation model failed", model=model_name, error=str(exc))
+
+    duration_ms = round((time.perf_counter() - started) * 1000)
+    logger.error("Translation request failed", target_lang=target_lang, duration_ms=duration_ms, reason=last_error)
+    raise HTTPException(status_code=503, detail=f"Translation unavailable: {last_error}")
 
 
 @app.post("/api/multi-agent/process", response_model=Dict[str, Any])
