@@ -1266,14 +1266,11 @@ async def translate_text(request: TranslateRequest):
         text_length=len(text),
     )
 
-    system_prompt = (
-        "You are a translation engine. Translate the user text exactly into the target language. "
-        "Do not explain, do not add notes, do not wrap in markdown."
-    )
+    # OpenRouter free models frequently reject strict system+structured prompts for translation.
+    # Use a single concise user prompt to reduce 400 "rejected request" responses.
     user_prompt = (
-        f"source_language={source_lang}\n"
-        f"target_language={target_lang}\n"
-        "text:\n"
+        f"Translate from {source_lang} to {target_lang}. "
+        "Output only the translated text without explanation.\n"
         f"{text}"
     )
     headers = {
@@ -1291,12 +1288,9 @@ async def translate_text(request: TranslateRequest):
             try:
                 payload: Dict[str, Any] = {
                     "model": model_name,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "max_tokens": 512,
-                    "temperature": 0.1,
+                    "messages": [{"role": "user", "content": user_prompt}],
+                    "max_tokens": 128,
+                    "temperature": 0,
                 }
                 resp = await client.post(f"{api_base}/chat/completions", json=payload, headers=headers)
                 if resp.status_code in (429, 503):

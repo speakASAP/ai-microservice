@@ -47,6 +47,9 @@ def _is_public_path(path: str) -> bool:
     # Email-triage: internal service-to-service (agentic-email-processing-system)
     if path.startswith("/api/email-triage"):
         return True
+    # Service-to-service translation endpoint used by content-service.
+    if path == "/api/v1/translate":
+        return True
     return False
 
 
