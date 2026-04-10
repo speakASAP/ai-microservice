@@ -1201,6 +1201,10 @@ async def ai_complete(request: AiCompleteRequest, req: Request):
                 last_error = f"{model_name} rate-limited ({resp.status_code})"
                 continue  # try next model
 
+            if resp.status_code == 400:
+                last_error = f"{model_name} rejected request (400): {resp.text[:150]}"
+                continue  # model may not support system prompts or structured output; try next
+
             if resp.status_code != 200:
                 raise HTTPException(status_code=502, detail=f"OpenRouter error {resp.status_code}: {resp.text[:300]}")
 
