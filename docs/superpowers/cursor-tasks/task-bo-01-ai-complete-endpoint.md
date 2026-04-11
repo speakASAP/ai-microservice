@@ -1,17 +1,20 @@
 # Cursor Task: Add `/ai/complete` endpoint to AI Orchestrator
 
+**Status:** FINISHED (verified in repo 2026-04-11)
+
+**Shipped code:** `services/ai-orchestrator/app/main.py` — `AiCompleteRequest` (around line 265), `POST /ai/complete` (around line 1168). Uses `OPENROUTER_API_KEY` / `OPENROUTER_API_BASE` with a free-model fallback chain (`_free_model_list`), not direct Gemini. Response: parsed JSON object, or `{"text": "...", "model_used": "..."}` on non-JSON. Protected by JWT middleware (Bearer required).
+
 **Project:** `/home/ssf/Documents/Github/ai-microservice/services/ai-orchestrator`
-**File to edit:** `app/main.py`
 
 ---
 
 ## Context
 
-`business-orchestrator` (NestJS service) calls `POST /ai/complete` on the AI orchestrator (port 3380) for LLM inference. This endpoint does not exist yet.
+`business-orchestrator` (NestJS service) calls `POST /ai/complete` on the AI orchestrator (port 3380) for LLM inference. The endpoint is implemented; see shipped code above.
 
 ---
 
-## What to add
+## Original implementation sketch (superseded — kept for history)
 
 ### 1. Pydantic models (add near the top of `app/main.py`, after existing imports/models)
 

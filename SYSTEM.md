@@ -5,7 +5,7 @@
 FastAPI (Python). Modules: Orchestrator, NLP, ASR, Document AI, Prototype Generator, Free AI, Gemini, Data Viz.
 
 - Tier routing: free (Ollama) → cheap (OpenRouter) → smart (Gemini Flash) → premium (Claude)
-- Endpoint: `POST /ai/process` `{model_tier, system_prompt, user_prompt, output_schema}`
+- Endpoint: `POST /ai/complete` — body: `{ model_tier, system_prompt, user_prompt, output_schema?, max_tokens?, correlation_id? }` (see `docs/model-tier-endpoints.md`)
 
 ## Integrations
 

@@ -151,6 +151,7 @@ docker compose -f docker-compose.blue.yml logs -f
 
 ### AI Orchestrator
 
+- **Model tier (LLM gateway):** `POST /ai/complete` — JSON body includes `model_tier`, `system_prompt`, `user_prompt`; JWT required. Full request/response examples: [`docs/model-tier-endpoints.md`](docs/model-tier-endpoints.md).
 - `POST /api/process-submission` - Process user submission
 - `GET /api/status/{submission_id}` - Check processing status
 - `GET /api/results/{submission_id}` - Get final results

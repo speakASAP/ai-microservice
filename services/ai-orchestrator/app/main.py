@@ -264,7 +264,7 @@ class SubmissionRequest(BaseModel):
 
 class AiCompleteRequest(BaseModel):
     model_tier: str = "free"
-    system_prompt: str
+    system_prompt: Optional[str] = None
     user_prompt: str
     output_schema: Optional[dict] = None
     max_tokens: Optional[int] = 1000
@@ -1168,9 +1168,13 @@ async def metrics():
 @app.post("/ai/complete")
 async def ai_complete(request: AiCompleteRequest, req: Request):
     """
-    Generic LLM completion endpoint for business-orchestrator.
-    Routes model_tier (free|cheap|smart) to OpenRouter free models.
-    Returns the raw JSON-parsed LLM response, or {"text": "..."} for non-JSON responses.
+    Generic LLM completion for business-orchestrator (JWT required).
+    Accepts model_tier (free|cheap|smart) for API compatibility; uses OpenRouter
+    free-model fallback chain regardless of tier until tier routing is implemented.
+    Returns parsed JSON object, or {"text": "...", "model_used": "..."} if not JSON.
+
+    Wall-clock budget stays **below** business-orchestrator axios timeout (120s): sequential
+    OpenRouter tries must not sum to more than ~95s so the caller gets a JSON error, not a client timeout.
     """
     api_key = os.getenv("OPENROUTER_API_KEY", "")
     api_base = os.getenv("OPENROUTER_API_BASE", "https://openrouter.ai/api/v1")
@@ -1189,9 +1193,46 @@ async def ai_complete(request: AiCompleteRequest, req: Request):
 
     models = _free_model_list()
     last_error = "No models available"
+    cid = request.correlation_id or "none"
+    t0 = time.monotonic()
+    # Total budget for all OpenRouter attempts (orchestrator client timeout is 120s).
+    budget_sec = float(os.getenv("AI_COMPLETE_BUDGET_SEC", "95"))
+    deadline = t0 + budget_sec
+    per_model_sec = float(os.getenv("AI_COMPLETE_PER_MODEL_SEC", "24"))
+    max_tries = int(os.getenv("AI_COMPLETE_MAX_MODEL_TRIES", "4"))
+    per_req = httpx.Timeout(
+        per_model_sec,
+        connect=float(os.getenv("AI_COMPLETE_CONNECT_SEC", "8")),
+    )
+    models_to_try = models[: max(1, min(max_tries, len(models)))]
 
-    async with httpx.AsyncClient(timeout=90.0) as client:
-        for model_name in models:
+    async with httpx.AsyncClient(timeout=per_req) as client:
+        for idx, model_name in enumerate(models_to_try):
+            now = time.monotonic()
+            if now >= deadline:
+                elapsed_ms = int((now - t0) * 1000)
+                logger.error(
+                    "ai_complete budget exceeded",
+                    cid=cid,
+                    models_tried=idx,
+                    elapsed_ms=elapsed_ms,
+                    last_error=last_error,
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"openrouter_budget_exceeded:{int(now - t0)}s:{last_error}",
+                )
+
+            elapsed_ms = int((now - t0) * 1000)
+            logger.info(
+                "ai_complete try",
+                cid=cid,
+                idx=idx,
+                model=model_name,
+                elapsed_ms=elapsed_ms,
+                budget_remaining_s=round(max(0.0, deadline - now), 2),
+            )
+
             payload: Dict[str, Any] = {
                 "model": model_name,
                 "messages": messages,
@@ -1201,7 +1242,34 @@ async def ai_complete(request: AiCompleteRequest, req: Request):
             # Note: do NOT set response_format — not reliably supported across free models.
             # JSON output is enforced via system_prompt instructions instead.
 
-            resp = await client.post(f"{api_base}/chat/completions", json=payload, headers=headers)
+            post_timeout = per_model_sec + 4.0
+            try:
+                resp = await asyncio.wait_for(
+                    client.post(f"{api_base}/chat/completions", json=payload, headers=headers),
+                    timeout=post_timeout,
+                )
+            except asyncio.TimeoutError:
+                last_error = f"{model_name} asyncio_wait_for>{post_timeout}s"
+                logger.warning(
+                    "ai_complete asyncio_timeout",
+                    cid=cid,
+                    model=model_name,
+                    idx=idx,
+                    post_timeout_s=post_timeout,
+                    elapsed_ms=int((time.monotonic() - t0) * 1000),
+                )
+                continue
+            except httpx.TimeoutException as e:
+                last_error = f"{model_name} httpx_timeout: {e}"
+                logger.warning(
+                    "ai_complete per_model_timeout",
+                    cid=cid,
+                    model=model_name,
+                    idx=idx,
+                    elapsed_ms=int((time.monotonic() - t0) * 1000),
+                    err=str(e),
+                )
+                continue
 
             if resp.status_code in (429, 503):
                 last_error = f"{model_name} rate-limited ({resp.status_code})"
