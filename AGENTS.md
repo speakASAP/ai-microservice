@@ -5,9 +5,9 @@ Infrastructure service — provides LLM inference to other agents, does not self
 ## Model Tier → Model Mapping
 
 ```yaml
-free:    ollama/gemma2:2b                              # local, zero cost, always available
-cheap:   openrouter/meta-llama/llama-3.1-8b-instruct:free  # free tier; falls back to Ollama via LiteLLM
-smart:   google/gemini-flash-1.5                       # free quota; falls back to Ollama via LiteLLM
+free:    ollama/qwen2.5-coder:0.5b                     # local via LiteLLM (pull on host if missing)
+cheap:   openrouter/google/gemma-3-27b-it:free         # OpenRouter free; falls back to Ollama via LiteLLM
+smart:   gemini/gemini-2.0-flash                       # Google AI Studio; falls back to Ollama via LiteLLM
 premium: anthropic/claude-sonnet-4-6                   # BLOCKED — human approval required per call
 ```
 

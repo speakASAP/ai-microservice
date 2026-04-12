@@ -4,7 +4,7 @@
 
 FastAPI (Python). Modules: Orchestrator, NLP, ASR, Document AI, Prototype Generator, Free AI, Gemini, Data Viz.
 
-- Tier routing: free (Ollama) → cheap (OpenRouter via LiteLLM when enabled) → smart (Gemini Flash via LiteLLM when enabled) → premium (Claude, human approval)
+- Tier routing: free (Ollama) → cheap (OpenRouter via LiteLLM when enabled) → smart (Gemini 2.0 Flash via LiteLLM when enabled) → premium (Claude, human approval)
 - LiteLLM handles automatic failover when `LITELLM_BASE_URL` is set (e.g. OpenRouter rate limits → Ollama on host)
 - Endpoint: `POST /ai/complete` — body: `{ model_tier, system_prompt, user_prompt, output_schema?, max_tokens?, correlation_id? }` (see `docs/model-tier-endpoints.md`)
 
@@ -14,7 +14,7 @@ FastAPI (Python). Modules: Orchestrator, NLP, ASR, Document AI, Prototype Genera
 |-----------|-----|
 | database-server | db-server-postgres:5432 + Redis |
 | logging-microservice | logging-microservice:3367 |
-| Ollama | localhost:11434 (local models) |
+| Ollama | localhost:11434 (local models). LiteLLM in Docker needs Ollama on `0.0.0.0:11434` (`OLLAMA_HOST=0.0.0.0`) or use `OLLAMA_API_BASE` to a reachable URL. |
 | LiteLLM proxy | ai-microservice-litellm:4000 (optional fallback gateway — Ollama → OpenRouter → Gemini; internal Docker only) |
 
 ## Current State
