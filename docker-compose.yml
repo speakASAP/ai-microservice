@@ -20,7 +20,7 @@ services:
       - NOTIFICATION_SERVICE_URL=${NOTIFICATION_SERVICE_URL:-https://notifications.statex.cz}
       - LOGGING_SERVICE_URL=${LOGGING_SERVICE_URL:-https://logging.statex.cz}
       - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
-      - LITELLM_BASE_URL=${LITELLM_BASE_URL:-}
+      - LITELLM_BASE_URL=${LITELLM_BASE_URL:-http://ai-microservice-litellm:4000}
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-}
     restart: unless-stopped
     networks:

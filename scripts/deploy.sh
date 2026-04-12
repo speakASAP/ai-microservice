@@ -241,6 +241,23 @@ if [ "${DEPLOY_EXIT_CODE}" -eq 0 ]; then
         echo -e "${YELLOW}  Skip: ai-microservice orchestrator container not found.${NC}"
     fi
 
+    echo -e "${BLUE}Verifying LiteLLM reachable from ai-orchestrator (LITELLM_BASE_URL)...${NC}"
+    if [ -n "${ORCHESTRATOR_CONTAINER:-}" ]; then
+        LM_BASE=$(docker exec "$ORCHESTRATOR_CONTAINER" printenv LITELLM_BASE_URL 2>/dev/null || true)
+        if [ -z "$LM_BASE" ]; then
+            echo -e "${YELLOW}  Warning: LITELLM_BASE_URL not set in $ORCHESTRATOR_CONTAINER (LiteLLM path disabled).${NC}"
+        else
+            LM_CODE=$(docker exec "$ORCHESTRATOR_CONTAINER" sh -c 'curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 --max-time 12 -H "Authorization: Bearer $(printenv LITELLM_MASTER_KEY)" "${LITELLM_BASE_URL%/}/health"' 2>/dev/null || echo "000")
+            if [ "$LM_CODE" = "200" ]; then
+                echo -e "${GREEN}✓ Verified: $ORCHESTRATOR_CONTAINER can reach LiteLLM (HTTP 200 /health with master key) at $LM_BASE${NC}"
+            else
+                echo -e "${YELLOW}  Warning: LiteLLM /health from $ORCHESTRATOR_CONTAINER returned HTTP ${LM_CODE} (expect 200; check litellm container and LITELLM_MASTER_KEY).${NC}"
+            fi
+        fi
+    else
+        echo -e "${YELLOW}  Skip: LiteLLM check (orchestrator container not found).${NC}"
+    fi
+
     # Verify same-server consumers (e.g. aeps.alfares.cz) can reach AI: internal URL used by agentic-email
     echo -e "${BLUE}Verifying AI reachable from same-server services (e.g. aeps.alfares.cz uses http://ai-microservice:3380)...${NC}"
     AEPS_CONTAINER=""
