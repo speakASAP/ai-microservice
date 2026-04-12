@@ -46,6 +46,12 @@ Centralized AI processing service for the Statex microservices ecosystem. Provid
 
 **Note**: All ports are configured in `ai-microservice/.env`. The values shown are defaults.
 
+### LLM gateway (LiteLLM + Docker Ollama)
+
+- **LiteLLM** listens on **port 4000 inside the Docker network** (not in the 338x table). Orchestrator uses `LITELLM_BASE_URL` + `LITELLM_MASTER_KEY`; **free-ai-service** uses the same vars when set and routes `/analyze` through LiteLLM only (tiers `free` / `cheap` / `smart` from `litellm_config.yaml`).
+- **Ollama** is a compose service built from `services/ollama/Dockerfile` (image `ai-microservice-ollama:${OLLAMA_IMAGE_TAG:-local}`) with a named volume; LiteLLM reaches it via `OLLAMA_API_BASE`. `scripts/deploy.sh` uses nginx-microservice `prepare-green-smart.sh`, which **sequentially** builds all compose services including `ollama`. After first deploy, pull models the config references, e.g. `docker exec -it ai-microservice-ollama-green ollama pull qwen2.5-coder:0.5b` (adjust container name to your active color).
+- **Cold start / debugging** (see `docs/superpowers/plans/2026-04-12-unified-llm-gateway-stages.md`): start or recreate **`ollama` → `litellm` → `free-ai-service` → `backend`** so DNS and env stay consistent.
+
 ## Access Methods
 
 ### Production Access (HTTPS)

@@ -1,6 +1,6 @@
 # Business: ai-microservice
->
-> ⚠️ IMMUTABLE BY AI.
+
+> ⚠️ **IMMUTABLE BY AI** — do not change Goal, Consumers, or SLA without product-owner approval. Factual **routing/stack** lines may be updated to match production (same spirit as `AGENTS.md` / `SYSTEM.md`).
 
 ## Goal
 
@@ -8,10 +8,10 @@ Centralized AI inference gateway for all Statex services. Routes LLM calls by mo
 
 ## Constraints
 
-- AI agents must never call external LLM APIs directly — route through this service
-- Model selection by tier: free (Ollama) → cheap (OpenRouter) → smart (Gemini/Claude)
-- Premium tier requires explicit human approval per invocation
-- API costs tracked per service/business_id
+- Other Statex services must **not** call external LLM providers directly — they call **this service** (orchestrator, free-ai, or other published agents on `nginx-network`).
+- **Tier routing** is implemented via the **LiteLLM** sidecar when enabled: route names `free`, `cheap`, `smart` map to upstreams in `litellm_config.yaml` (Docker **Ollama**, OpenRouter, Gemini). See **`AGENTS.md`** for the current model list; secrets only in **`.env`** / compose.
+- **Premium** tier still requires explicit **human approval** per invocation (not exposed as an unattended LiteLLM route).
+- **API costs** remain a product requirement: track per service / **business_id** in inference logs (see `TASKS.md` backlog).
 
 ## Consumers
 

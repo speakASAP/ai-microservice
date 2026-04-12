@@ -2,17 +2,26 @@
 
 Central reference for callers that pass **`model_tier`** (`free` \| `cheap` \| `smart`; ecosystem also defines `premium` for policy, not for blind LLM calls).
 
+## Two modes
+
+| Mode | How it is selected | `/ai/complete` behavior | free-ai `/analyze` behavior |
+| ---- | -------------------- | ------------------------ | ---------------------------- |
+| **LiteLLM (preferred)** | `LITELLM_BASE_URL` and `LITELLM_MASTER_KEY` set on the **orchestrator** and matching proxy reachable | `POST {LITELLM_BASE_URL}/v1/chat/completions` with `model` = tier name (`free`, `cheap`, `smart`). Routing and fallbacks are defined in `litellm_config.yaml` (Ollama + OpenRouter + Gemini). | **Only** LiteLLM: `POST {LITELLM_BASE_URL}/v1/chat/completions`. Tier from `analysis_type` (`email_*` → `cheap`, else `free`); optional request `model` overrides if it is a valid tier name. |
+| **Legacy** | `LITELLM_BASE_URL` empty or master key missing (orchestrator); **free-ai** without both LiteLLM env vars | OpenRouter free-model fallback chain in `services/ai-orchestrator/app/main.py` (`FREE_MODEL_FALLBACKS` / `OPENROUTER_MODEL`). | Direct OpenRouter and optional Ollama/Hugging Face paths in `services/free-ai-service/app/main.py`. |
+
+Ports: orchestrator and sibling services use **338x** on the host; LiteLLM is **4000 inside the stack** (compose service `litellm`, not published by default).
+
 ## Where `model_tier` is accepted
 
 | Service | Path | Notes |
 |---------|------|-------|
-| **AI Orchestrator** | `POST /ai/complete` | Only HTTP route in this repo whose JSON body includes `model_tier`. |
+| **AI Orchestrator** | `POST /ai/complete` | JSON body includes `model_tier`; used when LiteLLM mode is active (see table above). |
 
 Other in-repo agents (free-ai-service `/analyze`, email-triage, shop-assistant, translation, and so on) **do not** take `model_tier`; they use their own fields (`analysis_type`, optional `model`, and so on).
 
 ## Intended tier → capability (ecosystem)
 
-See `AGENTS.md` in this repo for the **target** mapping used across Statex services. The orchestrator’s `/ai/complete` handler today routes all successful calls through **OpenRouter** using the shared free-model fallback chain (`OPENROUTER_MODEL` plus `FREE_MODEL_FALLBACKS` in `services/ai-orchestrator/app/main.py`). The **`model_tier` field is accepted on the wire** (for example `business-orchestrator` includes it in the body and in Redis cache keys) but **does not yet change** which provider or model list is used.
+See `AGENTS.md` in this repo for the **target** mapping used across Statex services.
 
 ## `POST /ai/complete` (AI Orchestrator)
 
@@ -34,12 +43,12 @@ Paths not listed as public in `shared/auth.py` require this header; `/ai/complet
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `model_tier` | string | no | `free` | Callers use `free`, `cheap`, or `smart` (retry escalation in business-orchestrator). Accepted for compatibility; selection logic is unchanged today. |
+| `model_tier` | string | no | `free` | `free`, `cheap`, or `smart`. In **LiteLLM mode**, selects the proxy model name. In **legacy mode**, accepted for compatibility but OpenRouter fallback chain does not map tiers to different providers. |
 | `system_prompt` | string | yes | — | Sent as a `system` message when non-empty. |
 | `user_prompt` | string | yes | — | Sent as the `user` message. |
-| `output_schema` | object | no | `null` | Carried for callers/cache keys; **not** sent to OpenRouter as `response_format`. Enforce JSON in prompts. |
-| `max_tokens` | integer | no | `1000` | Passed to OpenRouter. |
-| `correlation_id` | string | no | `null` | Optional tracing id (ignored by OpenRouter path). |
+| `output_schema` | object | no | `null` | Caller metadata / cache keys; **not** sent as `response_format`. Enforce JSON in prompts. |
+| `max_tokens` | integer | no | `1000` | Passed to LiteLLM or OpenRouter. |
+| `correlation_id` | string | no | `null` | Tracing id; logged on orchestrator. |
 
 ### Success responses
 
@@ -51,8 +60,8 @@ Paths not listed as public in `shared/auth.py` require this header; `/ai/complet
 | HTTP | Meaning |
 |------|---------|
 | `401` | Missing/invalid JWT or insufficient roles. |
-| `502` | OpenRouter returned an error status that was not handled by model fallback. |
-| `503` | `OPENROUTER_API_KEY` unset, or all candidate models failed (rate limit, empty content, and so on). |
+| `502` | LiteLLM or OpenRouter returned an error status not handled by fallback. |
+| `503` | Missing API keys / master key, empty model output, timeouts, or all legacy models failed. |
 
 ### Example: minimal JSON-oriented call (`model_tier: free`)
 
@@ -71,7 +80,7 @@ curl -sS -X POST "${BASE}/ai/complete" \
   }'
 ```
 
-### Example: `cheap` tier (same contract; tier for client policy / future routing)
+### Example: `cheap` tier (same contract; tier selects LiteLLM route when configured)
 
 ```bash
 curl -sS -X POST "${BASE}/ai/complete" \
@@ -113,5 +122,6 @@ curl -sS -o /dev/stderr -w "%{http_code}" -X POST "${BASE}/ai/complete" \
 ## Related reading
 
 - `AGENTS.md` — tier → model names (ecosystem contract).
-- `docs/superpowers/cursor-tasks/task-bo-01-ai-complete-endpoint.md` — history of `/ai/complete`.
+- `docs/superpowers/plans/2026-04-12-unified-llm-gateway-stages.md` — staged rollout and smoke order.
+- `litellm_config.yaml` — proxy routes and fallbacks.
 - `business-orchestrator/src/worker/ai-http.client.ts` — production client: `POST .../ai/complete` with `model_tier` in body and cache key.

@@ -1,8 +1,9 @@
 # LiteLLM proxy — routed model names: free, cheap, smart (see AGENTS.md).
 # Secrets: use os.environ/VAR only (never commit keys).
 #
-# Host Ollama: must listen on 0.0.0.0:11434 (e.g. OLLAMA_HOST=0.0.0.0) so containers can reach it via
-# OLLAMA_API_BASE (default http://host.docker.internal:11434). 127.0.0.1-only binds break /health from Docker.
+# Ollama: compose provides service `ollama` on nginx-network; OLLAMA_API_BASE defaults to
+# http://ai-microservice-ollama:11434 (non-BG) or *-blue / *-green per color file. Override in .env if needed.
+# Pull models into the volume, e.g.: docker exec -it ai-microservice-ollama ollama pull qwen2.5-coder:0.5b
 
 model_list:
   - model_name: free
@@ -38,6 +39,7 @@ model_list:
 router_settings:
   routing_strategy: least-busy
   fallbacks:
+    - {"free": ["cheap"]}
     - {"cheap": ["cheap-fallback"]}
     - {"smart": ["smart-fallback"]}
   num_retries: 3

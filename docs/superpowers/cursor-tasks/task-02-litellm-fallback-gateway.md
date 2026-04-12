@@ -1,181 +1,69 @@
 # Task 02 — LiteLLM fallback gateway for ai-microservice
 
-## Goal
+## Status (implemented)
 
-Add **LiteLLM** as a self-hosted fallback/load-balancing proxy between `ai-microservice` and LLM providers. When OpenRouter hits rate limits or is unavailable, the service must transparently fall back to Ollama (local) or other configured free providers without any code change in callers.
+Delivered as the **unified LLM gateway**: LiteLLM sidecar + **compose `ollama`** (image `services/ollama/Dockerfile`) + orchestrator **`/ai/complete`** + **free-ai `/analyze`** when `LITELLM_*` is set. Staged plan: [`../plans/2026-04-12-unified-llm-gateway-stages.md`](../plans/2026-04-12-unified-llm-gateway-stages.md). Task index: [`../LLM_UNIFIED_GATEWAY_TASK_INDEX.md`](../LLM_UNIFIED_GATEWAY_TASK_INDEX.md).
 
-LiteLLM is chosen because it is:
+**Do not duplicate YAML here** — the source of truth is repo-root **`litellm_config.yaml`**. **`AGENTS.md`** summarizes tier → model and fallback intent.
 
-- 100 % open-source (MIT), self-hosted, zero recurring cost
-- OpenAI-compatible API — drop-in replacement for the current OpenRouter calls
-- Supports Ollama, OpenRouter, Groq, Together.ai, Mistral, Vercel AI Gateway, Eden AI, and 100+ others
-- Has built-in automatic fallbacks, retries, and load balancing per route
-- Can be deployed as a Docker sidecar alongside ai-microservice
+---
+
+## Goal (original)
+
+Self-hosted **LiteLLM** proxy between ai-microservice and providers, with automatic fallbacks (Ollama, OpenRouter, Gemini) and no caller code changes for tiers `free` \| `cheap` \| `smart`.
 
 ---
 
 ## Inputs (read before coding)
 
-- `ai-microservice/SYSTEM.md` — current tier routing (`free → cheap → smart`)
-- `ai-microservice/BUSINESS.md` — constraints (no direct external LLM calls, tier routing)
-- `ai-microservice/AGENTS.md` — current model tier → model mapping
-- `ai-microservice/services/ai-orchestrator/app/main.py` — current OpenRouter call logic and `FREE_MODEL_FALLBACKS`
-- `ai-microservice/.env.example` — existing env var patterns
+- [`SYSTEM.md`](../../../SYSTEM.md) — integrations, Ollama/LiteLLM compose
+- [`BUSINESS.md`](../../../BUSINESS.md) — constraints (LiteLLM tier routing, no direct upstream calls from other services)
+- [`AGENTS.md`](../../../AGENTS.md) — tier → model (sync with `litellm_config.yaml`)
+- [`services/ai-orchestrator/app/main.py`](../../../services/ai-orchestrator/app/main.py) — `LITELLM_BASE_URL` + legacy OpenRouter
+- [`services/free-ai-service/app/main.py`](../../../services/free-ai-service/app/main.py) — LiteLLM path when `LITELLM_*` set
+- [`.env.example`](../../../.env.example)
 
 ---
 
-## Scope
+## Scope (where it lives)
 
-### 1. LiteLLM Docker sidecar
-
-Add a `litellm` service to `ai-microservice/docker-compose.yml` (and `docker-compose.prod.yml` if present):
-
-```yaml
-litellm:
-  image: ghcr.io/berriai/litellm:main-latest
-  ports:
-    - "4000:4000"
-  volumes:
-    - ./litellm_config.yaml:/app/config.yaml
-  environment:
-    - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-    - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-  command: ["--config", "/app/config.yaml", "--port", "4000"]
-  restart: unless-stopped
-```
-
-### 2. LiteLLM config file
-
-Create `ai-microservice/litellm_config.yaml`:
-
-```yaml
-model_list:
-  # free tier — Ollama local (zero cost, always available)
-  - model_name: free
-    litellm_params:
-      model: ollama/gemma2:2b
-      api_base: http://host.docker.internal:11434
-
-  # cheap tier — OpenRouter free models with Ollama fallback
-  - model_name: cheap
-    litellm_params:
-      model: openrouter/meta-llama/llama-3.1-8b-instruct:free
-      api_key: os.environ/OPENROUTER_API_KEY
-      api_base: https://openrouter.ai/api/v1
-
-  - model_name: cheap-fallback
-    litellm_params:
-      model: ollama/gemma2:2b
-      api_base: http://host.docker.internal:11434
-
-  # smart tier — Gemini Flash (free quota) with Ollama fallback
-  - model_name: smart
-    litellm_params:
-      model: gemini/gemini-1.5-flash
-      api_key: os.environ/GEMINI_API_KEY
-
-  - model_name: smart-fallback
-    litellm_params:
-      model: ollama/llama3.2:3b
-      api_base: http://host.docker.internal:11434
-
-router_settings:
-  routing_strategy: least-busy
-  fallbacks:
-    - {"cheap": ["cheap-fallback"]}
-    - {"smart": ["smart-fallback"]}
-  num_retries: 3
-  retry_after: 5
-
-litellm_settings:
-  drop_params: true
-  success_callback: []
-  failure_callback: []
-```
-
-### 3. Update ai-orchestrator to use LiteLLM proxy
-
-In `services/ai-orchestrator/app/main.py`, add an env var `LITELLM_BASE_URL` (default `http://litellm:4000`). When set, use it as the `api_base` for the OpenAI client instead of `https://openrouter.ai/api/v1`. The model name becomes the LiteLLM route name (`free`, `cheap`, `smart`).
-
-```python
-LITELLM_BASE_URL = os.getenv("LITELLM_BASE_URL", "")  # empty = use OpenRouter directly (backward compat)
-
-if LITELLM_BASE_URL:
-    client = openai.OpenAI(
-        api_key=os.getenv("LITELLM_MASTER_KEY", "sk-1234"),
-        base_url=LITELLM_BASE_URL,
-    )
-    # model name = tier name: "free", "cheap", "smart"
-    model_name = model_tier  # pass tier directly as model
-else:
-    # existing OpenRouter path unchanged
-    ...
-```
-
-### 4. Add env vars to `.env.example`
-
-```text
-# LiteLLM fallback gateway
-LITELLM_BASE_URL=http://litellm:4000
-LITELLM_MASTER_KEY=sk-local-dev-key
-```
-
-### 5. Update SYSTEM.md
-
-Update the `Integrations` table to include:
-
-```text
-| LiteLLM proxy | litellm:4000 (fallback gateway — Ollama → OpenRouter → Gemini) |
-```
-
-Update the tier routing line to:
-
-```text
-- Tier routing: free (Ollama) → cheap (OpenRouter via LiteLLM) → smart (Gemini Flash via LiteLLM) → premium (Claude, human approval)
-- LiteLLM handles automatic failover: if OpenRouter hits rate limits, falls back to Ollama locally
-```
+| Item | Location |
+|------|-----------|
+| LiteLLM + Ollama services | `docker-compose.yml`, `docker-compose.blue.yml`, `docker-compose.green.yml` — **no** published `4000` on prod (internal only); `litellm` `depends_on` `ollama` |
+| Router models + fallbacks | `litellm_config.yaml` — `os.environ/OLLAMA_API_BASE`, keys via env |
+| Ollama image | `services/ollama/Dockerfile` — `OLLAMA_HOST=0.0.0.0:11434` |
+| Orchestrator LLM | `services/ai-orchestrator/app/main.py` — `_litellm_chat_completions_url()`, bearer `LITELLM_MASTER_KEY` |
+| Free AI LLM | `services/free-ai-service/app/main.py` — `_litellm_configured()`, `analyze_with_litellm` |
+| Smoke / validate | `scripts/smoke-unified-llm.sh`, `scripts/validate-llm-gateway-tasks.sh`, [`../LLM_GATEWAY_SETUP.md`](../LLM_GATEWAY_SETUP.md) |
+| HTTP contract | [`../../model-tier-endpoints.md`](../../model-tier-endpoints.md) |
 
 ---
 
-## Do
+## Do (policy)
 
-- Use LiteLLM as an optional sidecar — if `LITELLM_BASE_URL` is unset, existing OpenRouter path still works
-- Keep Ollama as the ultimate local fallback (zero cost, always available when installed)
-- Keep all env var secrets out of `litellm_config.yaml` — use `os.environ/VAR_NAME` syntax
-- Add `LITELLM_MASTER_KEY` as the auth key for LiteLLM proxy (any string, internal only)
-- Test: with `LITELLM_BASE_URL` set, a `POST /ai/complete` with `model_tier: free` should resolve to Ollama
+- LiteLLM is **additive** on the orchestrator: unset `LITELLM_BASE_URL` → legacy OpenRouter chain remains.
+- Secrets only via **env** in `litellm_config.yaml` (`os.environ/VAR`); never commit keys.
+- **`LITELLM_MASTER_KEY`**: shared secret for proxy + callers (orchestrator, free-ai).
+- **Premium** stays out of LiteLLM config — human approval per ecosystem rules.
 
 ## Do Not
 
-- Do not remove the existing OpenRouter fallback path — LiteLLM is additive, not a replacement
-- Do not add premium tier to LiteLLM config — premium stays manually approved
-- Do not expose LiteLLM port publicly — keep it internal Docker network only
-- Do not add paid providers (Anthropic, OpenAI paid) to the fallback chain without human approval
+- Do not expose LiteLLM **:4000** on the public internet without a deliberate decision.
+- Do not add paid providers to the fallback chain without approval.
 
 ---
 
-## Outputs
-
-- `ai-microservice/litellm_config.yaml` — LiteLLM router config
-- `ai-microservice/docker-compose.yml` — `litellm` service added
-- `ai-microservice/services/ai-orchestrator/app/main.py` — LiteLLM branch added
-- `ai-microservice/.env.example` — `LITELLM_BASE_URL`, `LITELLM_MASTER_KEY` added
-- `ai-microservice/SYSTEM.md` — integrations table updated
-
----
-
-## Verify
+## Verify (from `ai-microservice/` repo root)
 
 ```bash
-# Check config file exists
-ls ai-microservice/litellm_config.yaml
-
-# Check docker-compose has litellm service
-grep -A 5 "litellm:" ai-microservice/docker-compose.yml
-
-# Check .env.example has new vars
-grep "LITELLM" ai-microservice/.env.example
-
-# Check main.py has LITELLM_BASE_URL branch
-grep "LITELLM_BASE_URL" ai-microservice/services/ai-orchestrator/app/main.py
+test -f litellm_config.yaml
+grep -q "litellm:" docker-compose.yml
+grep -q "LITELLM" .env.example
+grep -q "LITELLM_BASE_URL" services/ai-orchestrator/app/main.py
+grep -q "_litellm_configured" services/free-ai-service/app/main.py
+./scripts/validate-llm-gateway-tasks.sh
+./scripts/smoke-unified-llm.sh
+python3 scripts/test-ai-services.py
 ```
+
+After deploy, pull Ollama weights referenced in `litellm_config.yaml` into the **named volume** (see comments in that file).

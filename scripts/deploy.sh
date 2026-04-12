@@ -106,6 +106,7 @@ fi
 
 echo -e "${GREEN}✅ Found nginx-microservice at: $NGINX_MICROSERVICE_PATH${NC}"
 echo -e "${GREEN}✅ Deploying service: $SERVICE_NAME${NC}"
+echo -e "${YELLOW}LLM stack hint: if LiteLLM/Ollama misbehave after deploy, recreate order is ollama → litellm → free-ai-service → backend.${NC}"
 echo ""
 
 # Timing and phase summary

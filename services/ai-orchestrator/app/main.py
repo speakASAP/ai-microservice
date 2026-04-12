@@ -1193,6 +1193,7 @@ async def ai_complete(request: AiCompleteRequest, req: Request):
     """
     messages = [{"role": "system", "content": request.system_prompt}] if request.system_prompt else []
     messages.append({"role": "user", "content": request.user_prompt})
+    t0_mono = time.monotonic()
 
     litellm_url = _litellm_chat_completions_url()
     if litellm_url:
@@ -1259,6 +1260,15 @@ async def ai_complete(request: AiCompleteRequest, req: Request):
             if stripped.endswith("```"):
                 stripped = stripped[:-3].strip()
 
+        duration_ms = round((time.monotonic() - t0_mono) * 1000)
+        logger.info(
+            "ai_complete litellm success",
+            cid=cid,
+            transport="litellm",
+            model_tier=tier_model,
+            model_used=used_model,
+            duration_ms=duration_ms,
+        )
         try:
             return json.loads(stripped)
         except (json.JSONDecodeError, ValueError):

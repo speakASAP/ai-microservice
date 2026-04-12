@@ -108,6 +108,13 @@ HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY", "")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_API_BASE = os.getenv("OPENROUTER_API_BASE", "https://openrouter.ai/api/v1")
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "anthropic/claude-3.5-sonnet")
+LITELLM_BASE_URL = (os.getenv("LITELLM_BASE_URL") or "").strip().rstrip("/")
+LITELLM_MASTER_KEY = (os.getenv("LITELLM_MASTER_KEY") or "").strip()
+
+
+def _litellm_configured() -> bool:
+    return bool(LITELLM_BASE_URL and LITELLM_MASTER_KEY)
+
 
 # Debug: Print loaded values
 logger.debug(r"Loaded values:")
@@ -194,7 +201,29 @@ class FreeAIService:
     async def check_providers(self):
         """Check which AI providers are available"""
         logger.info("🔍 Checking AI providers availability...")
-        
+        if _litellm_configured():
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        f"{LITELLM_BASE_URL}/health/liveliness",
+                        headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
+                        timeout=aiohttp.ClientTimeout(total=8),
+                    ) as response:
+                        if response.status == 200:
+                            self.provider_status["litellm"] = "available"
+                            logger.info("✅ LiteLLM liveliness OK (free-ai uses this path exclusively when configured)")
+                        else:
+                            self.provider_status["litellm"] = "unavailable"
+                            logger.warning("LiteLLM liveliness returned %s", response.status)
+            except Exception as e:
+                self.provider_status["litellm"] = "unavailable"
+                logger.warning("LiteLLM check failed: %s", e)
+            self.provider_status["openrouter"] = "delegated"
+            self.provider_status["ollama"] = "delegated"
+            self.provider_status["huggingface"] = "disabled"
+            logger.info("⏭️ Skipping direct OpenRouter/Ollama checks (LiteLLM gateway mode)")
+            return
+
         # Ollama: check if OLLAMA_URL is set and reachable (fallback when OpenRouter fails)
         ollama_url = (os.getenv("OLLAMA_URL") or "").strip()
         if ollama_url and ollama_url.lower() != "disabled":
@@ -325,7 +354,9 @@ class FreeAIService:
 
     async def analyze_with_fallback(self, request: AIAnalysisRequest) -> Dict[str, Any]:
         """Analyze with automatic fallback between providers"""
-        
+        if _litellm_configured():
+            return await self.analyze_with_litellm(request)
+
         # Determine provider and model
         provider, model = self.get_best_model(request.analysis_type, request.provider)
         
@@ -405,7 +436,191 @@ class FreeAIService:
                 status_code=503, 
                 detail="All AI providers are currently unavailable. Please check service status and try again later."
             )
-    
+
+    def _litellm_tier_for_analysis(self, analysis_type: AnalysisType) -> str:
+        if analysis_type in (AnalysisType.EMAIL_CLASSIFY, AnalysisType.EMAIL_DECIDE):
+            return "cheap"
+        return "free"
+
+    def _analysis_prompt_and_max_tokens(self, request: AIAnalysisRequest) -> tuple[str, int]:
+        if request.analysis_type == AnalysisType.BUSINESS_ANALYSIS:
+            prompt = f"""Analyze this business request and provide a comprehensive business analysis:
+
+User: {request.user_name}
+Request: {request.text_content}
+
+Please provide a JSON response with these fields:
+- business_type: The type of business
+- pain_points: Array of current pain points
+- opportunities: Array of business opportunities with name, description, potential, timeline
+- technical_recommendations: Object with frontend, backend, integrations arrays
+- next_steps: Array of action items with action, priority, timeline
+- budget_estimate: Object with development, infrastructure, maintenance costs
+- confidence: Float between 0 and 1
+- summary: String summary of the analysis
+"""
+        elif request.analysis_type == AnalysisType.TECHNICAL_ANALYSIS:
+            prompt = f"""Provide a technical analysis for this request:
+
+User: {request.user_name}
+Request: {request.text_content}
+
+Please provide a JSON response with:
+- technical_requirements: Object with frontend, backend, database, infrastructure
+- architecture_recommendations: Object with patterns, technologies, scalability
+- implementation_phases: Array of phases with name, description, timeline
+- technology_stack: Object with recommended technologies
+- confidence: Float between 0 and 1
+- summary: String summary
+"""
+        elif request.analysis_type == AnalysisType.EMAIL_CLASSIFY:
+            prompt = f"""Classify this business email into exactly one intent. Return only valid JSON, no other text.
+
+Email content:
+{request.text_content}
+
+Intent must be one of: support, sales, contract, technical, billing, spam, unknown, multi_intent.
+- support: general customer support
+- sales: product/offer/pricing inquiry
+- contract: contract question or change
+- technical: technical problem or question
+- billing: billing or payment issue
+- spam: spam or irrelevant
+- unknown: cannot determine
+- multi_intent: clearly multiple intents
+
+Return JSON with these keys only:
+- "intent": one of the values above
+- "confidence": number between 0 and 1
+- "raw_scores": object with keys support, sales, contract, technical, billing, spam and number values 0-1 for each (optional; if missing we use intent and confidence only)
+
+Example: {{"intent": "support", "confidence": 0.92, "raw_scores": {{"support": 0.92, "sales": 0.1, "contract": 0.05, "technical": 0.2, "billing": 0.15, "spam": 0.02}}}}
+"""
+        elif request.analysis_type == AnalysisType.EMAIL_DECIDE:
+            prompt = f"""Given triage inputs, decide the action. Return only valid JSON, no other text.
+
+Input (JSON):
+{request.text_content}
+
+Actions: auto_respond (only for high-confidence support when safe), route_to_queue (assign to a queue), escalate (human review).
+Queues: support, sales, technical, billing, spam_review. Always escalate for intent unknown, multi_intent, or contract.
+
+Return JSON with:
+- "action": one of auto_respond, route_to_queue, escalate
+- "escalation_reason": null or string (e.g. ambiguous_intent, low_confidence, contract_change) only when action is escalate
+- "queue": null or one of support, sales, technical, billing, spam_review (when action is route_to_queue)
+
+Example: {{"action": "route_to_queue", "escalation_reason": null, "queue": "support"}}
+"""
+        else:
+            prompt = f"""Analyze this request and provide insights:
+
+User: {request.user_name}
+Request: {request.text_content}
+
+Please provide a JSON response with:
+- key_insights: Array of insights
+- recommendations: Array of recommendations
+- next_steps: Array of next steps
+- confidence: Float between 0 and 1
+- summary: String summary
+"""
+        max_tokens = 512 if request.analysis_type in (AnalysisType.EMAIL_CLASSIFY, AnalysisType.EMAIL_DECIDE) else 2000
+        return prompt, max_tokens
+
+    async def analyze_with_litellm(self, request: AIAnalysisRequest) -> Dict[str, Any]:
+        """Single LLM path via LiteLLM proxy (OpenAI-compatible chat completions)."""
+        tier = request.model or self._litellm_tier_for_analysis(request.analysis_type)
+        if tier not in ("free", "cheap", "smart"):
+            tier = self._litellm_tier_for_analysis(request.analysis_type)
+        prompt, max_tokens = self._analysis_prompt_and_max_tokens(request)
+        url = f"{LITELLM_BASE_URL}/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {LITELLM_MASTER_KEY}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": tier,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.7,
+            "max_tokens": max_tokens,
+        }
+        t0 = time.perf_counter()
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=120),
+                ) as response:
+                    body_text = await response.text()
+                    if response.status != 200:
+                        logger.error(
+                            "free_ai litellm error",
+                            status=response.status,
+                            analysis_type=str(request.analysis_type),
+                            litellm_model=tier,
+                            duration_ms=round((time.perf_counter() - t0) * 1000),
+                            body_preview=body_text[:300],
+                        )
+                        raise HTTPException(
+                            status_code=502,
+                            detail=f"LiteLLM error {response.status}: {body_text[:500]}",
+                        )
+                    result = json.loads(body_text)
+        except HTTPException:
+            raise
+        except aiohttp.ClientError as e:
+            logger.error(
+                "free_ai litellm transport",
+                err=str(e),
+                analysis_type=str(request.analysis_type),
+                litellm_model=tier,
+                duration_ms=round((time.perf_counter() - t0) * 1000),
+            )
+            raise HTTPException(status_code=503, detail=f"LiteLLM unreachable: {e}") from e
+        except json.JSONDecodeError as e:
+            logger.error(
+                "free_ai litellm bad_json",
+                err=str(e),
+                duration_ms=round((time.perf_counter() - t0) * 1000),
+            )
+            raise HTTPException(status_code=502, detail="LiteLLM returned non-JSON body") from e
+
+        duration_ms = round((time.perf_counter() - t0) * 1000)
+        choices = result.get("choices") or []
+        first = choices[0] if choices else None
+        msg = (first.get("message") if isinstance(first, dict) else None) or {}
+        ai_response = (msg.get("content") if isinstance(msg, dict) else None) or ""
+        effective_model = result.get("model") or tier
+        logger.info(
+            "free_ai litellm success",
+            analysis_type=str(request.analysis_type),
+            litellm_model=tier,
+            model_used=str(effective_model),
+            duration_ms=duration_ms,
+        )
+        if not ai_response.strip():
+            raise HTTPException(status_code=503, detail="LiteLLM returned empty content")
+        try:
+            json_start = ai_response.find("{")
+            json_end = ai_response.rfind("}") + 1
+            if json_start != -1 and json_end != -1:
+                json_str = ai_response[json_start:json_end]
+                analysis = json.loads(json_str)
+            else:
+                analysis = self._parse_text_response(ai_response, request.user_name, request.analysis_type)
+        except Exception:
+            analysis = self._parse_text_response(ai_response, request.user_name, request.analysis_type)
+        if request.analysis_type == AnalysisType.EMAIL_CLASSIFY:
+            analysis = self._normalize_email_classify(analysis)
+        elif request.analysis_type == AnalysisType.EMAIL_DECIDE:
+            analysis = self._normalize_email_decide(analysis)
+        analysis["ai_service"] = "LiteLLM"
+        analysis["model_used"] = f"{tier} -> {effective_model}"
+        return analysis
+
     async def analyze_with_ollama(self, request: AIAnalysisRequest) -> Dict[str, Any]:
         """Analyze using Ollama (Local LLM)"""
         logger.info(f"🤖 Analyzing with Ollama: {request.model or 'llama2:7b'}")
@@ -603,90 +818,7 @@ Please provide a JSON response with:
         logger.info(f"🤖 Analyzing with OpenRouter: {request.model or OPENROUTER_MODEL}")
         
         model = request.model or OPENROUTER_MODEL
-        
-        # Create a comprehensive prompt based on analysis type
-        if request.analysis_type == AnalysisType.BUSINESS_ANALYSIS:
-            prompt = f"""Analyze this business request and provide a comprehensive business analysis:
-
-User: {request.user_name}
-Request: {request.text_content}
-
-Please provide a JSON response with these fields:
-- business_type: The type of business
-- pain_points: Array of current pain points
-- opportunities: Array of business opportunities with name, description, potential, timeline
-- technical_recommendations: Object with frontend, backend, integrations arrays
-- next_steps: Array of action items with action, priority, timeline
-- budget_estimate: Object with development, infrastructure, maintenance costs
-- confidence: Float between 0 and 1
-- summary: String summary of the analysis
-"""
-        elif request.analysis_type == AnalysisType.TECHNICAL_ANALYSIS:
-            prompt = f"""Provide a technical analysis for this request:
-
-User: {request.user_name}
-Request: {request.text_content}
-
-Please provide a JSON response with:
-- technical_requirements: Object with frontend, backend, database, infrastructure
-- architecture_recommendations: Object with patterns, technologies, scalability
-- implementation_phases: Array of phases with name, description, timeline
-- technology_stack: Object with recommended technologies
-- confidence: Float between 0 and 1
-- summary: String summary
-"""
-        elif request.analysis_type == AnalysisType.EMAIL_CLASSIFY:
-            prompt = f"""Classify this business email into exactly one intent. Return only valid JSON, no other text.
-
-Email content:
-{request.text_content}
-
-Intent must be one of: support, sales, contract, technical, billing, spam, unknown, multi_intent.
-- support: general customer support
-- sales: product/offer/pricing inquiry
-- contract: contract question or change
-- technical: technical problem or question
-- billing: billing or payment issue
-- spam: spam or irrelevant
-- unknown: cannot determine
-- multi_intent: clearly multiple intents
-
-Return JSON with these keys only:
-- "intent": one of the values above
-- "confidence": number between 0 and 1
-- "raw_scores": object with keys support, sales, contract, technical, billing, spam and number values 0-1 for each (optional; if missing we use intent and confidence only)
-
-Example: {{"intent": "support", "confidence": 0.92, "raw_scores": {{"support": 0.92, "sales": 0.1, "contract": 0.05, "technical": 0.2, "billing": 0.15, "spam": 0.02}}}}
-"""
-        elif request.analysis_type == AnalysisType.EMAIL_DECIDE:
-            prompt = f"""Given triage inputs, decide the action. Return only valid JSON, no other text.
-
-Input (JSON):
-{request.text_content}
-
-Actions: auto_respond (only for high-confidence support when safe), route_to_queue (assign to a queue), escalate (human review).
-Queues: support, sales, technical, billing, spam_review. Always escalate for intent unknown, multi_intent, or contract.
-
-Return JSON with:
-- "action": one of auto_respond, route_to_queue, escalate
-- "escalation_reason": null or string (e.g. ambiguous_intent, low_confidence, contract_change) only when action is escalate
-- "queue": null or one of support, sales, technical, billing, spam_review (when action is route_to_queue)
-
-Example: {{"action": "route_to_queue", "escalation_reason": null, "queue": "support"}}
-"""
-        else:
-            prompt = f"""Analyze this request and provide insights:
-
-User: {request.user_name}
-Request: {request.text_content}
-
-Please provide a JSON response with:
-- key_insights: Array of insights
-- recommendations: Array of recommendations
-- next_steps: Array of next steps
-- confidence: Float between 0 and 1
-- summary: String summary
-"""
+        prompt, max_tokens = self._analysis_prompt_and_max_tokens(request)
         
         try:
             headers = {
@@ -702,8 +834,6 @@ Please provide a JSON response with:
             ssl_context.verify_mode = ssl.CERT_NONE
             
             connector = aiohttp.TCPConnector(ssl=ssl_context)
-            # Use lower max_tokens for email-triage so free/limited credits stay within quota (e.g. 402)
-            max_tokens = 512 if request.analysis_type in (AnalysisType.EMAIL_CLASSIFY, AnalysisType.EMAIL_DECIDE) else 2000
             async with aiohttp.ClientSession(connector=connector) as session:
                 payload = {
                     "model": model,
