@@ -289,6 +289,20 @@ def _free_model_list() -> list:
     rest = [m for m in FREE_MODEL_FALLBACKS if m != primary]
     return [primary] + rest
 
+
+def _normalize_litellm_tier(model_tier: str) -> str:
+    t = (model_tier or "free").strip().lower()
+    if t in ("free", "cheap", "smart"):
+        return t
+    return "free"
+
+
+def _litellm_chat_completions_url() -> str:
+    base = (os.getenv("LITELLM_BASE_URL") or "").strip().rstrip("/")
+    if not base:
+        return ""
+    return f"{base}/v1/chat/completions"
+
 # Shop-assistant agents: request/response models
 class ShopTranscribeRequest(BaseModel):
     voice_file_url: str
@@ -1169,20 +1183,91 @@ async def metrics():
 async def ai_complete(request: AiCompleteRequest, req: Request):
     """
     Generic LLM completion for business-orchestrator (JWT required).
-    Accepts model_tier (free|cheap|smart) for API compatibility; uses OpenRouter
-    free-model fallback chain regardless of tier until tier routing is implemented.
+    Accepts model_tier (free|cheap|smart). When LITELLM_BASE_URL is set, requests go to the
+    LiteLLM proxy with model = tier name (free|cheap|smart). Otherwise uses the OpenRouter
+    free-model fallback chain (legacy; tier ignored for model selection).
     Returns parsed JSON object, or {"text": "...", "model_used": "..."} if not JSON.
 
     Wall-clock budget stays **below** business-orchestrator axios timeout (120s): sequential
     OpenRouter tries must not sum to more than ~95s so the caller gets a JSON error, not a client timeout.
     """
+    messages = [{"role": "system", "content": request.system_prompt}] if request.system_prompt else []
+    messages.append({"role": "user", "content": request.user_prompt})
+
+    litellm_url = _litellm_chat_completions_url()
+    if litellm_url:
+        master = (os.getenv("LITELLM_MASTER_KEY") or "").strip()
+        if not master:
+            raise HTTPException(status_code=503, detail="LITELLM_MASTER_KEY not configured")
+        tier_model = _normalize_litellm_tier(request.model_tier)
+        cid = request.correlation_id or "none"
+        logger.info(
+            "ai_complete transport",
+            cid=cid,
+            transport="litellm",
+            litellm_base_preview=(os.getenv("LITELLM_BASE_URL") or "").strip()[:80],
+            model_tier=tier_model,
+        )
+        budget_sec = float(os.getenv("AI_COMPLETE_BUDGET_SEC", "95"))
+        connect_sec = float(os.getenv("AI_COMPLETE_CONNECT_SEC", "8"))
+        per_req = httpx.Timeout(budget_sec, connect=connect_sec)
+        payload: Dict[str, Any] = {
+            "model": tier_model,
+            "messages": messages,
+            "max_tokens": request.max_tokens or 1000,
+            "temperature": 0.2,
+        }
+        headers_lm = {
+            "Authorization": f"Bearer {master}",
+            "Content-Type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=per_req) as client:
+            try:
+                resp = await asyncio.wait_for(
+                    client.post(litellm_url, json=payload, headers=headers_lm),
+                    timeout=budget_sec + 5.0,
+                )
+            except asyncio.TimeoutError:
+                logger.error(
+                    "ai_complete litellm asyncio_timeout",
+                    cid=cid,
+                    model=tier_model,
+                    budget_sec=budget_sec,
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"litellm_timeout:{int(budget_sec)}s",
+                )
+            except httpx.TimeoutException as e:
+                logger.error("ai_complete litellm httpx_timeout", cid=cid, err=str(e))
+                raise HTTPException(status_code=503, detail=f"litellm_httpx_timeout:{e}")
+
+        if resp.status_code != 200:
+            raise HTTPException(
+                status_code=502,
+                detail=f"LiteLLM error {resp.status_code}: {resp.text[:300]}",
+            )
+        data = resp.json()
+        raw_text = (data.get("choices", [{}])[0].get("message", {}) or {}).get("content") or ""
+        used_model = data.get("model", tier_model)
+        if not raw_text:
+            raise HTTPException(status_code=503, detail="LiteLLM returned empty content")
+
+        stripped = raw_text.strip()
+        if stripped.startswith("```"):
+            stripped = "\n".join(stripped.split("\n")[1:])
+            if stripped.endswith("```"):
+                stripped = stripped[:-3].strip()
+
+        try:
+            return json.loads(stripped)
+        except (json.JSONDecodeError, ValueError):
+            return {"text": raw_text, "model_used": used_model}
+
     api_key = os.getenv("OPENROUTER_API_KEY", "")
     api_base = os.getenv("OPENROUTER_API_BASE", "https://openrouter.ai/api/v1")
     if not api_key:
         raise HTTPException(status_code=503, detail="OPENROUTER_API_KEY not configured")
-
-    messages = [{"role": "system", "content": request.system_prompt}] if request.system_prompt else []
-    messages.append({"role": "user", "content": request.user_prompt})
 
     headers = {
         "Authorization": f"Bearer {api_key}",

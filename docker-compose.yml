@@ -20,6 +20,8 @@ services:
       - NOTIFICATION_SERVICE_URL=${NOTIFICATION_SERVICE_URL:-https://notifications.statex.cz}
       - LOGGING_SERVICE_URL=${LOGGING_SERVICE_URL:-https://logging.statex.cz}
       - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
+      - LITELLM_BASE_URL=${LITELLM_BASE_URL:-}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-}
     restart: unless-stopped
     networks:
       nginx-network:
@@ -323,6 +325,22 @@ services:
       timeout: 10s
       retries: 2
       start_period: 30s
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: ai-microservice-litellm
+    volumes:
+      - ./litellm_config.yaml:/app/config.yaml:ro
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-local-dev-key}
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    networks:
+      - nginx-network
 
 volumes: {}
 
