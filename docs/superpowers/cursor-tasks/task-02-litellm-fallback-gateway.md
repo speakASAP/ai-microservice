@@ -5,6 +5,7 @@
 Add **LiteLLM** as a self-hosted fallback/load-balancing proxy between `ai-microservice` and LLM providers. When OpenRouter hits rate limits or is unavailable, the service must transparently fall back to Ollama (local) or other configured free providers without any code change in callers.
 
 LiteLLM is chosen because it is:
+
 - 100 % open-source (MIT), self-hosted, zero recurring cost
 - OpenAI-compatible API — drop-in replacement for the current OpenRouter calls
 - Supports Ollama, OpenRouter, Groq, Together.ai, Mistral, Vercel AI Gateway, Eden AI, and 100+ others
@@ -113,7 +114,7 @@ else:
 
 ### 4. Add env vars to `.env.example`
 
-```
+```text
 # LiteLLM fallback gateway
 LITELLM_BASE_URL=http://litellm:4000
 LITELLM_MASTER_KEY=sk-local-dev-key
@@ -123,13 +124,13 @@ LITELLM_MASTER_KEY=sk-local-dev-key
 
 Update the `Integrations` table to include:
 
-```
+```text
 | LiteLLM proxy | litellm:4000 (fallback gateway — Ollama → OpenRouter → Gemini) |
 ```
 
 Update the tier routing line to:
 
-```
+```text
 - Tier routing: free (Ollama) → cheap (OpenRouter via LiteLLM) → smart (Gemini Flash via LiteLLM) → premium (Claude, human approval)
 - LiteLLM handles automatic failover: if OpenRouter hits rate limits, falls back to Ollama locally
 ```
