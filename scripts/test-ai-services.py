@@ -19,7 +19,7 @@ Usage:
 Loads .env from ai-microservice project root for port and host overrides.
 
 For post-deploy (e.g. after deploy.sh): set AI_ORCHESTRATOR_BASE_URL to the deployed
-orchestrator URL (e.g. https://ai.statex.cz). Then only orchestrator and email-triage
+orchestrator URL (e.g. https://ai.alfares.cz). Then only orchestrator and email-triage
 pipeline tests run; per-service health and OpenRouter/analyze are skipped (internal).
 
 Note: The error "AI service unreachable (http://ai-microservice:3380/api/email-triage/ingest)"
@@ -77,7 +77,7 @@ def get_host() -> str:
 
 
 def get_orchestrator_base_url() -> Optional[str]:
-    """If set (e.g. https://ai.statex.cz), use for orchestrator and skip internal service checks."""
+    """If set (e.g. https://ai.alfares.cz), use for orchestrator and skip internal service checks."""
     return os.environ.get("AI_ORCHESTRATOR_BASE_URL") or None
 
 

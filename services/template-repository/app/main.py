@@ -154,7 +154,7 @@ async def find_matching_templates(
             "match_score": 0.92,
             "popularity": 0.85,
             "last_updated": "2024-01-15",
-            "preview_url": "https://templates.statex.cz/business-website-001",
+            "preview_url": "https://templates.alfares.cz/business-website-001",
             "repository_url": "https://github.com/statex/templates/business-website-001",
             "customization_level": "medium",
             "estimated_setup_time": "2-3 hours"
@@ -170,7 +170,7 @@ async def find_matching_templates(
             "match_score": 0.88,
             "popularity": 0.78,
             "last_updated": "2024-01-10",
-            "preview_url": "https://templates.statex.cz/ecommerce-store-002",
+            "preview_url": "https://templates.alfares.cz/ecommerce-store-002",
             "repository_url": "https://github.com/statex/templates/ecommerce-store-002",
             "customization_level": "advanced",
             "estimated_setup_time": "4-6 hours"
@@ -186,7 +186,7 @@ async def find_matching_templates(
             "match_score": 0.85,
             "popularity": 0.82,
             "last_updated": "2024-01-12",
-            "preview_url": "https://templates.statex.cz/saas-dashboard-003",
+            "preview_url": "https://templates.alfares.cz/saas-dashboard-003",
             "repository_url": "https://github.com/statex/templates/saas-dashboard-003",
             "customization_level": "advanced",
             "estimated_setup_time": "6-8 hours"
@@ -202,7 +202,7 @@ async def find_matching_templates(
             "match_score": 0.90,
             "popularity": 0.88,
             "last_updated": "2024-01-08",
-            "preview_url": "https://templates.statex.cz/landing-page-004",
+            "preview_url": "https://templates.alfares.cz/landing-page-004",
             "repository_url": "https://github.com/statex/templates/landing-page-004",
             "customization_level": "basic",
             "estimated_setup_time": "1-2 hours"
@@ -218,7 +218,7 @@ async def find_matching_templates(
             "match_score": 0.75,
             "popularity": 0.70,
             "last_updated": "2024-01-05",
-            "preview_url": "https://templates.statex.cz/portfolio-site-005",
+            "preview_url": "https://templates.alfares.cz/portfolio-site-005",
             "repository_url": "https://github.com/statex/templates/portfolio-site-005",
             "customization_level": "medium",
             "estimated_setup_time": "2-3 hours"
@@ -341,9 +341,9 @@ async def get_template(template_id: str):
         "description": "Clean, professional website template for businesses",
         "features": ["hero", "about", "services", "contact", "blog"],
         "tech_stack": ["Next.js", "Tailwind CSS", "TypeScript"],
-        "preview_url": f"https://templates.statex.cz/{template_id}",
+        "preview_url": f"https://templates.alfares.cz/{template_id}",
         "repository_url": f"https://github.com/statex/templates/{template_id}",
-        "documentation_url": f"https://docs.statex.cz/templates/{template_id}",
+        "documentation_url": f"https://docs.alfares.cz/templates/{template_id}",
         "setup_instructions": [
             "Clone the repository",
             "Install dependencies with npm install",

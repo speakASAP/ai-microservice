@@ -10,7 +10,7 @@ Read this repo's `BUSINESS.md` → `SYSTEM.md` → `AGENTS.md` → `TASKS.md` �
 
 **Purpose**: Centralized AI inference gateway — all LLM calls in the ecosystem route through here; no service calls external LLM providers directly.  
 **Port**: 3380  
-**Domain**: https://ai.statex.cz  
+**Domain**: https://ai.alfares.cz  
 **Stack**: NestJS · LiteLLM sidecar · Ollama (local) · OpenRouter · Gemini
 
 ### Model tiers (LiteLLM routes)

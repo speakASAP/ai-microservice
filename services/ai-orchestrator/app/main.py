@@ -165,8 +165,8 @@ notification_client = NotificationServiceClient()
 
 # CORS middleware — same-domain (aeps.alfares.cz → ai.alfares.cz) and statex/localhost; no 403 for alfares.cz
 _cors_origins = [
-    "https://statex.cz",
-    "https://www.statex.cz",
+    "https://alfares.cz",
+    "https://www.alfares.cz",
     "https://aeps.alfares.cz",
     "http://aeps.alfares.cz",
     "https://ai.alfares.cz",
@@ -231,7 +231,7 @@ ASR_SERVICE_URL = os.getenv("ASR_SERVICE_URL", f"http://{asr_host}:{asr_port}")
 DOCUMENT_AI_URL = os.getenv("DOCUMENT_AI_URL", f"http://{document_ai_host}:{document_ai_port}")
 PROTOTYPE_GENERATOR_URL = os.getenv("PROTOTYPE_GENERATOR_URL", f"http://{prototype_gen_host}:{prototype_gen_port}")
 # TEMPLATE_REPOSITORY_URL removed - Template Repository functionality disabled
-NOTIFICATION_SERVICE_URL = os.getenv("NOTIFICATION_SERVICE_URL", "https://notifications.statex.cz")
+NOTIFICATION_SERVICE_URL = os.getenv("NOTIFICATION_SERVICE_URL", "https://notifications.alfares.cz")
 
 # In-memory storage for demo (replace with database in production)
 submissions_db: Dict[str, Dict[str, Any]] = {}
@@ -1439,7 +1439,7 @@ async def translate_text(request: TranslateRequest):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://ai.statex.cz",
+        "HTTP-Referer": "https://ai.alfares.cz",
         "X-Title": "ai-microservice-translate",
     }
     models = _free_model_list()

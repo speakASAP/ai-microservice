@@ -1050,7 +1050,7 @@ class MultiAgentOrchestrator:
     def __init__(self):
         self.workflow_engine = workflow_engine
         self.persistence = workflow_persistence
-        self.notification_service_url = os.getenv("NOTIFICATION_SERVICE_URL", "https://notifications.statex.cz")
+        self.notification_service_url = os.getenv("NOTIFICATION_SERVICE_URL", "https://notifications.alfares.cz")
         self.notification_client = NotificationServiceClient()
         
         # Register agents

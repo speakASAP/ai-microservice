@@ -833,7 +833,7 @@ async def get_prototype(prototype_id: str):
     return {
         "prototype_id": prototype_id,
         "status": "completed",
-        "url": f"https://prototype-{prototype_id}.statex.cz",
+        "url": f"https://prototype-{prototype_id}.alfares.cz",
         "repository": f"https://github.com/statex/prototype-{prototype_id}",
         "created_at": datetime.now().isoformat()
     }

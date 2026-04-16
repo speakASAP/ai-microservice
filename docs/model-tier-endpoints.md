@@ -26,7 +26,7 @@ See `AGENTS.md` in this repo for the **target** mapping used across Statex servi
 ## `POST /ai/complete` (AI Orchestrator)
 
 - **Default URL (Docker):** `http://ai-microservice:3380/ai/complete` (port from `AI_ORCHESTRATOR_PORT`).
-- **Production (typical):** `https://<DOMAIN>/ai/complete` when exposed behind nginx for `DOMAIN` (for example `ai.statex.cz`).
+- **Production (typical):** `https://<DOMAIN>/ai/complete` when exposed behind nginx for `DOMAIN` (for example `ai.alfares.cz`).
 
 ### Authentication
 

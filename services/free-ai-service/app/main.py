@@ -824,7 +824,7 @@ Please provide a JSON response with:
             headers = {
                 "Authorization": f"Bearer {OPENROUTER_API_KEY}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://statex.cz",
+                "HTTP-Referer": "https://alfares.cz",
                 "X-Title": "StateX AI Platform"
             }
             

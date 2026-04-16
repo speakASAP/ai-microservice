@@ -20,4 +20,4 @@ business-orchestrator, statex, shop-assistant, crypto-ai-agent, agentic-email.
 ## SLA
 
 - Port: 3380 (<http://ai-microservice:3380>)
-- Production: <https://ai.statex.cz>
+- Production: <https://ai.alfares.cz>

@@ -32,9 +32,9 @@ class CentralizedLogger:
         self.service_name = service_name
         self.log_level = log_level
         # Get logging service URL from environment
-        # Production: https://logging.statex.cz
+        # Production: https://logging.alfares.cz
         # Docker/Development: http://logging-microservice:3367
-        self.logging_service_url = os.getenv("LOGGING_SERVICE_URL", "https://logging.statex.cz")
+        self.logging_service_url = os.getenv("LOGGING_SERVICE_URL", "https://logging.alfares.cz")
         self.logging_service_api_path = os.getenv("LOGGING_SERVICE_API_PATH", "/api/logs")
         
         # Setup local logger

@@ -64,7 +64,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://statex.cz", "https://www.statex.cz", f"http://localhost:{os.getenv('FRONTEND_PORT', '3000')}"],
+    allow_origins=["https://alfares.cz", "https://www.alfares.cz", f"http://localhost:{os.getenv('FRONTEND_PORT', '3000')}"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -53,7 +53,7 @@ class NotificationServiceClient(BaseServiceClient):
     
     def __init__(self):
         # Support both Docker and localhost environments
-        notification_base_url = os.getenv("NOTIFICATION_SERVICE_URL", "https://notifications.statex.cz")
+        notification_base_url = os.getenv("NOTIFICATION_SERVICE_URL", "https://notifications.alfares.cz")
         super().__init__(notification_base_url)
     
     async def send_notification(self, notification_data: Dict[str, Any]) -> Dict[str, Any]:

@@ -654,9 +654,9 @@ class OfferFormatter:
         """Get contact information"""
         return {
             "company": "StateX Development",
-            "email": "projects@statex.cz",
+            "email": "projects@alfares.cz",
             "phone": "+420 XXX XXX XXX",
-            "website": "https://statex.cz",
+            "website": "https://alfares.cz",
             "address": "Prague, Czech Republic"
         }
     

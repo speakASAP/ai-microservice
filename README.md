@@ -58,7 +58,7 @@ Centralized AI processing service for the Statex microservices ecosystem. Provid
 
 ```bash
 # AI Orchestrator
-curl https://ai.statex.cz/health
+curl https://ai.alfares.cz/health
 ```
 
 ### Docker Network Access
@@ -84,7 +84,7 @@ Copy `.env.example` to `.env` and configure:
 
 ```bash
 # Service Domain - Used by nginx-microservice for auto-registry (required for correct domain detection)
-DOMAIN=ai.statex.cz
+DOMAIN=ai.alfares.cz
 
 # Service Name - Used for logging and service identification
 SERVICE_NAME=ai-microservice
@@ -106,10 +106,10 @@ REDIS_HOST=db-server-redis
 REDIS_SERVER_PORT=6379
 
 # Logging Service (Shared)
-LOGGING_SERVICE_URL=https://logging.statex.cz
+LOGGING_SERVICE_URL=https://logging.alfares.cz
 
 # Notification Service (Shared)
-NOTIFICATION_SERVICE_URL=https://notifications.statex.cz
+NOTIFICATION_SERVICE_URL=https://notifications.alfares.cz
 
 # AI API Keys
 OPENROUTER_API_KEY=<key>
@@ -139,7 +139,7 @@ Runs health checks for all AI agents (orchestrator, free-ai-service, nlp, asr, d
 ./scripts/test-ai-services.py
 ```
 
-From host use default `localhost`; override with `AI_SERVICE_HOST=localhost`. Ports are read from `.env` (defaults: 3380–3389). After deploy, run with `AI_ORCHESTRATOR_BASE_URL=https://ai.statex.cz` (or your `DOMAIN`) to test the deployed orchestrator and email-triage full pipeline only. Exit code 0 if all checks pass, 1 otherwise. `deploy.sh` runs this script automatically after a successful deployment.
+From host use default `localhost`; override with `AI_SERVICE_HOST=localhost`. Ports are read from `.env` (defaults: 3380–3389). After deploy, run with `AI_ORCHESTRATOR_BASE_URL=https://ai.alfares.cz` (or your `DOMAIN`) to test the deployed orchestrator and email-triage full pipeline only. Exit code 0 if all checks pass, 1 otherwise. `deploy.sh` runs this script automatically after a successful deployment.
 
 ### Stop Services
 
@@ -190,7 +190,7 @@ All AI agents data, workflows, submissions, and related information are stored i
 
 All services send logs to the centralized logging microservice:
 
-- **Production URL**: `https://logging.statex.cz`
+- **Production URL**: `https://logging.alfares.cz`
 - **Docker Network URL**: `http://logging-microservice:3367`
 - **API Endpoint**: `POST /api/logs`
 - **Fallback**: Local log files if logging service unavailable
@@ -219,7 +219,7 @@ For issues or questions:
 
 - Check service logs: `docker compose logs <service-name>`
 - Verify network connectivity: `docker network inspect nginx-network`
-- Check health endpoints: `curl https://ai.statex.cz/health`
+- Check health endpoints: `curl https://ai.alfares.cz/health`
 
 ---
 
