@@ -7,20 +7,46 @@ metadata:
     app: ai-microservice
     managed-by: k8s-migration
 data:
+  # Core/Cluster Configuration
   NODE_ENV: "production"
   SERVICE_NAME: "ai-microservice"
   DOMAIN: "ai.alfares.cz"
   PORT: "3380"
-  # Add environment variables from .env that are non-sensitive (no secrets, API keys, passwords)
-  # Examples:
-  # DATABASE_POOL_SIZE: "10"
-  # LOG_LEVEL: "info"
+  LOG_LEVEL: "INFO"
+  DEBUG: "false"
+
+  # Auth/Logging (Already in K8s - use K8s DNS)
   AUTH_SERVICE_URL: "http://auth-microservice.statex-apps.svc.cluster.local:3370"
   LOGGING_SERVICE_URL: "http://logging-microservice.statex-apps.svc.cluster.local:3367"
+
+  # Database Configuration (Host IP until Phase 4)
   DB_HOST: "192.168.88.53"
   DB_PORT: "5432"
   DB_USER: "dbadmin"
   DB_NAME: "ai"
   DB_SYNC: "false"
   DB_AUTO_CREATE: "true"
-  # TIMEOUT_MS: "30000"
+
+  # Redis/Cache Configuration (Host IP until Phase 4)
+  REDIS_HOST: "192.168.88.53"
+  REDIS_SERVER_PORT: "6379"
+  REDIS_URL: "redis://192.168.88.53:6379/2"
+
+  # Sub-services on Docker Compose (reached via host.k3s.internal)
+  NLP_SERVICE_URL: "http://host.k3s.internal:3381"
+  ASR_SERVICE_URL: "http://host.k3s.internal:3382"
+  DOCUMENT_AI_URL: "http://host.k3s.internal:3383"
+  PROTOTYPE_GENERATOR_URL: "http://host.k3s.internal:3384"
+  TEMPLATE_REPOSITORY_URL: "http://host.k3s.internal:3385"
+  FREE_AI_SERVICE_URL: "http://host.k3s.internal:3386"
+  AI_WORKERS_URL: "http://host.k3s.internal:3387"
+  GEMINI_AI_SERVICE_URL: "http://host.k3s.internal:3388"
+  DATA_VIZ_SERVICE_URL: "http://host.k3s.internal:3389"
+  LITELLM_BASE_URL: "http://host.k3s.internal:4000"
+
+  # External Services
+  NOTIFICATION_SERVICE_URL: "https://notifications.alfares.cz"
+
+  # AI Modes
+  ASR_MODE: "free"
+  AI_MODE: "free"
