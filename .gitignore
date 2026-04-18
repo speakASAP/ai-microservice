@@ -69,3 +69,4 @@ data/uploads/
 *.db
 *.sqlite
 
+k8s/secret.yaml
