@@ -5,9 +5,11 @@ import { Entity, PrimaryColumn, Column, CreateDateColumn, UpdateDateColumn, Inde
 @Index(['status'])
 @Index(['createdAt'], { sort: 'DESC' })
 export class ClaudeCodeJob {
-  @PrimaryColumn('varchar')
+  // UUID format (36 chars)
+  @PrimaryColumn('varchar', { length: 36 })
   jobId: string;
 
+  // Must be valid UUID
   @Column('uuid')
   taskId: string;
 

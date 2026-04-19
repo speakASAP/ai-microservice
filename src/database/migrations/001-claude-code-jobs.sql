@@ -1,6 +1,6 @@
 -- Create claude_code_jobs table
-CREATE TABLE claude_code_jobs (
-  job_id VARCHAR(255) PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS claude_code_jobs (
+  job_id VARCHAR(36) PRIMARY KEY,
   task_id UUID NOT NULL,
 
   -- Input parameters
