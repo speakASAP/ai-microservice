@@ -60,13 +60,36 @@ Poll job status and results.
 }
 ```
 
-## Job Lifecycle
+## Job Lifecycle (Phase 2)
 
 ```
 queued → executing → success
-                   → failed
+                   → failed        (non-retryable or max retries exceeded)
+                   → retrying      (transient error, scheduled for re-execution)
+                       └→ executing (retry attempt)
                    → timeout
 ```
+
+Retry backoff: attempt 1 → 30s, attempt 2 → 90s, attempt 3 → 270s. Default max retries: 3 (per job).
+
+## Logging Microservice Integration
+
+Key events are posted fire-and-forget to `LOGGING_SERVICE_URL/api/logs`:
+
+| Event | Level |
+|-------|-------|
+| Claude Code Job Executing | info |
+| Claude Code Job Completed | info |
+| Claude Code Job Retry Scheduled | warn |
+| Claude Code Job Retry Recovery | warn |
+| Claude Code Job Failed | error |
+
+**Configuration:** Set environment variable:
+```bash
+export LOGGING_SERVICE_URL=http://logging-microservice:3367
+```
+
+The logging client is fire-and-forget: if the logging-microservice is unavailable, job execution continues normally. Never blocks.
 
 ## Architecture
 
