@@ -1,66 +1,66 @@
 import { Entity, PrimaryColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 
 @Entity('claude_code_jobs')
-@Index(['taskId'])
-@Index(['status'])
-@Index(['createdAt'], { sort: 'DESC' })
+@Index('idx_taskId', ['taskId'])
+@Index('idx_status', ['status'])
+@Index('idx_createdAt', ['createdAt'])
 export class ClaudeCodeJob {
   // UUID format (36 chars)
   @PrimaryColumn('varchar', { length: 36 })
-  jobId: string;
+  jobId!: string;
 
   // Must be valid UUID
   @Column('uuid')
-  taskId: string;
+  taskId!: string;
 
   @Column('text')
-  repoPath: string;
+  repoPath!: string;
 
   @Column('varchar')
-  branch: string;
+  branch!: string;
 
   @Column('text')
-  instructions: string;
+  instructions!: string;
 
   @Column('text', { nullable: true })
-  expectedOutcome: string;
+  expectedOutcome?: string;
 
   @Column('integer', { default: 300 })
-  timeoutSeconds: number;
+  timeoutSeconds!: number;
 
   @Column('text', { nullable: true })
-  validationScript: string;
+  validationScript?: string;
 
   @Column('varchar', { default: 'queued' })
-  status: 'queued' | 'executing' | 'success' | 'failed' | 'timeout';
+  status!: 'queued' | 'executing' | 'success' | 'failed' | 'timeout';
 
   @Column('timestamptz', { nullable: true })
-  startedAt: Date;
+  startedAt?: Date;
 
   @Column('timestamptz', { nullable: true })
-  completedAt: Date;
+  completedAt?: Date;
 
   @Column('integer', { nullable: true })
-  exitCode: number;
+  exitCode?: number;
 
   @Column('text', { nullable: true })
-  stdout: string;
+  stdout?: string;
 
   @Column('text', { nullable: true })
-  stderr: string;
+  stderr?: string;
 
   @Column('text', { nullable: true })
-  gitDiff: string;
+  gitDiff?: string;
 
   @Column('boolean', { nullable: true })
-  validationPassed: boolean;
+  validationPassed?: boolean;
 
   @Column('text', { nullable: true })
-  validationOutput: string;
+  validationOutput?: string;
 
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt!: Date;
 
   @UpdateDateColumn()
-  updatedAt: Date;
+  updatedAt!: Date;
 }

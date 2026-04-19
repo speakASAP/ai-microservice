@@ -1,0 +1,163 @@
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
+import { ClaudeCodeJob } from '../database/entities/claude-code-job.entity';
+import { ExecuteCodeDto } from './dto/execute-code.dto';
+import { JobEnqueueResponseDto } from './dto/job-enqueue-response.dto';
+import { JobStatusResponseDto } from './dto/job-status-response.dto';
+import { JobStatus } from './job-status.enum';
+import { AmqpConnection } from '@golevelup/nestjs-rabbitmq';
+
+/**
+ * ClaudeCodeService manages Claude Code job execution lifecycle.
+ * Handles job enqueueing, status polling, and result persistence.
+ */
+@Injectable()
+export class ClaudeCodeService {
+  private logger = new Logger(ClaudeCodeService.name);
+
+  constructor(
+    @InjectRepository(ClaudeCodeJob)
+    private jobRepository: Repository<ClaudeCodeJob>,
+    private amqpConnection: AmqpConnection,
+  ) {}
+
+  /**
+   * Enqueue a new Claude Code job for execution.
+   * Creates a job record with status=queued and publishes to RabbitMQ.
+   */
+  async enqueueJob(dto: ExecuteCodeDto): Promise<JobEnqueueResponseDto> {
+    const jobId = `job-${randomUUID()}`;
+    const timeoutSeconds = dto.timeoutSeconds || 300;
+
+    const job = this.jobRepository.create({
+      jobId,
+      taskId: dto.taskId,
+      repoPath: dto.repoPath,
+      branch: dto.branch,
+      instructions: dto.instructions,
+      expectedOutcome: dto.expectedOutcome,
+      timeoutSeconds,
+      validationScript: dto.validationScript,
+      status: 'queued' as JobStatus,
+    });
+
+    const saved = await this.jobRepository.save(job);
+
+    // Enqueue to RabbitMQ
+    try {
+      await this.amqpConnection.publish(
+        'claude-code-exchange',
+        'claude-code.execute',
+        {
+          jobId,
+          taskId: dto.taskId,
+          repoPath: dto.repoPath,
+          branch: dto.branch,
+          instructions: dto.instructions,
+          expectedOutcome: dto.expectedOutcome,
+          timeoutSeconds,
+          validationScript: dto.validationScript,
+        },
+      );
+      this.logger.log(JSON.stringify({
+        event: 'Claude Code Job Enqueued',
+        jobId,
+        taskId: dto.taskId,
+        repoPath: dto.repoPath,
+        branch: dto.branch,
+      }));
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(`Failed to publish job ${jobId} to RabbitMQ: ${errorMsg}`);
+      // Job is persisted; consumer will process when RabbitMQ recovers
+    }
+
+    return {
+      jobId: saved.jobId,
+      taskId: saved.taskId,
+      status: saved.status as JobStatus,
+      createdAt: saved.createdAt,
+    };
+  }
+
+  /**
+   * Get job status and results by job ID.
+   * Returns null if job not found.
+   */
+  async getJobStatus(jobId: string): Promise<JobStatusResponseDto | null> {
+    const job = await this.jobRepository.findOne({ where: { jobId } });
+    if (!job) {
+      return null;
+    }
+
+    return {
+      jobId: job.jobId,
+      taskId: job.taskId,
+      status: job.status as JobStatus,
+      startedAt: job.startedAt,
+      completedAt: job.completedAt,
+      exitCode: job.exitCode,
+      stdout: job.stdout,
+      stderr: job.stderr,
+      gitDiff: job.gitDiff,
+      validationPassed: job.validationPassed,
+      validationOutput: job.validationOutput,
+    };
+  }
+
+  /**
+   * Update job execution results (called by RabbitMQ consumer).
+   * Validates status transitions to prevent invalid state changes.
+   * Valid transitions:
+   * - queued → executing | failed
+   * - executing → success | failed | timeout
+   * - success/failed/timeout → terminal (no updates allowed)
+   */
+  async updateJobExecution(
+    jobId: string,
+    data: Partial<{
+      status: JobStatus;
+      startedAt: Date;
+      completedAt: Date;
+      exitCode: number;
+      stdout: string;
+      stderr: string;
+      gitDiff: string;
+      validationPassed: boolean;
+      validationOutput: string;
+    }>,
+  ): Promise<void> {
+    // Validate status transitions if status is being updated
+    if (data.status) {
+      const job = await this.jobRepository.findOne({ where: { jobId } });
+      if (job && !this.isValidStatusTransition(job.status as JobStatus, data.status)) {
+        throw new BadRequestException(
+          `Invalid status transition from ${job.status} to ${data.status}`,
+        );
+      }
+    }
+
+    await this.jobRepository.update({ jobId }, data);
+    this.logger.log(JSON.stringify({
+      event: 'Claude Code Job Updated',
+      jobId,
+      status: data.status || 'unchanged',
+    }));
+  }
+
+  /**
+   * Check if a status transition is valid according to job state machine.
+   */
+  private isValidStatusTransition(from: JobStatus, to: JobStatus): boolean {
+    const validTransitions: Record<JobStatus, JobStatus[]> = {
+      'queued': ['executing', 'failed'] as JobStatus[],
+      'executing': ['success', 'failed', 'timeout'] as JobStatus[],
+      'success': [] as JobStatus[],
+      'failed': [] as JobStatus[],
+      'timeout': [] as JobStatus[],
+    };
+    return validTransitions[from]?.includes(to) ?? false;
+  }
+}
