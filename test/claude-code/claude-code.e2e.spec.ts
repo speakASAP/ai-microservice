@@ -6,6 +6,7 @@ import { AmqpConnection } from '@golevelup/nestjs-rabbitmq';
 import { ClaudeCodeController } from '../../src/claude-code/claude-code.controller';
 import { ClaudeCodeService } from '../../src/claude-code/claude-code.service';
 import { ClaudeCodeConsumer } from '../../src/claude-code/claude-code.consumer';
+import { LoggingClient } from '../../src/claude-code/logging.client';
 import { ClaudeCodeJob } from '../../src/database/entities/claude-code-job.entity';
 import { randomUUID } from 'crypto';
 
@@ -13,6 +14,7 @@ describe('ClaudeCode E2E', () => {
   let app: INestApplication;
   let mockRepo: any;
   let mockAmqp: any;
+  let mockLoggingClient: any;
 
   beforeAll(async () => {
     const jobStore = new Map<string, any>();
@@ -28,10 +30,19 @@ describe('ClaudeCode E2E', () => {
         const existing = jobStore.get(jobId);
         if (existing) jobStore.set(jobId, { ...existing, ...data });
       }),
+      createQueryBuilder: jest.fn(() => ({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([]),
+      })),
     };
 
     mockAmqp = {
       publish: jest.fn().mockResolvedValue(undefined),
+    };
+
+    mockLoggingClient = {
+      log: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -41,6 +52,7 @@ describe('ClaudeCode E2E', () => {
         ClaudeCodeConsumer,
         { provide: getRepositoryToken(ClaudeCodeJob), useValue: mockRepo },
         { provide: AmqpConnection, useValue: mockAmqp },
+        { provide: LoggingClient, useValue: mockLoggingClient },
       ],
     }).compile();
 

@@ -284,4 +284,74 @@ describe('ClaudeCodeService', () => {
       expect(mockRepository.save).toHaveBeenCalled();
     });
   });
+
+  describe('markJobRetrying', () => {
+    it('updates job to retrying status and appends error history', async () => {
+      const jobId = `job-${randomUUID()}`;
+      mockRepository.findOne.mockResolvedValue({
+        jobId,
+        status: 'executing',
+        retryCount: 0,
+        errorHistory: null,
+      });
+      mockRepository.update.mockResolvedValue(undefined);
+
+      await service.markJobRetrying(jobId, {
+        retryCount: 1,
+        nextRetryAt: new Date(Date.now() + 30_000),
+        lastError: 'ETIMEDOUT: git fetch failed',
+      });
+
+      expect(mockRepository.update).toHaveBeenCalledWith(
+        { jobId },
+        expect.objectContaining({
+          status: 'retrying',
+          retryCount: 1,
+          errorHistory: expect.arrayContaining([
+            expect.objectContaining({ attempt: 1, error: 'ETIMEDOUT: git fetch failed' }),
+          ]),
+        }),
+      );
+    });
+
+    it('returns silently when job not found', async () => {
+      mockRepository.findOne.mockResolvedValue(null);
+      await expect(
+        service.markJobRetrying('job-unknown', {
+          retryCount: 1,
+          nextRetryAt: new Date(),
+          lastError: 'error',
+        }),
+      ).resolves.not.toThrow();
+      expect(mockRepository.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('isValidStatusTransition (updated for retrying)', () => {
+    it('allows executing → retrying', async () => {
+      const jobId = `job-${randomUUID()}`;
+      mockRepository.findOne.mockResolvedValue({ jobId, status: 'executing' });
+      mockRepository.update.mockResolvedValue(undefined);
+      await expect(
+        service.updateJobExecution(jobId, { status: 'retrying' as JobStatus }),
+      ).resolves.not.toThrow();
+    });
+
+    it('allows retrying → executing', async () => {
+      const jobId = `job-${randomUUID()}`;
+      mockRepository.findOne.mockResolvedValue({ jobId, status: 'retrying' });
+      mockRepository.update.mockResolvedValue(undefined);
+      await expect(
+        service.updateJobExecution(jobId, { status: 'executing' as JobStatus }),
+      ).resolves.not.toThrow();
+    });
+
+    it('rejects retrying → success (must go through executing)', async () => {
+      const jobId = `job-${randomUUID()}`;
+      mockRepository.findOne.mockResolvedValue({ jobId, status: 'retrying' });
+      await expect(
+        service.updateJobExecution(jobId, { status: 'success' as JobStatus }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
 });

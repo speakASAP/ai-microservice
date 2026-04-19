@@ -32,7 +32,7 @@ export class ClaudeCodeJob {
   validationScript?: string;
 
   @Column('varchar', { default: 'queued' })
-  status!: 'queued' | 'executing' | 'success' | 'failed' | 'timeout';
+  status!: 'queued' | 'executing' | 'success' | 'failed' | 'timeout' | 'retrying';
 
   @Column('timestamptz', { nullable: true })
   startedAt?: Date;
@@ -63,4 +63,19 @@ export class ClaudeCodeJob {
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  @Column('integer', { default: 0 })
+  retryCount!: number;
+
+  @Column('integer', { default: 3 })
+  maxRetries!: number;
+
+  @Column('timestamptz', { nullable: true })
+  nextRetryAt?: Date;
+
+  @Column('timestamptz', { nullable: true })
+  lastErrorAt?: Date;
+
+  @Column('jsonb', { nullable: true })
+  errorHistory?: Array<{ attempt: number; error: string; timestamp: string }>;
 }

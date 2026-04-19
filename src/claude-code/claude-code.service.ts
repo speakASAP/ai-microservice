@@ -152,12 +152,72 @@ export class ClaudeCodeService {
    */
   private isValidStatusTransition(from: JobStatus, to: JobStatus): boolean {
     const validTransitions: Record<JobStatus, JobStatus[]> = {
-      'queued': ['executing', 'failed'] as JobStatus[],
-      'executing': ['success', 'failed', 'timeout'] as JobStatus[],
-      'success': [] as JobStatus[],
-      'failed': [] as JobStatus[],
-      'timeout': [] as JobStatus[],
+      [JobStatus.QUEUED]: [JobStatus.EXECUTING, JobStatus.FAILED],
+      [JobStatus.EXECUTING]: [JobStatus.SUCCESS, JobStatus.FAILED, JobStatus.TIMEOUT, JobStatus.RETRYING],
+      [JobStatus.RETRYING]: [JobStatus.EXECUTING, JobStatus.FAILED],
+      [JobStatus.SUCCESS]: [],
+      [JobStatus.FAILED]: [],
+      [JobStatus.TIMEOUT]: [],
     };
     return validTransitions[from]?.includes(to) ?? false;
+  }
+
+  /**
+   * Get a job by ID (helper for consumers to check retry status).
+   */
+  async getJobById(jobId: string): Promise<ClaudeCodeJob | null> {
+    return this.jobRepository.findOne({ where: { jobId } });
+  }
+
+  /**
+   * Mark a job as retrying with error tracking.
+   * Updates job to RETRYING status, increments retry count, schedules next retry.
+   */
+  async markJobRetrying(
+    jobId: string,
+    data: {
+      retryCount: number;
+      nextRetryAt: Date;
+      lastError: string;
+    },
+  ): Promise<void> {
+    const job = await this.jobRepository.findOne({ where: { jobId } });
+    if (!job) return;
+
+    const errorEntry = {
+      attempt: data.retryCount,
+      error: data.lastError,
+      timestamp: new Date().toISOString(),
+    };
+    const errorHistory = [...(job.errorHistory ?? []), errorEntry];
+
+    await this.jobRepository.update(
+      { jobId },
+      {
+        status: JobStatus.RETRYING,
+        retryCount: data.retryCount,
+        nextRetryAt: data.nextRetryAt,
+        lastErrorAt: new Date(),
+        errorHistory,
+      },
+    );
+    this.logger.log(JSON.stringify({
+      event: 'Claude Code Job Retry Scheduled',
+      jobId,
+      retryCount: data.retryCount,
+      nextRetryAt: data.nextRetryAt,
+    }));
+  }
+
+  /**
+   * Get all retrying jobs that are due for re-execution.
+   * Used by consumer's OnApplicationBootstrap for recovery.
+   */
+  async getRetryingJobsDue(): Promise<ClaudeCodeJob[]> {
+    return this.jobRepository
+      .createQueryBuilder('job')
+      .where('job.status = :status', { status: JobStatus.RETRYING })
+      .andWhere('job.nextRetryAt <= :now', { now: new Date() })
+      .getMany();
   }
 }

@@ -1,26 +1,95 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { RabbitSubscribe } from '@golevelup/nestjs-rabbitmq';
+import {
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+} from '@nestjs/common';
+import { RabbitSubscribe, AmqpConnection } from '@golevelup/nestjs-rabbitmq';
 import { ClaudeCodeService } from './claude-code.service';
+import { LoggingClient } from './logging.client';
 import { JobStatus } from './job-status.enum';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 
 const execAsync = promisify(exec);
+const RETRY_BACKOFF_MS = [30_000, 90_000, 270_000];
+
+/**
+ * Determines if an error is retryable (transient) vs permanent.
+ * Transient: timeout, connection reset, spawn failures, process signals
+ * Permanent: non-zero exit code from completed process
+ */
+function isRetryableError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const msg = error.message.toLowerCase();
+  return (
+    msg.includes('etimedout') ||
+    msg.includes('econnreset') ||
+    msg.includes('enoent') ||
+    msg.includes('spawn') ||
+    msg.includes('sigkill') ||
+    msg.includes('sigterm') ||
+    msg.includes('timeout') ||
+    msg.includes('socket hang up')
+  );
+}
 
 /**
  * RabbitMQ consumer that processes Claude Code job execution requests.
- * Subscribes to claude-code.execute messages and runs code in isolated git worktrees.
+ * Implements smart retry with exponential backoff for transient failures.
+ * Logs job lifecycle events to logging-microservice.
  */
 @Injectable()
-export class ClaudeCodeConsumer {
-  private logger = new Logger(ClaudeCodeConsumer.name);
+export class ClaudeCodeConsumer implements OnApplicationBootstrap {
+  private readonly logger = new Logger(ClaudeCodeConsumer.name);
 
-  constructor(private service: ClaudeCodeService) {}
+  constructor(
+    private readonly service: ClaudeCodeService,
+    private readonly loggingClient: LoggingClient,
+    private readonly amqpConnection: AmqpConnection,
+  ) {}
+
+  /**
+   * OnApplicationBootstrap: Recover jobs stuck in retrying state.
+   * After process restart, re-queue jobs that were waiting for retry.
+   */
+  async onApplicationBootstrap(): Promise<void> {
+    try {
+      const dueJobs = await this.service.getRetryingJobsDue();
+      for (const job of dueJobs) {
+        this.logger.warn(
+          JSON.stringify({
+            event: 'Claude Code Job Retry Recovery',
+            jobId: job.jobId,
+            retryCount: job.retryCount,
+          }),
+        );
+        await this.loggingClient.log('warn', 'Claude Code Job Retry Recovery', {
+          jobId: job.jobId,
+          retryCount: job.retryCount,
+        });
+        // Re-schedule immediately (0 ms delay)
+        this.scheduleRetry(
+          job.jobId,
+          job.repoPath,
+          job.branch,
+          job.instructions,
+          job.timeoutSeconds,
+          job.validationScript,
+          0,
+          job.maxRetries ?? 3,
+        );
+      }
+    } catch (error) {
+      this.logger.error('Failed to recover retrying jobs', error);
+    }
+  }
 
   /**
    * Handle job execution from RabbitMQ message.
-   * Creates worktree, executes claude code CLI, captures results, validates, and updates job.
+   * Creates worktree, executes claude code CLI, captures results, validates.
+   * On transient error: schedules retry with exponential backoff.
+   * On permanent error: marks job as failed.
    */
   @RabbitSubscribe({
     exchange: 'claude-code-exchange',
@@ -37,11 +106,18 @@ export class ClaudeCodeConsumer {
       validationScript,
     } = msg;
 
-    this.logger.log(JSON.stringify({
-      event: 'Claude Code Job Executing',
+    this.logger.log(
+      JSON.stringify({
+        event: 'Claude Code Job Executing',
+        jobId,
+        repoPath,
+      }),
+    );
+    await this.loggingClient.log('info', 'Claude Code Job Executing', {
       jobId,
       repoPath,
-    }));
+      branch,
+    });
 
     try {
       // Update status to executing
@@ -142,13 +218,20 @@ export class ClaudeCodeConsumer {
         completedAt: new Date(),
       });
 
-      this.logger.log(JSON.stringify({
-        event: 'Claude Code Job Completed',
+      this.logger.log(
+        JSON.stringify({
+          event: 'Claude Code Job Completed',
+          jobId,
+          status: finalStatus,
+          exitCode,
+          durationMs: new Date().getTime() - startedAt.getTime(),
+        }),
+      );
+      await this.loggingClient.log('info', 'Claude Code Job Completed', {
         jobId,
         status: finalStatus,
         exitCode,
-        durationMs: new Date().getTime() - startedAt.getTime(),
-      }));
+      });
 
       // Clean up worktree
       try {
@@ -159,13 +242,109 @@ export class ClaudeCodeConsumer {
         this.logger.warn(`Failed to clean up worktree ${worktreePath}: ${e}`);
       }
     } catch (error: any) {
-      this.logger.error(`Job execution failed: ${jobId}`, error);
+      // Outer catch: determine if error is retryable
+      const job = await this.service.getJobById(jobId);
+      const retryCount = job?.retryCount ?? 0;
+      const maxRetries = job?.maxRetries ?? 3;
 
-      await this.service.updateJobExecution(jobId, {
-        status: JobStatus.FAILED as JobStatus,
-        stderr: error.message,
-        completedAt: new Date(),
-      });
+      if (isRetryableError(error) && retryCount < maxRetries && job) {
+        // Transient error: schedule retry
+        const nextRetry = retryCount;
+        const delayMs = RETRY_BACKOFF_MS[nextRetry] ?? RETRY_BACKOFF_MS[2];
+
+        this.logger.warn(
+          JSON.stringify({
+            event: 'Claude Code Job Retry Scheduled',
+            jobId,
+            retryCount: nextRetry + 1,
+            delayMs,
+            error: error.message,
+          }),
+        );
+        await this.loggingClient.log(
+          'warn',
+          'Claude Code Job Retry Scheduled',
+          {
+            jobId,
+            retryCount: nextRetry + 1,
+            delayMs,
+            error: error.message,
+          },
+        );
+
+        const nextRetryAt = new Date(Date.now() + delayMs);
+        await this.service.markJobRetrying(jobId, {
+          retryCount: nextRetry + 1,
+          nextRetryAt,
+          lastError: error.message,
+        });
+
+        // Schedule retry after delay
+        this.scheduleRetry(
+          jobId,
+          job.repoPath,
+          job.branch,
+          job.instructions,
+          job.timeoutSeconds,
+          job.validationScript,
+          delayMs,
+          maxRetries,
+        );
+      } else {
+        // Permanent error or max retries exceeded
+        this.logger.error(
+          JSON.stringify({
+            event: 'Claude Code Job Failed',
+            jobId,
+            retryCount,
+            maxRetries,
+            error: error.message,
+          }),
+        );
+        await this.loggingClient.log('error', 'Claude Code Job Failed', {
+          jobId,
+          retryCount,
+          maxRetries,
+          error: error.message,
+        });
+
+        await this.service.updateJobExecution(jobId, {
+          status: JobStatus.FAILED as JobStatus,
+          stderr: error.message,
+          completedAt: new Date(),
+        });
+      }
     }
+  }
+
+  /**
+   * Schedule a job retry after the specified delay.
+   * Uses setTimeout to re-publish to RabbitMQ after backoff.
+   */
+  private scheduleRetry(
+    jobId: string,
+    repoPath: string,
+    branch: string,
+    instructions: string,
+    timeoutSeconds: number,
+    validationScript: string | undefined,
+    delayMs: number,
+    maxRetries: number,
+  ): void {
+    setTimeout(async () => {
+      try {
+        await this.amqpConnection.publish('claude-code-exchange', 'claude-code.execute', {
+          jobId,
+          repoPath,
+          branch,
+          instructions,
+          timeoutSeconds,
+          validationScript,
+        });
+        this.logger.log(`Retry published for job ${jobId} after ${delayMs}ms delay`);
+      } catch (error) {
+        this.logger.error(`Failed to re-publish retry for job ${jobId}: ${error}`);
+      }
+    }, delayMs);
   }
 }
