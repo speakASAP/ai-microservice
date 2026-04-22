@@ -6,6 +6,7 @@
 ## Required Update
 
 ### Current (Line 42-45)
+
 ```bash
 # External Services (Shared Microservices)
 # Logging Service - All services must send logs to centralized logging microservice
@@ -14,6 +15,7 @@ LOGGING_SERVICE_API_PATH=/api/logs
 ```
 
 ### Updated (Replace With)
+
 ```bash
 # External Services (Shared Microservices)
 # Logging Service - All services must send logs to centralized logging microservice
@@ -34,7 +36,7 @@ LOGGING_SERVICE_API_PATH=/api/logs
 ## Values
 
 | Environment | LOGGING_SERVICE_URL |
-|-------------|-------------------|
+| ----------- | ----------------- |
 | Development/Local | `http://logging-microservice:3367` |
 | Production | `https://logging.alfares.cz` |
 | Kubernetes | Managed via Vault: `secret/prod/ai-microservice` |
@@ -49,6 +51,7 @@ LOGGING_SERVICE_API_PATH=/api/logs
 ## Verification
 
 After updating, the `.env` file should have:
+
 - ✅ Original LOGGING_SERVICE_URL value (unchanged)
 - ✅ New comments explaining Phase 2 usage
 - ✅ Documentation of development vs production URLs

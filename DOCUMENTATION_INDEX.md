@@ -7,18 +7,21 @@
 ## 📚 Quick Start Documents
 
 ### For Impatient Users (5 min read)
+
 1. **QUICK_STATUS.md** — Status table + next steps
 2. **STATUS_2026-04-20.md** — Current state + remaining actions
 
 ### For Detailed Understanding (15 min read)
-3. **PHASE2_COMPLETE.md** — Full implementation summary with metrics
-4. **DEPLOYMENT_STATUS.md** — Deployment checklist and verification
+
+1. **PHASE2_COMPLETE.md** — Full implementation summary with metrics
+2. **DEPLOYMENT_STATUS.md** — Deployment checklist and verification
 
 ---
 
 ## 🔧 Implementation Documentation
 
 ### Code Implementation Details
+
 - **src/claude-code/README.md** — Feature documentation
   - Job lifecycle with retrying state
   - Logging events table
@@ -44,17 +47,20 @@
 ## 🚀 Deployment Documentation
 
 ### Kubernetes Setup
+
 - **k8s/external-secret.yaml** — ExternalSecret configuration
   - Vault binding: secret/prod/ai-microservice
   - Auto-sync LOGGING_SERVICE_URL
 
 ### Vault Configuration
+
 - **VAULT_SETUP.md** — Complete Vault setup guide
   - Authentication methods
   - Secret storage commands
   - K8s auto-sync verification
 
 ### Environment Variables
+
 - **ENV_UPDATES_PHASE2.md** — .env file documentation
   - Phase 2 comments
   - Production vs development URLs
@@ -100,10 +106,12 @@
 ## 🔐 Security & Hooks
 
 ### Configuration
+
 - **block-env-edits.py** — ❌ DISABLED (allows .env editing)
 - **block-git-commits.py** — ✅ ENABLED (protects git operations)
 
 ### .env Configuration
+
 - Production: `LOGGING_SERVICE_URL=https://logging.alfares.cz`
 - Development: `LOGGING_SERVICE_URL=http://logging-microservice:3367`
 - Managed in K8s via Vault: `secret/prod/ai-microservice`
@@ -115,16 +123,19 @@
 ### By Purpose
 
 **Implementation Code:**
+
 - `src/database/migrations/` — Database migrations (001, 002)
 - `src/database/entities/` — Entity definitions
 - `src/claude-code/` — Feature implementation
 - `test/claude-code/` — Test suites (35+ tests)
 
 **Configuration:**
+
 - `k8s/external-secret.yaml` — Vault binding
 - `.env` — Environment variables (with Phase 2 docs)
 
 **Documentation:**
+
 - `*.md` files in project root — Comprehensive guides
 - `src/claude-code/README.md` — Feature docs
 - Project memory — Implementation tracking
@@ -133,7 +144,7 @@
 
 ## 🎯 Quick Navigation
 
-### I want to understand...
+### I want to understand
 
 **...what was built**
 → Start with PHASE2_COMPLETE.md
@@ -172,6 +183,7 @@
 ## ✨ Key Information
 
 ### Implementation Metrics
+
 - **Lines of Code:** ~600 (Phase 2)
 - **Tests Written:** 20 (Phase 2)
 - **Tests Passing:** 40/40 (100%)
@@ -179,12 +191,14 @@
 - **Dependencies Added:** 0
 
 ### Database Metrics
+
 - **Columns Added:** 5
 - **Indexes Added:** 2
 - **Status Values:** 6 (new: 'retrying')
 - **Total Columns:** 24
 
 ### Deployment Status
+
 - **K8s Pods:** Running ✅
 - **ExternalSecret:** Deployed ✅
 - **Database:** Migrated ✅

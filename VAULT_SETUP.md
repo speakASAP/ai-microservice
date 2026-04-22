@@ -16,10 +16,12 @@ Phase 2 introduces the `LOGGING_SERVICE_URL` environment variable for structured
 **Vault Key:** `LOGGING_SERVICE_URL`
 
 **Values:**
+
 - **Development/K8s:** `http://logging-microservice:3367`
 - **Production:** `https://logging.alfares.cz`
 
 **ExternalSecret Configuration:**
+
 ```yaml
 # File: k8s/external-secret.yaml (already updated)
 - secretKey: LOGGING_SERVICE_URL
@@ -70,14 +72,19 @@ env:
 
 1. **Update Vault** (as shown above) with the LOGGING_SERVICE_URL value
 2. **Apply ExternalSecret** to sync the value:
+
    ```bash
    kubectl apply -f k8s/external-secret.yaml
    ```
+
 3. **Verify Secret** was created:
+
    ```bash
    kubectl get secret ai-microservice-secret -n statex-apps -o yaml
    ```
+
 4. **Restart pods** to pick up the new secret:
+
    ```bash
    kubectl rollout restart deployment/ai-microservice -n statex-apps
    ```

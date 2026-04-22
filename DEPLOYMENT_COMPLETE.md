@@ -10,6 +10,7 @@
 **Status:** ✅ COMPLETE
 
 ### Executed
+
 ```bash
 # Created database
 CREATE DATABASE statex_ai
@@ -24,6 +25,7 @@ psql -h localhost -U dbadmin -d statex_ai < src/database/migrations/002-claude-c
 ```
 
 ### Schema Verification
+
 ```
 ✅ Table: claude_code_jobs
 ✅ Base columns: 19 (original)
@@ -59,11 +61,13 @@ psql -h localhost -U dbadmin -d statex_ai < src/database/migrations/002-claude-c
 **Status:** ✅ CONFIGURED (Awaiting Vault Secret Setup)
 
 ### Files Updated
+
 - ✅ `k8s/external-secret.yaml` — Added `LOGGING_SERVICE_URL` secret binding
 
 ### Current Configuration
 
 **File:** `k8s/external-secret.yaml`
+
 ```yaml
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
@@ -173,6 +177,7 @@ git push origin main
 ## ✅ Deployment Checklist
 
 ### Code Ready
+
 - ✅ All 40 tests passing (20 Phase 1 + 20 Phase 2)
 - ✅ TypeScript: zero errors
 - ✅ Type safety: 100% (no `any` types)
@@ -181,6 +186,7 @@ git push origin main
 - ✅ Documentation: complete
 
 ### Database Ready
+
 - ✅ Migration executed successfully
 - ✅ Schema verified
 - ✅ All new columns present
@@ -188,11 +194,13 @@ git push origin main
 - ✅ Recovery index created
 
 ### Configuration Ready
+
 - ✅ ExternalSecret updated with LOGGING_SERVICE_URL
 - ✅ Vault setup documentation provided
 - ✅ K8s deployment ready
 
 ### Remaining (User-Controlled)
+
 - ⏳ User: Set LOGGING_SERVICE_URL in Vault
 - ⏳ User: Apply ExternalSecret to K8s
 - ⏳ User: Commit and push code
@@ -206,7 +214,7 @@ git push origin main
 |----------|------|--------|-----------------|--------------|
 | POSTGRES_* | DB | .env | localhost:5432 | db-server-postgres:5432 |
 | REDIS_* | Cache | .env/.vault | localhost:6379 | db-server-redis:6379 |
-| LOGGING_SERVICE_URL | External | **Vault** ✅ NEW | http://logging-microservice:3367 | https://logging.alfares.cz |
+| LOGGING_SERVICE_URL | External | **Vault** ✅ NEW | <http://logging-microservice:3367> | <https://logging.alfares.cz> |
 | JWT_SECRET | Auth | Vault | ... | ... |
 | API_KEYS | Auth | Vault | ... | ... |
 
@@ -217,10 +225,12 @@ git push origin main
 ## Files Modified/Created
 
 ### Database
+
 - ✅ `src/database/migrations/001-claude-code-jobs.sql` (initial, executed)
 - ✅ `src/database/migrations/002-claude-code-jobs-retry.sql` (Phase 2, executed)
 
 ### Implementation
+
 - ✅ `src/database/entities/claude-code-job.entity.ts`
 - ✅ `src/claude-code/job-status.enum.ts`
 - ✅ `src/claude-code/claude-code.service.ts`
@@ -230,13 +240,16 @@ git push origin main
 - ✅ `src/claude-code/README.md`
 
 ### Kubernetes
+
 - ✅ `k8s/external-secret.yaml` (updated with LOGGING_SERVICE_URL)
 
 ### Documentation
+
 - ✅ `VAULT_SETUP.md` (new — Vault configuration guide)
 - ✅ `DEPLOYMENT_COMPLETE.md` (this file)
 
 ### Tests
+
 - ✅ All Phase 2 test files (35+ new test cases)
 
 ---
@@ -244,6 +257,7 @@ git push origin main
 ## Next Review
 
 After user completes remaining steps:
+
 1. Confirm Vault secret was set
 2. Verify ExternalSecret synced to K8s
 3. Confirm pod received LOGGING_SERVICE_URL env var

@@ -9,6 +9,7 @@ Async job system for executing Claude Code CLI tasks in isolated git worktrees.
 Submit a code execution job.
 
 **Request:**
+
 ```json
 {
   "taskId": "uuid",
@@ -22,6 +23,7 @@ Submit a code execution job.
 ```
 
 **Response (201):**
+
 ```json
 {
   "jobId": "job-<uuid>",
@@ -36,6 +38,7 @@ Submit a code execution job.
 Poll job status and results.
 
 **Response (executing):**
+
 ```json
 {
   "jobId": "job-<uuid>",
@@ -45,6 +48,7 @@ Poll job status and results.
 ```
 
 **Response (terminal):**
+
 ```json
 {
   "jobId": "job-<uuid>",
@@ -62,7 +66,7 @@ Poll job status and results.
 
 ## Job Lifecycle (Phase 2)
 
-```
+```text
 queued → executing → success
                    → failed        (non-retryable or max retries exceeded)
                    → retrying      (transient error, scheduled for re-execution)
@@ -77,7 +81,7 @@ Retry backoff: attempt 1 → 30s, attempt 2 → 90s, attempt 3 → 270s. Default
 Key events are posted fire-and-forget to `LOGGING_SERVICE_URL/api/logs`:
 
 | Event | Level |
-|-------|-------|
+| ----- | ----- |
 | Claude Code Job Executing | info |
 | Claude Code Job Completed | info |
 | Claude Code Job Retry Scheduled | warn |
@@ -85,6 +89,7 @@ Key events are posted fire-and-forget to `LOGGING_SERVICE_URL/api/logs`:
 | Claude Code Job Failed | error |
 
 **Configuration:** Set environment variable:
+
 ```bash
 export LOGGING_SERVICE_URL=http://logging-microservice:3367
 ```
