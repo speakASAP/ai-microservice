@@ -29,7 +29,7 @@ Read this repo's `BUSINESS.md` → `SYSTEM.md` → `AGENTS.md` → `TASKS.md` �
 - Other Statex services must call this service — never direct LLM provider calls
 - `premium` tier requires human approval — not for unattended/automated use
 - Track API costs per service/business_id in inference logs
-- Model config lives in `litellm_config.yaml` — secrets in `.env` only
+- Model config lives in `litellm_config.yaml` — secrets come from Vault via ESO in K8s; for local dev generate `.env` with `vault-env-gen.sh`
 
 ### Consumers
 
