@@ -60,7 +60,7 @@ After updating, the `.env` file should have:
 ## Related Files
 
 - `k8s/external-secret.yaml` — Kubernetes vault binding (already updated)
-- `VAULT_SETUP.md` — Vault configuration guide
+- `shared/docs/VAULT.md` — Vault configuration guide
 - `src/claude-code/logging.client.ts` — Implementation using this variable
 - `src/claude-code/README.md` — Documentation of logging integration
 

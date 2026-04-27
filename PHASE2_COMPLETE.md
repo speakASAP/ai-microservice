@@ -41,13 +41,13 @@
 
 - ✅ ExternalSecret updated: LOGGING_SERVICE_URL binding added
 - ✅ Vault path: `secret/prod/ai-microservice`
-- ✅ Configuration guide: VAULT_SETUP.md created
+- ✅ Configuration guide: shared/docs/VAULT.md created
 
 ### ✅ Documentation
 
 - ✅ Implementation README: Updated with Phase 2 features
 - ✅ Deployment guide: DEPLOYMENT_COMPLETE.md
-- ✅ Vault setup guide: VAULT_SETUP.md
+- ✅ Vault setup guide: shared/docs/VAULT.md
 - ✅ Environment variables guide: ENV_UPDATES_PHASE2.md
 - ✅ This summary: PHASE2_COMPLETE.md
 
@@ -103,7 +103,7 @@ async onApplicationBootstrap() {
 - `src/database/migrations/002-claude-code-jobs-retry.sql` — Phase 2 database migration
 - `src/claude-code/logging.client.ts` — Logging client service
 - `test/claude-code/logging.client.spec.ts` — Logging client tests
-- `VAULT_SETUP.md` — Kubernetes Vault configuration guide
+- `shared/docs/VAULT.md` — Kubernetes Vault configuration guide
 - `DEPLOYMENT_COMPLETE.md` — Deployment checklist
 - `ENV_UPDATES_PHASE2.md` — Environment variable documentation
 - `PHASE2_COMPLETE.md` — This file
@@ -148,7 +148,7 @@ async onApplicationBootstrap() {
 
 - [x] K8s ExternalSecret updated: LOGGING_SERVICE_URL binding
 - [x] Vault path documented: `secret/prod/ai-microservice`
-- [x] Setup guide created: VAULT_SETUP.md
+- [x] Setup guide created: shared/docs/VAULT.md
 - [x] Environment variables documented: ENV_UPDATES_PHASE2.md
 
 ### ⏳ Remaining User Actions
@@ -290,7 +290,7 @@ Type Safety:    100% ✅
 |------|---------|--------|
 | `PHASE2_COMPLETE.md` | This summary | ✅ |
 | `DEPLOYMENT_COMPLETE.md` | Deployment checklist | ✅ |
-| `VAULT_SETUP.md` | Kubernetes Vault guide | ✅ |
+| `shared/docs/VAULT.md` | Kubernetes Vault guide | ✅ |
 | `ENV_UPDATES_PHASE2.md` | .env variable guide | ✅ |
 | `src/claude-code/README.md` | Implementation docs | ✅ |
 

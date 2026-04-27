@@ -91,7 +91,7 @@
 ✅ Deployment Docs
    - PHASE2_COMPLETE.md (this series)
    - DEPLOYMENT_COMPLETE.md
-   - VAULT_SETUP.md
+   - shared/docs/VAULT.md
    - ENV_UPDATES_PHASE2.md
 ```
 
@@ -219,7 +219,7 @@ git add \
   src/claude-code/logging.client.ts \
   src/claude-code/README.md \
   k8s/external-secret.yaml \
-  VAULT_SETUP.md \
+  shared/docs/VAULT.md \
   DEPLOYMENT_COMPLETE.md \
   ENV_UPDATES_PHASE2.md \
   PHASE2_COMPLETE.md \
@@ -338,7 +338,7 @@ Three simple user actions remain:
 |----------|---------|----------|
 | PHASE2_COMPLETE.md | Full implementation summary | ai-microservice/ |
 | DEPLOYMENT_COMPLETE.md | Detailed deployment checklist | ai-microservice/ |
-| VAULT_SETUP.md | Kubernetes Vault configuration | ai-microservice/ |
+| shared/docs/VAULT.md | Kubernetes Vault configuration | ai-microservice/ |
 | ENV_UPDATES_PHASE2.md | Environment variable guide | ai-microservice/ |
 | DEPLOYMENT_STATUS.md | This file | ai-microservice/ |
 | src/claude-code/README.md | Feature documentation | src/claude-code/ |

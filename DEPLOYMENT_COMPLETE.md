@@ -151,7 +151,7 @@ git add \
   src/claude-code/logging.client.ts \
   src/claude-code/README.md \
   k8s/external-secret.yaml \
-  VAULT_SETUP.md \
+  shared/docs/VAULT.md \
   test/claude-code/
 
 # Commit
@@ -245,7 +245,7 @@ git push origin main
 
 ### Documentation
 
-- ✅ `VAULT_SETUP.md` (new — Vault configuration guide)
+- ✅ `shared/docs/VAULT.md` (new — Vault configuration guide)
 - ✅ `DEPLOYMENT_COMPLETE.md` (this file)
 
 ### Tests

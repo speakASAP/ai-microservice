@@ -54,7 +54,7 @@
 
 ### Vault Configuration
 
-- **VAULT_SETUP.md** — Complete Vault setup guide
+- **shared/docs/VAULT.md** — Complete Vault setup guide
   - Authentication methods
   - Secret storage commands
   - K8s auto-sync verification
@@ -153,7 +153,7 @@
 → Check QUICK_STATUS.md or STATUS_2026-04-20.md
 
 **...how to deploy**
-→ Read DEPLOYMENT_STATUS.md or VAULT_SETUP.md
+→ Read DEPLOYMENT_STATUS.md or shared/docs/VAULT.md
 
 **...the implementation**
 → See src/claude-code/README.md or claude-code/*.ts
@@ -171,7 +171,7 @@
 | STATUS_2026-04-20.md | Status | 4 pages | Current state |
 | PHASE2_COMPLETE.md | Summary | 6 pages | Full implementation |
 | DEPLOYMENT_COMPLETE.md | Checklist | 4 pages | Deployment steps |
-| VAULT_SETUP.md | Guide | 3 pages | Vault configuration |
+| shared/docs/VAULT.md | Guide | 3 pages | Vault configuration |
 | DEPLOYMENT_STATUS.md | Report | 5 pages | Detailed status |
 | FINAL_DEPLOYMENT_STATUS.md | Summary | 3 pages | Session summary |
 | ENV_UPDATES_PHASE2.md | Guide | 2 pages | Environment vars |
