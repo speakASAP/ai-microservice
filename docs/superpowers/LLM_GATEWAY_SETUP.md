@@ -168,3 +168,4 @@ docker exec ai-microservice-litellm-green python3 -c \
 ```bash
 # See docs/model-tier-endpoints.md for full curl; use model_tier free|cheap|smart
 ```
+

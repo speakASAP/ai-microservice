@@ -1,226 +1,84 @@
 # AI Microservice
 
-Centralized AI processing service for the Statex microservices ecosystem. Provides intelligent analysis, content generation, and prototype creation services through multiple AI agents.
+Centralized AI processing service for the Statex ecosystem. Routes LLM calls by model tier, provides NLP, ASR, Document AI, and prototype generation.
+
+**Stack**: NestJS · LiteLLM · Ollama · OpenRouter · Gemini — see `SYSTEM.md`
 
 ## Features
 
-- ✅ **AI Orchestrator** - Central coordination for all AI operations
-- ✅ **NLP Service** - Text analysis and business plan generation
-- ✅ **ASR Service** - Speech-to-text conversion
-- ✅ **Document AI** - File analysis and OCR
-- ✅ **Prototype Generator** - Website and application prototype creation
-- ✅ **Template Repository** - Template management
-- ✅ **Free AI Service** - Free AI models integration
-- ✅ **AI Workers** - Background AI processing
-- ✅ **Gemini AI Service** - Google Gemini AI integration
-- ✅ **Data Viz Service** - Data visualization
-- ✅ **Email-triage agents** - Ingest (validate/normalize) and Classifier (intent + confidence) for [agentic-email-processing-system](../agentic-email-processing-system/)
-- ✅ **Shared Database** - All AI agents data stored in shared database-server
-- ✅ **Centralized Logging** - All logs sent to logging-microservice
-- ✅ **Blue/Green Deployment** - Zero-downtime deployments
+- AI Orchestrator — central coordination, `POST /ai/complete` (LLM gateway)
+- NLP, ASR, Document AI, Prototype Generator, Template Repository
+- Free AI Service, AI Workers, Gemini AI Service, Data Viz Service
+- Email-triage agents (Ingest, Classifier, Extractor, Decider) for agentic-email-processing-system
+- Centralized Logging, Shared Database, Blue/Green Deployment
 
-## Technology Stack
+## Ports
 
-- **Framework**: FastAPI (Python)
-- **Database**: PostgreSQL (via shared database-server)
-- **Cache**: Redis (via shared database-server)
-- **Logging**: External centralized logging microservice
-- **Network**: nginx-network (shared Docker network)
+| Service | Port | Env var |
+|---------|------|---------|
+| AI Orchestrator | 3380 | `AI_ORCHESTRATOR_PORT` |
+| NLP Service | 3381 | `NLP_SERVICE_PORT` |
+| ASR Service | 3382 | `ASR_SERVICE_PORT` |
+| Document AI | 3383 | `DOCUMENT_AI_PORT` |
+| Prototype Generator | 3384 | `PROTOTYPE_GENERATOR_PORT` |
+| Template Repository | 3385 | `TEMPLATE_REPOSITORY_PORT` |
+| Free AI Service | 3386 | `FREE_AI_SERVICE_PORT` |
+| AI Workers | 3387 | `AI_WORKERS_PORT` |
+| Gemini AI Service | 3388 | `GEMINI_AI_SERVICE_PORT` |
+| Data Viz Service | 3389 | `DATA_VIZ_SERVICE_PORT` |
+| LiteLLM proxy | 4000 (internal) | `LITELLM_BASE_URL` |
+| Ollama | 11434 (internal) | `OLLAMA_API_BASE` |
 
-## Port Configuration
+**LiteLLM** routes `free`/`cheap`/`smart` tiers; config in `litellm_config.yaml`. **Ollama** built from `services/ollama/Dockerfile`; after first deploy pull weights: `docker exec -it ai-microservice-ollama-green ollama pull qwen2.5-coder:0.5b`. Cold-start order: `ollama` → `litellm` → `free-ai-service` → `backend`.
 
-**Port Range**: 338x (shared microservices)
+## Environment / Secrets
 
-| Service | Host Port | Container Port | .env Variable | Description |
-| ------- | --------- | -------------- | ------------- | ----------- |
-| **AI Orchestrator** | `${AI_ORCHESTRATOR_PORT:-3380}` | `${AI_ORCHESTRATOR_PORT:-3380}` | `AI_ORCHESTRATOR_PORT` | Central AI coordination |
-| **NLP Service** | `${NLP_SERVICE_PORT:-3381}` | `${NLP_SERVICE_PORT:-3381}` | `NLP_SERVICE_PORT` | Text analysis and generation |
-| **ASR Service** | `${ASR_SERVICE_PORT:-3382}` | `${ASR_SERVICE_PORT:-3382}` | `ASR_SERVICE_PORT` | Speech-to-text conversion |
-| **Document AI** | `${DOCUMENT_AI_PORT:-3383}` | `${DOCUMENT_AI_PORT:-3383}` | `DOCUMENT_AI_PORT` | Document processing |
-| **Prototype Generator** | `${PROTOTYPE_GENERATOR_PORT:-3384}` | `${PROTOTYPE_GENERATOR_PORT:-3384}` | `PROTOTYPE_GENERATOR_PORT` | Website prototype creation |
-| **Template Repository** | `${TEMPLATE_REPOSITORY_PORT:-3385}` | `${TEMPLATE_REPOSITORY_PORT:-3385}` | `TEMPLATE_REPOSITORY_PORT` | Template management |
-| **Free AI Service** | `${FREE_AI_SERVICE_PORT:-3386}` | `${FREE_AI_SERVICE_PORT:-3386}` | `FREE_AI_SERVICE_PORT` | Free AI operations |
-| **AI Workers** | `${AI_WORKERS_PORT:-3387}` | `${AI_WORKERS_PORT:-3387}` | `AI_WORKERS_PORT` | Background AI processing |
-| **Gemini AI Service** | `${GEMINI_AI_SERVICE_PORT:-3388}` | `${GEMINI_AI_SERVICE_PORT:-3388}` | `GEMINI_AI_SERVICE_PORT` | Google Gemini AI integration |
-| **Data Viz Service** | `${DATA_VIZ_SERVICE_PORT:-3389}` | `${DATA_VIZ_SERVICE_PORT:-3389}` | `DATA_VIZ_SERVICE_PORT` | Data visualization |
+Secrets managed by Vault via Kubernetes ESO (`secret/prod/ai-microservice`). Local dev: `./scripts/vault-env-gen.sh` generates `.env`.
 
-**Note**: All ports are configured in `ai-microservice/.env`. The values shown are defaults.
-
-### LLM gateway (LiteLLM + Docker Ollama)
-
-- **LiteLLM** listens on **port 4000 inside the Docker network** (not in the 338x table). Orchestrator uses `LITELLM_BASE_URL` + `LITELLM_MASTER_KEY`; **free-ai-service** uses the same vars when set and routes `/analyze` through LiteLLM only (tiers `free` / `cheap` / `smart` from `litellm_config.yaml`).
-- **Ollama** is a compose service built from `services/ollama/Dockerfile` (image `ai-microservice-ollama:${OLLAMA_IMAGE_TAG:-local}`) with a named volume; LiteLLM reaches it via `OLLAMA_API_BASE`. `scripts/deploy.sh` uses nginx-microservice `prepare-green-smart.sh`, which **sequentially** builds all compose services including `ollama`. After first deploy, pull models the config references, e.g. `docker exec -it ai-microservice-ollama-green ollama pull qwen2.5-coder:0.5b` (adjust container name to your active color).
-- **Cold start / debugging** (see `docs/superpowers/plans/2026-04-12-unified-llm-gateway-stages.md`): start or recreate **`ollama` → `litellm` → `free-ai-service` → `backend`** so DNS and env stay consistent.
-
-## Access Methods
-
-### Production Access (HTTPS)
+## Access
 
 ```bash
-# AI Orchestrator
+# Production
 curl https://ai.alfares.cz/health
-```
 
-### Docker Network Access
+# Docker network (from container on nginx-network)
+curl http://ai-microservice:3380/health
 
-```bash
-# From within a container on nginx-network
-curl http://ai-microservice:${AI_ORCHESTRATOR_PORT:-3380}/health
-```
-
-### SSH Access
-
-```bash
-# Connect to production server
-ssh statex
-
-# Access microservice directory
-cd /home/statex/ai-microservice
-```
-
-## Environment Configuration
-
-Copy `.env.example` to `.env` and configure:
-
-```bash
-# Service Domain - Used by nginx-microservice for auto-registry (required for correct domain detection)
-DOMAIN=ai.alfares.cz
-
-# Service Name - Used for logging and service identification
-SERVICE_NAME=ai-microservice
-
-# Port Configuration
-AI_ORCHESTRATOR_PORT=3380
-NLP_SERVICE_PORT=3381
-# ... etc
-
-# Database (Shared)
-DB_HOST=db-server-postgres
-DB_PORT=5432
-DB_USER=dbadmin
-DB_PASSWORD=<password>
-DB_NAME=statex_ai
-
-# Redis (Shared)
-REDIS_HOST=db-server-redis
-REDIS_SERVER_PORT=6379
-
-# Logging Service (Shared)
-LOGGING_SERVICE_URL=https://logging.alfares.cz
-
-# Notification Service (Shared)
-NOTIFICATION_SERVICE_URL=https://notifications.alfares.cz
-
-# AI API Keys
-OPENROUTER_API_KEY=<key>
-GEMINI_API_KEY=<key>
+# SSH to server
+ssh statex && cd /home/statex/ai-microservice
 ```
 
 ## Quick Start
 
-### Start Services
-
 ```bash
-cd ai-microservice
 ./scripts/start.sh
-```
-
-### Check Status
-
-```bash
 ./scripts/status.sh
-```
-
-### Test AI Services (health and LLM accessibility)
-
-Runs health checks for all AI agents (orchestrator, free-ai-service, nlp, asr, document-ai, prototype-generator, template-repository, ai-workers, gemini-ai-service, data-viz-service), verifies OpenRouter accessibility via free-ai-service `/models`, and a minimal POST `/analyze` to confirm LLM response:
-
-```bash
-./scripts/test-ai-services.py
-```
-
-From host use default `localhost`; override with `AI_SERVICE_HOST=localhost`. Ports are read from `.env` (defaults: 3380–3389). After deploy, run with `AI_ORCHESTRATOR_BASE_URL=https://ai.alfares.cz` (or your `DOMAIN`) to test the deployed orchestrator and email-triage full pipeline only. Exit code 0 if all checks pass, 1 otherwise. `deploy.sh` runs this script automatically after a successful deployment.
-
-### Stop Services
-
-```bash
 ./scripts/stop.sh
-```
-
-### View Logs
-
-```bash
 docker compose -f docker-compose.blue.yml logs -f
+./scripts/deploy.sh
 ```
 
-## API Endpoints
+## API Endpoints — AI Orchestrator
 
-### AI Orchestrator
-
-- **Model tier (LLM gateway):** `POST /ai/complete` — JSON body includes `model_tier`, `system_prompt`, `user_prompt`; JWT required. Full request/response examples: [`docs/model-tier-endpoints.md`](docs/model-tier-endpoints.md).
-- `POST /api/process-submission` - Process user submission
-- `GET /api/status/{submission_id}` - Check processing status
-- `GET /api/results/{submission_id}` - Get final results
-- `GET /health` - Health check
-- `POST /api/shop-assistant/transcribe` - Shop-assistant ASR (voice to text)
-- `POST /api/shop-assistant/refine-query` - Shop-assistant COMMUNICATION agent (refine user text)
--,`POST /api/shop-assistant/search` - Shop-assistant SEARCH agent (external search)
--,`POST /api/shop-assistant/format-presentation` - Shop-assistant PRESENTATION agent (format results)
--,`POST /api/shop-assistant/compare-prices` - Shop-assistant COMPARISON agent (price/priorities comparison)
--,`POST /api/shop-assistant/extract-location` - Shop-assistant LOCATION agent (delivery region)
-- `POST /api/email-triage/ingest` - Email-triage Ingest (validate/normalize per email-schema)
-- `POST /api/email-triage/classify` - Email-triage Classifier (intent + confidence; agentic-email-processing-system). Optional: set `EMAIL_TRIAGE_LLM_CLASSIFIER=true` to use LLM (free-ai-service/OpenRouter); otherwise rule-based.
-- `POST /api/email-triage/extract` - Email-triage Extractor (entities from payload)
-- `POST /api/email-triage/decide` - Email-triage Action/Decider (action per routing-rules). Optional: set `EMAIL_TRIAGE_LLM_DECIDER=true` to use LLM; otherwise rule-based.
-- `POST /api/v1/translate` - Stable translation API for service-to-service integrations (e.g. SpeakASAP content-service)
-
-```
+- `POST /ai/complete` — LLM gateway (`model_tier`, `system_prompt`, `user_prompt`, `output_schema?`, `max_tokens?`, `correlation_id?`) · JWT required · see `docs/model-tier-endpoints.md`
+- `POST /api/process-submission` · `GET /api/status/{id}` · `GET /api/results/{id}` · `GET /health`
+- `POST /api/shop-assistant/transcribe` — ASR
+- `POST /api/shop-assistant/refine-query` — COMMUNICATION agent
+- `POST /api/shop-assistant/search` — SEARCH agent
+- `POST /api/shop-assistant/format-presentation` — PRESENTATION agent
+- `POST /api/shop-assistant/compare-prices` — COMPARISON agent
+- `POST /api/shop-assistant/extract-location` — LOCATION agent
+- `POST /api/email-triage/ingest` — validate/normalize email
+- `POST /api/email-triage/classify` — intent + confidence (`EMAIL_TRIAGE_LLM_CLASSIFIER=true` for LLM)
+- `POST /api/email-triage/extract` — entity extraction
+- `POST /api/email-triage/decide` — action decision (`EMAIL_TRIAGE_LLM_DECIDER=true` for LLM)
+- `POST /api/v1/translate` — stable translation API
 
 ## Shared Services
 
-### Database
+- **Database**: `db-server-postgres:5432`, db `statex_ai`; Redis at `db-server-redis`
+- **Logging**: `logging-microservice:3367` (prod: `https://logging.alfares.cz`); fallback to local files
 
-All AI agents data, workflows, submissions, and related information are stored in the shared database:
+## Internal Connectivity
 
-- **Database Server**: `db-server-postgres` (Docker network)
-- **Database Name**: `statex_ai`
-- **Connection**: All services connect to shared `db-server-postgres:5432`
-
-### Logging
-
-All services send logs to the centralized logging microservice:
-
-- **Production URL**: `https://logging.alfares.cz`
-- **Docker Network URL**: `http://logging-microservice:3367`
-- **API Endpoint**: `POST /api/logs`
-- **Fallback**: Local log files if logging service unavailable
-
-## Blue/Green Deployment
-
-The microservice supports blue/green deployments:
-
-- **Blue**: `docker-compose.blue.yml`
-- **Green**: `docker-compose.green.yml`
-
-Switch between deployments by updating nginx configuration.
-
-## Documentation
-
-- **Migration Plan**: See `AI_MICROSERVICE_MIGRATION_PLAN.md` in project root
-- **Main README**: See main `README.md` for ecosystem overview
-
-## Internal connectivity (ai-microservice alias)
-
-Containers on `nginx-network` (e.g. agentic-email-processing-system) call the orchestrator at `http://ai-microservice:3380`. The hostname `ai-microservice` is a Docker network alias on the **backend** service of the active blue/green stack. **Only one stack (blue or green) should be running** after deploy; deploy-smart.sh stops the inactive stack. If both stacks run, two containers share the alias and DNS may resolve to the wrong or unhealthy one, causing timeouts. If you see "AI service unreachable ... timeout" from AEPS, ensure only one ai-microservice stack is up and that `curl http://ai-microservice:3380/health` from a container on nginx-network succeeds.
-
-## Support
-
-For issues or questions:
-
-- Check service logs: `docker compose logs <service-name>`
-- Verify network connectivity: `docker network inspect nginx-network`
-- Check health endpoints: `curl https://ai.alfares.cz/health`
-
----
-
-**AI Microservice** - Intelligent business solutions powered by AI agents 🚀
+Containers on `nginx-network` call the orchestrator at `http://ai-microservice:3380`. The hostname is a Docker alias on the active blue/green backend — only one stack should run at a time. If consumers report timeouts, confirm: `curl http://ai-microservice:3380/health` from within a container on nginx-network.
