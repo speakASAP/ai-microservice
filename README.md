@@ -45,7 +45,7 @@ curl https://ai.alfares.cz/health
 curl http://ai-microservice:3380/health
 
 # SSH to server
-ssh statex && cd /home/statex/ai-microservice
+ssh alfares && cd ~/Documents/Github/ai-microservice
 ```
 
 ## Quick Start
