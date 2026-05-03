@@ -1,8 +1,6 @@
 # CLAUDE.md (ai-microservice)
 
-Ecosystem defaults: sibling [`../CLAUDE.md`](../CLAUDE.md) and [`../shared/docs/PROJECT_AGENT_DOCS_STANDARD.md`](../shared/docs/PROJECT_AGENT_DOCS_STANDARD.md).
-
-Read this repo's `BUSINESS.md` → `SYSTEM.md` → `AGENTS.md` → `TASKS.md` → `STATE.json` first.
+→ Ecosystem: [../shared/CLAUDE.md](../shared/CLAUDE.md) | Reading order: `BUSINESS.md` → `SYSTEM.md` → `AGENTS.md` → `TASKS.md` → `STATE.json`
 
 ---
 
@@ -15,11 +13,4 @@ Read this repo's `BUSINESS.md` → `SYSTEM.md` → `AGENTS.md` → `TASKS.md` �
 **Consumers**: business-orchestrator, statex, shop-assistant, crypto-ai-agent, agentic-email — see `BUSINESS.md`  
 **Secrets**: Vault via ESO (`secret/prod/ai-microservice`); local dev: `./scripts/vault-env-gen.sh`
 
-### Quick ops
-
-```bash
-curl http://ai-microservice:3380/health
-./scripts/orch-test-ai.sh free
-docker compose logs -f
-./scripts/deploy.sh
-```
+**Ops**: `curl http://ai-microservice:3380/health` · `kubectl logs -n statex-apps -l app=ai-microservice -f` · `./scripts/deploy.sh`
