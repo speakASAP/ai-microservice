@@ -14,8 +14,8 @@ NestJS. Modules: Orchestrator, NLP, ASR, Document AI, Prototype Generator, Free 
 |-----------|-----|
 | database-server | db-server-postgres:5432 + Redis |
 | logging-microservice | logging-microservice:3367 |
-| Ollama | Compose service `ollama` (build `services/ollama/Dockerfile`, `OLLAMA_HOST=0.0.0.0:11434`); per-color container `ai-microservice-ollama(-blue|-green)`. Override with `OLLAMA_API_BASE` (e.g. host Ollama). |
-| LiteLLM proxy | `ai-microservice-litellm(-blue|-green):4000` — routes `free` / `cheap` / `smart`; internal Docker only (see `litellm_config.yaml`) |
+| Ollama | Sidecar pod in K8s. Override with `OLLAMA_API_BASE` env var if using external Ollama. |
+| LiteLLM proxy | Sidecar pod `:4000` — routes `free` / `cheap` / `smart` tiers (see `litellm_config.yaml`) |
 
 ## Current State
 <!-- AI-maintained -->
