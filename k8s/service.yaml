@@ -14,4 +14,4 @@ spec:
     - protocol: TCP
       port: 3380
       targetPort: 3380
-      name: http
+      name: app
