@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ClaudeCodeModule } from './claude-code/claude-code.module';
 import { ClaudeCodeJob } from './database/entities/claude-code-job.entity';
+import { VoiceModule } from './voice/voice.module';
 
 /**
  * Root application module.
@@ -21,6 +22,7 @@ import { ClaudeCodeJob } from './database/entities/claude-code-job.entity';
       logging: process.env.DEBUG_SQL === 'true',
     }),
     ClaudeCodeModule,
+    VoiceModule,
   ],
   controllers: [],
   providers: [],
