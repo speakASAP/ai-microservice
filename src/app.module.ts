@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ClaudeCodeModule } from './claude-code/claude-code.module';
 import { ClaudeCodeJob } from './database/entities/claude-code-job.entity';
 import { VoiceModule } from './voice/voice.module';
+import { TaskModule } from './task/task.module';
 
 /**
  * Root application module.
@@ -23,6 +24,7 @@ import { VoiceModule } from './voice/voice.module';
     }),
     ClaudeCodeModule,
     VoiceModule,
+    TaskModule,
   ],
   controllers: [],
   providers: [],
