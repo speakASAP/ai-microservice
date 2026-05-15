@@ -50,6 +50,9 @@ def _is_public_path(path: str) -> bool:
     # Service-to-service translation endpoint used by content-service.
     if path == "/api/v1/translate":
         return True
+    # Internal task draft endpoint used by school-committee (cluster-internal only).
+    if path == "/task/draft":
+        return True
     return False
 
 

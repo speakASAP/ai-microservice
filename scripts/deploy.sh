@@ -70,7 +70,7 @@ echo -e "${NC}"
 preflight_service_health
 
 echo -e "${YELLOW}[1/5] Building image: ${IMAGE}...${NC}"
-docker build -t "$IMAGE" -t "$IMAGE_LATEST" "$PROJECT_ROOT"
+docker build --no-cache -t "$IMAGE" -t "$IMAGE_LATEST" "$PROJECT_ROOT"
 echo -e "${GREEN}✅ Image built${NC}"
 
 # ── Phase 2: Push to local registry ──────────────────────────

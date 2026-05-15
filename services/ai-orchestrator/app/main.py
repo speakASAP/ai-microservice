@@ -279,9 +279,10 @@ class TranslateRequest(BaseModel):
 
 FREE_MODEL_FALLBACKS = [
     "minimax/minimax-m2.5:free",
-    "google/gemma-3-27b-it:free",
+    "openai/gpt-oss-20b:free",
+    "nvidia/nemotron-nano-12b-v2-vl:free",
     "meta-llama/llama-3.3-70b-instruct:free",
-    "google/gemma-3-12b-it:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
 ]
 
 def _free_model_list() -> list:
@@ -1179,6 +1180,128 @@ async def metrics():
     return {"message": "Metrics endpoint disabled", "status": "disabled"}
 
 
+class TaskDraftRequest(BaseModel):
+    transcript: Optional[str] = None
+    textNote: Optional[str] = None
+    language: Optional[str] = "cs"
+
+class TaskDraftResponse(BaseModel):
+    title: str
+    description: str
+    priority: str  # "low" | "normal" | "high"
+    deadline: Optional[str] = None
+    modelTier: str
+
+_TASK_DRAFT_SYSTEM = (
+    "You are a school task assistant. Given a voice transcript and/or text note from a teacher, "
+    "extract and reformat into a structured volunteer task for parents.\n"
+    "Output ONLY valid JSON (no markdown, no explanation): "
+    '{ "title": string, "description": string, "priority": "low"|"normal"|"high", "deadline"?: string }\n'
+    "- title: concise, max 80 chars\n"
+    "- description: clear, actionable, 2-5 sentences\n"
+    "- priority: \"low\" | \"normal\" | \"high\"\n"
+    "- deadline: ISO date string (YYYY-MM-DD) if mentioned, omit otherwise\n"
+    "- Language: match input language (default Czech)"
+)
+
+@app.post("/task/draft", response_model=TaskDraftResponse)
+async def task_draft(request: TaskDraftRequest):
+    """
+    Generate a structured task draft from a teacher's transcript/note.
+    Internal endpoint — no JWT required (cluster-internal only).
+    Tries LiteLLM first; falls back to OpenRouter free models if unavailable.
+    """
+    if not request.transcript and not request.textNote:
+        raise HTTPException(status_code=422, detail="At least one of transcript or textNote is required")
+
+    user_content = "\n".join(filter(None, [
+        f"Transcript: {request.transcript}" if request.transcript else "",
+        f"Note: {request.textNote}" if request.textNote else "",
+    ]))
+    messages = [
+        {"role": "system", "content": _TASK_DRAFT_SYSTEM},
+        {"role": "user", "content": user_content},
+    ]
+    fallback_title = (request.transcript or request.textNote or "Nový úkol")[:80]
+
+    def _parse_response(raw: str, model_tier: str) -> TaskDraftResponse:
+        stripped = raw.strip()
+        if stripped.startswith("```"):
+            stripped = "\n".join(stripped.split("\n")[1:])
+            if stripped.endswith("```"):
+                stripped = stripped[:-3].strip()
+        try:
+            parsed = json.loads(stripped)
+            priority = parsed.get("priority", "normal")
+            if priority not in ("low", "normal", "high"):
+                priority = "normal"
+            return TaskDraftResponse(
+                title=parsed.get("title") or fallback_title,
+                description=parsed.get("description") or raw,
+                priority=priority,
+                deadline=parsed.get("deadline"),
+                modelTier=model_tier,
+            )
+        except (json.JSONDecodeError, ValueError):
+            return TaskDraftResponse(
+                title=fallback_title,
+                description=raw or request.transcript or request.textNote or "",
+                priority="normal",
+                modelTier=model_tier,
+            )
+
+    # Try LiteLLM first (smart tier)
+    litellm_url = _litellm_chat_completions_url()
+    if litellm_url:
+        master = (os.getenv("LITELLM_MASTER_KEY") or "").strip()
+        if master:
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=8.0)) as client:
+                    resp = await client.post(
+                        litellm_url,
+                        json={"model": "smart", "messages": messages, "temperature": 0.3, "max_tokens": 500},
+                        headers={"Authorization": f"Bearer {master}", "Content-Type": "application/json"},
+                    )
+                if resp.status_code == 200:
+                    raw = (resp.json().get("choices", [{}])[0].get("message", {}) or {}).get("content", "")
+                    return _parse_response(raw, "smart")
+                logger.warning("task_draft litellm non-200, falling back to openrouter", status=resp.status_code)
+            except httpx.TimeoutException:
+                logger.warning("task_draft litellm timeout, falling back to openrouter")
+            except Exception as e:
+                logger.warning("task_draft litellm error, falling back to openrouter", err=str(e))
+
+    # Fallback: OpenRouter free models
+    api_key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
+    api_base = os.getenv("OPENROUTER_API_BASE", "https://openrouter.ai/api/v1")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="No AI backend available (LITELLM_BASE_URL and OPENROUTER_API_KEY both missing)")
+
+    or_headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://strilkove.cz",
+        "X-Title": "school-committee",
+    }
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=8.0)) as client:
+        for model_name in _free_model_list()[:3]:
+            try:
+                resp = await client.post(
+                    f"{api_base}/chat/completions",
+                    json={"model": model_name, "messages": messages, "temperature": 0.3, "max_tokens": 500},
+                    headers=or_headers,
+                )
+                if resp.status_code == 200:
+                    raw = (resp.json().get("choices", [{}])[0].get("message", {}) or {}).get("content", "")
+                    return _parse_response(raw, "cheap")
+                logger.warning("task_draft openrouter skip", model=model_name, status=resp.status_code)
+            except httpx.TimeoutException:
+                logger.warning("task_draft openrouter timeout", model=model_name)
+                continue
+
+    raise HTTPException(status_code=503, detail="All AI backends failed for task draft")
+
+
 @app.post("/ai/complete")
 async def ai_complete(request: AiCompleteRequest, req: Request):
     """
@@ -1366,16 +1489,29 @@ async def ai_complete(request: AiCompleteRequest, req: Request):
                 )
                 continue
 
-            if resp.status_code in (429, 503):
-                last_error = f"{model_name} rate-limited ({resp.status_code})"
+            if resp.status_code in (400, 401, 402, 404, 429, 503):
+                last_error = f"{model_name} skip ({resp.status_code}): {resp.text[:120]}"
+                logger.warning(
+                    "ai_complete skip_model",
+                    cid=cid,
+                    model=model_name,
+                    idx=idx,
+                    status=resp.status_code,
+                    body=resp.text[:120],
+                )
                 continue  # try next model
 
-            if resp.status_code == 400:
-                last_error = f"{model_name} rejected request (400): {resp.text[:150]}"
-                continue  # model may not support system prompts or structured output; try next
-
             if resp.status_code != 200:
-                raise HTTPException(status_code=502, detail=f"OpenRouter error {resp.status_code}: {resp.text[:300]}")
+                last_error = f"{model_name} unexpected ({resp.status_code}): {resp.text[:120]}"
+                logger.error(
+                    "ai_complete unexpected_status",
+                    cid=cid,
+                    model=model_name,
+                    idx=idx,
+                    status=resp.status_code,
+                    body=resp.text[:120],
+                )
+                continue  # skip and try next model instead of raising
 
             data = resp.json()
             raw_text = (data.get("choices", [{}])[0].get("message", {}) or {}).get("content") or ""
