@@ -33,11 +33,17 @@ spec:
                 name: ai-microservice-config
             - secretRef:
                 name: ai-microservice-secret
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 3380
+            failureThreshold: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /health
               port: 3380
-            initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 3
             timeoutSeconds: 5
