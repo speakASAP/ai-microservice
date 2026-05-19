@@ -27,7 +27,7 @@ services:
       - LOGGING_SERVICE_API_PATH=${LOGGING_SERVICE_API_PATH:-/api/logs}
       - LITELLM_BASE_URL=http://ai-microservice-litellm-green:4000
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-}
-      - OLLAMA_API_BASE=${OLLAMA_API_BASE:-http://ai-microservice-ollama-green:11434}
+      - OLLAMA_API_BASE=${OLLAMA_API_BASE:-http://ai-microservice-ollama-green:11435}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - OPENROUTER_API_BASE=${OPENROUTER_API_BASE:-https://openrouter.ai/api/v1}
     extra_hosts:
@@ -384,6 +384,10 @@ services:
     image: ai-microservice-ollama:${OLLAMA_IMAGE_TAG:-local}
     container_name: ai-microservice-ollama-green
     restart: unless-stopped
+    ports:
+      - "${OLLAMA_DOCKER_PORT:-11435}:${OLLAMA_DOCKER_PORT:-11435}"
+    environment:
+      - OLLAMA_HOST=0.0.0.0:${OLLAMA_DOCKER_PORT:-11435}
     volumes:
       - ollama-data-green:/root/.ollama
     networks:
@@ -398,7 +402,7 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-local-dev-key}
-      - OLLAMA_API_BASE=${OLLAMA_API_BASE:-http://ai-microservice-ollama-green:11434}
+      - OLLAMA_API_BASE=${OLLAMA_API_BASE:-http://ai-microservice-ollama-green:11435}
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     extra_hosts:
       - "host.docker.internal:host-gateway"

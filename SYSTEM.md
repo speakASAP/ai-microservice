@@ -14,7 +14,8 @@ NestJS. Modules: Orchestrator, NLP, ASR, Document AI, Prototype Generator, Free 
 |-----------|-----|
 | database-server | db-server-postgres:5432 + Redis |
 | logging-microservice | logging-microservice:3367 |
-| Ollama | Sidecar pod in K8s. Override with `OLLAMA_API_BASE` env var if using external Ollama. |
+| Ollama (Docker) | Port 11435 on host. Sidecar pod in K8s. Controlled by `OLLAMA_DOCKER_PORT` env var (default 11435). `OLLAMA_API_BASE` overrides the internal URL. |
+| Ollama (systemd) | Host port 11434 — separate instance managed by systemd `ollama.service`. |
 | LiteLLM proxy | Sidecar pod `:4000` — routes `free` / `cheap` / `smart` tiers (see `litellm_config.yaml`) |
 
 ## Current State
