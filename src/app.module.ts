@@ -1,14 +1,15 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ClaudeCodeModule } from './claude-code/claude-code.module';
 import { ClaudeCodeJob } from './database/entities/claude-code-job.entity';
+import { InferenceLog } from './database/entities/inference-log.entity';
 import { VoiceModule } from './voice/voice.module';
 import { TaskModule } from './task/task.module';
+import { ServiceIdentityModule } from './service-identity/service-identity.module';
+import { InferenceLogInterceptor } from './service-identity/inference-log.interceptor';
+import { HealthController } from './health.controller';
 
-/**
- * Root application module.
- * Initializes database connection and registers all feature modules.
- */
 @Module({
   imports: [
     TypeOrmModule.forRoot({
@@ -18,15 +19,22 @@ import { TaskModule } from './task/task.module';
       username: process.env.POSTGRES_USER || 'postgres',
       password: process.env.POSTGRES_PASSWORD,
       database: process.env.POSTGRES_DB || 'ai_microservice',
-      entities: [ClaudeCodeJob],
+      entities: [ClaudeCodeJob, InferenceLog],
       synchronize: process.env.NODE_ENV !== 'production',
       logging: process.env.DEBUG_SQL === 'true',
     }),
+    TypeOrmModule.forFeature([InferenceLog]),
+    ServiceIdentityModule,
     ClaudeCodeModule,
     VoiceModule,
     TaskModule,
   ],
-  controllers: [],
-  providers: [],
+  controllers: [HealthController],
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: InferenceLogInterceptor,
+    },
+  ],
 })
 export class AppModule {}
