@@ -6,6 +6,7 @@ import { ClaudeCodeJob } from './database/entities/claude-code-job.entity';
 import { InferenceLog } from './database/entities/inference-log.entity';
 import { VoiceModule } from './voice/voice.module';
 import { TaskModule } from './task/task.module';
+import { AiModule } from './ai/ai.module';
 import { ServiceIdentityModule } from './service-identity/service-identity.module';
 import { InferenceLogInterceptor } from './service-identity/inference-log.interceptor';
 import { HealthController } from './health.controller';
@@ -28,6 +29,7 @@ import { HealthController } from './health.controller';
     ClaudeCodeModule,
     VoiceModule,
     TaskModule,
+    AiModule,
   ],
   controllers: [HealthController],
   providers: [

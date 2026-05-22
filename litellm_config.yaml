@@ -48,3 +48,8 @@ router_settings:
 litellm_settings:
   drop_params: true
   request_timeout: 120
+  success_callback: ["langfuse"]
+  failure_callback: ["langfuse"]
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
