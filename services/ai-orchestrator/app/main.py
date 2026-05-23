@@ -1256,7 +1256,7 @@ async def task_draft(request: TaskDraftRequest):
         master = (os.getenv("LITELLM_MASTER_KEY") or "").strip()
         if master:
             try:
-                async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=8.0)) as client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=3.0)) as client:
                     resp = await client.post(
                         litellm_url,
                         json={"model": "smart", "messages": messages, "temperature": 0.3, "max_tokens": 500},
