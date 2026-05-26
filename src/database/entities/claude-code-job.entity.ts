@@ -31,6 +31,13 @@ export class ClaudeCodeJob {
   @Column('text', { nullable: true })
   validationScript?: string;
 
+  /** `code` = full claude code in worktree; `print` = claude --print (planning / validation) */
+  @Column('varchar', { length: 16, default: 'code', name: 'execution_mode' })
+  executionMode!: 'code' | 'print';
+
+  @Column('varchar', { length: 128, nullable: true })
+  model?: string;
+
   @Column('varchar', { default: 'queued' })
   status!: 'queued' | 'executing' | 'success' | 'failed' | 'timeout' | 'retrying';
 

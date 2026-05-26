@@ -42,7 +42,8 @@ data:
   AI_WORKERS_URL: "http://host.k3s.internal:3387"
   GEMINI_AI_SERVICE_URL: "http://host.k3s.internal:3388"
   DATA_VIZ_SERVICE_URL: "http://host.k3s.internal:3389"
-  LITELLM_BASE_URL: "http://host.k3s.internal:4000"
+  # Host IP (host.k3s.internal does not resolve in all k3s pods)
+  LITELLM_BASE_URL: "http://192.168.88.53:4000"
 
   # External Services
   NOTIFICATION_SERVICE_URL: "https://notifications.alfares.cz"

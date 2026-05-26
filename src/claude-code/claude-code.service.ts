@@ -31,6 +31,9 @@ export class ClaudeCodeService {
     const jobId = `job-${randomUUID()}`;
     const timeoutSeconds = dto.timeoutSeconds || 300;
 
+    const executionMode = dto.executionMode ?? 'code';
+    const model = dto.model ?? (executionMode === 'print' ? process.env.CC_PRINT_MODEL : undefined);
+
     const job = this.jobRepository.create({
       jobId,
       taskId: dto.taskId,
@@ -40,6 +43,8 @@ export class ClaudeCodeService {
       expectedOutcome: dto.expectedOutcome,
       timeoutSeconds,
       validationScript: dto.validationScript,
+      executionMode,
+      model,
       status: 'queued' as JobStatus,
     });
 
@@ -59,6 +64,8 @@ export class ClaudeCodeService {
           expectedOutcome: dto.expectedOutcome,
           timeoutSeconds,
           validationScript: dto.validationScript,
+          executionMode,
+          model,
         },
       );
       this.logger.log(JSON.stringify({

@@ -86,6 +86,9 @@ kubectl apply -f "$PROJECT_ROOT/k8s/external-secret.yaml" -n "${NAMESPACE}"
 kubectl apply -f "$PROJECT_ROOT/k8s/deployment.yaml" -n "${NAMESPACE}"
 kubectl apply -f "$PROJECT_ROOT/k8s/service.yaml" -n "${NAMESPACE}"
 kubectl apply -f "$PROJECT_ROOT/k8s/ingress.yaml" -n "${NAMESPACE}"
+# Legacy drift: bare `env: [{name: LITELLM_BASE_URL}]` shadows ConfigMap and forces OpenRouter-only /ai/complete 503s.
+kubectl patch deployment/"${SERVICE_NAME}" -n "${NAMESPACE}" --type=json \
+  -p='[{"op":"remove","path":"/spec/template/spec/containers/0/env"}]' 2>/dev/null || true
 echo -e "${GREEN}✅ Manifests applied${NC}"
 
 # ── Phase 4: Rollout & Status ────────────────────────────────
@@ -127,6 +130,12 @@ READY_STATE=$(kubectl get pod -n "${NAMESPACE}" "$POD" \
 
 if echo "$READY_STATE" | grep -q "=true"; then
   echo -e "${GREEN}✅ Pod containers ready: ${READY_STATE}${NC}"
+  LITELLM_URL=$(kubectl exec -n "${NAMESPACE}" "$POD" -- printenv LITELLM_BASE_URL 2>/dev/null || true)
+  if [ -z "$LITELLM_URL" ]; then
+    echo -e "${RED}❌ LITELLM_BASE_URL empty in pod (ConfigMap shadowed?) — /ai/complete will use rate-limited OpenRouter fallback${NC}"
+    exit 1
+  fi
+  log_ts "LITELLM_BASE_URL=${LITELLM_URL}"
 else
   echo -e "${RED}⚠️  Pod not ready yet: ${READY_STATE}${NC}"
   log_ts "Recent pod logs (last 60 lines) for debugging:"

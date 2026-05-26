@@ -1,4 +1,4 @@
-import { IsString, IsUUID, IsNumber, IsOptional, Min, Max, IsNotEmpty } from 'class-validator';
+import { IsString, IsUUID, IsNumber, IsOptional, Min, Max, IsNotEmpty, IsIn } from 'class-validator';
 
 /**
  * Request DTO for executing code in a repository.
@@ -40,4 +40,18 @@ export class ExecuteCodeDto {
   @IsString()
   @IsOptional()
   validationScript?: string;
+
+  /**
+   * `code` — git worktree + `claude code` (default).
+   * `print` — `claude --print` in repoPath (planning / semantic validation; no code edits).
+   */
+  @IsString()
+  @IsIn(['code', 'print'])
+  @IsOptional()
+  executionMode?: 'code' | 'print';
+
+  /** Claude model for print mode (e.g. claude-sonnet-4-6). Defaults to CC_PRINT_MODEL env. */
+  @IsString()
+  @IsOptional()
+  model?: string;
 }

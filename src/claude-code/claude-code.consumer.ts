@@ -9,9 +9,12 @@ import { LoggingClient } from './logging.client';
 import { JobStatus } from './job-status.enum';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import * as fs from 'fs';
 import * as path from 'path';
 
 const execAsync = promisify(exec);
+const CC_CLI = () => process.env.CC_CLI_PATH?.trim() || 'claude';
+const CC_PRINT_MODEL = () => process.env.CC_PRINT_MODEL?.trim() || 'claude-sonnet-4-6';
 const RETRY_BACKOFF_MS = [30_000, 90_000, 270_000];
 
 /**
@@ -76,6 +79,8 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
           job.instructions,
           job.timeoutSeconds,
           job.validationScript,
+          job.executionMode ?? 'code',
+          job.model,
           0,
           job.maxRetries ?? 3,
         );
@@ -104,6 +109,8 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
       instructions,
       timeoutSeconds,
       validationScript,
+      executionMode = 'code',
+      model,
     } = msg;
 
     this.logger.log(
@@ -126,6 +133,11 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
         status: JobStatus.EXECUTING as JobStatus,
         startedAt,
       });
+
+      if (executionMode === 'print') {
+        await this.executePrintJob(jobId, repoPath, instructions, timeoutSeconds, model ?? CC_PRINT_MODEL(), startedAt);
+        return;
+      }
 
       // Create worktree
       const worktreePath = `/tmp/worktree-${jobId}`;
@@ -287,6 +299,8 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
           job.instructions,
           job.timeoutSeconds,
           job.validationScript,
+          job.executionMode ?? 'code',
+          job.model,
           delayMs,
           maxRetries,
         );
@@ -318,6 +332,56 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
   }
 
   /**
+   * Planning / validation: claude --print in repo (no worktree, no file edits).
+   */
+  private async executePrintJob(
+    jobId: string,
+    repoPath: string,
+    instructions: string,
+    timeoutSeconds: number,
+    model: string,
+    startedAt: Date,
+  ): Promise<void> {
+    const tmpFile = path.join('/tmp', `cc-print-${jobId}.txt`);
+    let stdout = '';
+    let stderr = '';
+    let exitCode = 0;
+
+    try {
+      fs.writeFileSync(tmpFile, instructions, 'utf-8');
+      const modelFlag = model ? `--model ${model}` : '';
+      const { stdout: out } = await execAsync(
+        `cd "${repoPath.replace(/"/g, '\\"')}" && ${CC_CLI()} --print ${modelFlag} < "${tmpFile}"`,
+        { timeout: timeoutSeconds * 1000, maxBuffer: 10 * 1024 * 1024 },
+      );
+      stdout = out;
+    } catch (error: any) {
+      exitCode = error.code || 1;
+      stdout = error.stdout || '';
+      stderr = error.stderr || error.message || '';
+    } finally {
+      try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+    }
+
+    const finalStatus = exitCode === 0 ? JobStatus.SUCCESS : JobStatus.FAILED;
+    await this.service.updateJobExecution(jobId, {
+      status: finalStatus as JobStatus,
+      exitCode,
+      stdout,
+      stderr,
+      completedAt: new Date(),
+    });
+
+    await this.loggingClient.log('info', 'Claude Code Print Job Completed', {
+      jobId,
+      status: finalStatus,
+      exitCode,
+      durationMs: Date.now() - startedAt.getTime(),
+      model,
+    });
+  }
+
+  /**
    * Schedule a job retry after the specified delay.
    * Uses setTimeout to re-publish to RabbitMQ after backoff.
    */
@@ -328,6 +392,8 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
     instructions: string,
     timeoutSeconds: number,
     validationScript: string | undefined,
+    executionMode: 'code' | 'print',
+    model: string | undefined,
     delayMs: number,
     maxRetries: number,
   ): void {
@@ -340,6 +406,8 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
           instructions,
           timeoutSeconds,
           validationScript,
+          executionMode,
+          model,
         });
         this.logger.log(`Retry published for job ${jobId} after ${delayMs}ms delay`);
       } catch (error) {
