@@ -44,8 +44,11 @@ export class AiService {
     let stdout = '';
     try {
       const result = await execAsync(
-        `${CC_CLI} --print --model ${model} --tools "" < ${tmpFile}`,
-        { timeout: CC_TIMEOUT_MS },
+        `${CC_CLI} --print --model ${model} < ${tmpFile}`,
+        {
+          timeout: CC_TIMEOUT_MS,
+          env: { ...process.env, CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR || '/home/ssf/.claude' },
+        },
       );
       stdout = result.stdout;
     } catch (err: unknown) {

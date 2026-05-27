@@ -69,6 +69,8 @@ spec:
           env:
             - name: HOME
               value: /home/ssf
+            - name: CLAUDE_CONFIG_DIR
+              value: /home/ssf/.claude
           volumeMounts:
             - name: local-bin
               mountPath: /home/ssf/.local
