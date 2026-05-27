@@ -51,3 +51,8 @@ data:
   # AI Modes
   ASR_MODE: "free"
   AI_MODE: "free"
+
+  # Claude Code CLI — all LLM inference routes through CC CLI
+  CC_CLI_PATH: "/home/ssf/.local/bin/claude"
+  CLAUDE_CONFIG_DIR: "/home/ssf/.claude"
+  CC_CLI_TIMEOUT_MS: "120000"

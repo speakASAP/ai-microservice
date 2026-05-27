@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { writeFileSync, unlinkSync, existsSync } from 'fs';
@@ -9,11 +9,18 @@ import type { CompleteRequestDto } from './dto/complete-request.dto';
 
 const execAsync = promisify(exec);
 
-// model_tier field kept for API compat but ignored — all calls use claude-sonnet-4-6
+// model_tier field kept for API compat but ignored — all calls route through CC CLI with sonnet
 const DEFAULT_MODEL = 'sonnet';
+const ELEVATED_TIERS = new Set(['smart', 'premium']);
 
 const CC_CLI = process.env.CC_CLI_PATH || '/home/ssf/.local/bin/claude';
 const CC_TIMEOUT_MS = Number(process.env.CC_CLI_TIMEOUT_MS || 120_000);
+
+interface CcJsonResult {
+  result?: string;
+  usage?: { input_tokens?: number; output_tokens?: number };
+  modelUsage?: Record<string, { inputTokens?: number; outputTokens?: number }>;
+}
 
 export type AiCompleteResult = Record<string, unknown> & {
   text: string;
@@ -25,8 +32,14 @@ export type AiCompleteResult = Record<string, unknown> & {
 
 @Injectable()
 export class AiService {
+  private readonly logger = new Logger(AiService.name);
+
   async complete(dto: CompleteRequestDto): Promise<AiCompleteResult> {
     const model = DEFAULT_MODEL;
+
+    if (dto.model_tier && ELEVATED_TIERS.has(dto.model_tier)) {
+      this.logger.warn(`model_tier '${dto.model_tier}' requested — routing to sonnet via CC CLI (elevated tier ignored)`);
+    }
 
     // Build full prompt — merge system_prompt into user message
     let fullPrompt = '';
@@ -44,7 +57,7 @@ export class AiService {
     let stdout = '';
     try {
       const result = await execAsync(
-        `${CC_CLI} --print --model ${model} < ${tmpFile}`,
+        `${CC_CLI} --print --output-format json --model ${model} < ${tmpFile}`,
         {
           timeout: CC_TIMEOUT_MS,
           env: { ...process.env, CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR || '/home/ssf/.claude' },
@@ -60,7 +73,27 @@ export class AiService {
       try { if (existsSync(tmpFile)) unlinkSync(tmpFile); } catch { /* ignore */ }
     }
 
-    const rawText = stdout.trim();
+    // Parse CC JSON envelope to extract text and token counts
+    let rawText = '';
+    let inputTokens = 0;
+    let outputTokens = 0;
+    try {
+      const ccResult = JSON.parse(stdout.trim()) as CcJsonResult;
+      rawText = ccResult.result ?? '';
+      if (ccResult.usage) {
+        inputTokens = ccResult.usage.input_tokens ?? 0;
+        outputTokens = ccResult.usage.output_tokens ?? 0;
+      } else if (ccResult.modelUsage) {
+        const first = Object.values(ccResult.modelUsage)[0];
+        if (first) {
+          inputTokens = first.inputTokens ?? 0;
+          outputTokens = first.outputTokens ?? 0;
+        }
+      }
+    } catch {
+      // CC CLI returned plain text (older version fallback)
+      rawText = stdout.trim();
+    }
 
     let parsedData: Record<string, unknown> = {};
     const trimmed = rawText;
@@ -82,9 +115,9 @@ export class AiService {
       ...parsedData,
       text: rawText,
       model_used: `claude-${model}`,
-      inputTokens: 0,
-      outputTokens: 0,
-      token_usage_estimate: 0,
+      inputTokens,
+      outputTokens,
+      token_usage_estimate: inputTokens + outputTokens,
     };
   }
 }
