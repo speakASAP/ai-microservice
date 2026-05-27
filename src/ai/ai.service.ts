@@ -1,25 +1,25 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { writeFileSync, unlinkSync, existsSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { randomUUID } from 'crypto';
 import type { CompleteRequestDto } from './dto/complete-request.dto';
 
-const CLAUDE_MODEL = 'claude-sonnet-4-6-20251001';
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_API_VERSION = '2023-06-01';
+const execAsync = promisify(exec);
 
-interface AnthropicResponse {
-  content: Array<{ type: string; text: string }>;
-  usage?: {
-    input_tokens?: number;
-    output_tokens?: number;
-  };
-  model?: string;
-}
+// Map model_tier → claude CLI model alias (model_tier field is kept for API compat but all calls use Claude)
+const TIER_TO_MODEL: Record<string, string> = {
+  free: 'haiku',
+  cheap: 'haiku',
+  smart: 'sonnet',
+};
+const DEFAULT_MODEL = 'haiku';
 
-/**
- * The response from /ai/complete is a flat object that merges:
- *   - metadata fields (model_used, inputTokens, outputTokens, token_usage_estimate, text)
- *   - the parsed JSON payload fields spread at the top level so callers can access
- *     e.g. response.output_ref, response.passed, response.new_tasks directly.
- */
+const CC_CLI = process.env.CC_CLI_PATH || '/home/ssf/.local/bin/claude';
+const CC_TIMEOUT_MS = Number(process.env.CC_CLI_TIMEOUT_MS || 120_000);
+
 export type AiCompleteResult = Record<string, unknown> & {
   text: string;
   model_used: string;
@@ -31,57 +31,41 @@ export type AiCompleteResult = Record<string, unknown> & {
 @Injectable()
 export class AiService {
   async complete(dto: CompleteRequestDto): Promise<AiCompleteResult> {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new InternalServerErrorException('ANTHROPIC_API_KEY is not configured');
-    }
+    const model = TIER_TO_MODEL[dto.model_tier] ?? DEFAULT_MODEL;
 
-    // Build messages — system_prompt goes in the Anthropic `system` field
-    const messages: Array<{ role: 'user' | 'assistant'; content: string }> = [
-      { role: 'user', content: dto.user_prompt },
-    ];
-
-    const requestBody: Record<string, unknown> = {
-      model: CLAUDE_MODEL,
-      max_tokens: dto.max_tokens ?? 1024,
-      messages,
-    };
-
+    // Build full prompt — merge system_prompt into user message
+    let fullPrompt = '';
     if (dto.system_prompt) {
-      requestBody['system'] = dto.system_prompt;
+      fullPrompt += dto.system_prompt.trim() + '\n\n';
     }
-
-    // Request JSON output when output_schema is provided
     if (dto.output_schema) {
-      const currentSystem = (requestBody['system'] as string | undefined) ?? '';
-      requestBody['system'] = `${currentSystem}\nRespond with valid JSON only. No markdown fences.`.trim();
+      fullPrompt += 'Respond with valid JSON only. No markdown fences.\n\n';
+    }
+    fullPrompt += dto.user_prompt;
+
+    const tmpFile = join(tmpdir(), `ai-complete-${randomUUID()}.txt`);
+    writeFileSync(tmpFile, fullPrompt, 'utf-8');
+
+    let stdout = '';
+    try {
+      const result = await execAsync(
+        `${CC_CLI} --print --model ${model} --tools "" < ${tmpFile}`,
+        { timeout: CC_TIMEOUT_MS },
+      );
+      stdout = result.stdout;
+    } catch (err: unknown) {
+      const e = err as { stdout?: string; stderr?: string; message?: string };
+      throw new InternalServerErrorException(
+        `claude CLI failed: ${(e.stderr || e.message || '').slice(0, 300)}`,
+      );
+    } finally {
+      try { if (existsSync(tmpFile)) unlinkSync(tmpFile); } catch { /* ignore */ }
     }
 
-    const res = await fetch(ANTHROPIC_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': ANTHROPIC_API_VERSION,
-      },
-      body: JSON.stringify(requestBody),
-      signal: AbortSignal.timeout(120_000),
-    });
+    const rawText = stdout.trim();
 
-    if (!res.ok) {
-      throw new InternalServerErrorException(`Anthropic API error ${res.status}`);
-    }
-
-    const body = (await res.json()) as AnthropicResponse;
-
-    const rawText = body.content?.find((c) => c.type === 'text')?.text ?? '';
-    const inputTokens = body.usage?.input_tokens ?? 0;
-    const outputTokens = body.usage?.output_tokens ?? 0;
-    const token_usage_estimate = inputTokens + outputTokens;
-
-    // Attempt JSON parse and spread fields at top level (same contract as before)
     let parsedData: Record<string, unknown> = {};
-    const trimmed = rawText.trim();
+    const trimmed = rawText;
     if (trimmed.startsWith('{') || trimmed.startsWith('[') || dto.output_schema) {
       try {
         const cleaned = trimmed.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
@@ -99,10 +83,10 @@ export class AiService {
     return {
       ...parsedData,
       text: rawText,
-      model_used: 'claude-sonnet-4-6',
-      inputTokens,
-      outputTokens,
-      token_usage_estimate,
+      model_used: `claude-${model}`,
+      inputTokens: 0,
+      outputTokens: 0,
+      token_usage_estimate: 0,
     };
   }
 }

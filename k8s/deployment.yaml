@@ -69,3 +69,19 @@ spec:
           env:
             - name: HOME
               value: /home/ssf
+          volumeMounts:
+            - name: local-bin
+              mountPath: /home/ssf/.local
+              readOnly: true
+            - name: claude-config
+              mountPath: /home/ssf/.claude
+              readOnly: true
+      volumes:
+        - name: local-bin
+          hostPath:
+            path: /home/ssf/.local
+            type: Directory
+        - name: claude-config
+          hostPath:
+            path: /home/ssf/.claude
+            type: Directory
