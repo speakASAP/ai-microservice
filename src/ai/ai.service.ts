@@ -9,13 +9,8 @@ import type { CompleteRequestDto } from './dto/complete-request.dto';
 
 const execAsync = promisify(exec);
 
-// Map model_tier → claude CLI model alias (model_tier field is kept for API compat but all calls use Claude)
-const TIER_TO_MODEL: Record<string, string> = {
-  free: 'haiku',
-  cheap: 'haiku',
-  smart: 'sonnet',
-};
-const DEFAULT_MODEL = 'haiku';
+// model_tier field kept for API compat but ignored — all calls use claude-sonnet-4-6
+const DEFAULT_MODEL = 'sonnet';
 
 const CC_CLI = process.env.CC_CLI_PATH || '/home/ssf/.local/bin/claude';
 const CC_TIMEOUT_MS = Number(process.env.CC_CLI_TIMEOUT_MS || 120_000);
@@ -31,7 +26,7 @@ export type AiCompleteResult = Record<string, unknown> & {
 @Injectable()
 export class AiService {
   async complete(dto: CompleteRequestDto): Promise<AiCompleteResult> {
-    const model = TIER_TO_MODEL[dto.model_tier] ?? DEFAULT_MODEL;
+    const model = DEFAULT_MODEL;
 
     // Build full prompt — merge system_prompt into user message
     let fullPrompt = '';
