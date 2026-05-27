@@ -18,7 +18,7 @@ describe('AiService - Claude CLI', () => {
     service = module.get(AiService);
   });
 
-  it('invokes claude CLI with haiku model for free tier and returns text', async () => {
+  it('invokes claude CLI with sonnet model regardless of model_tier', async () => {
     mockExec.mockImplementation((_cmd: string, _opts: unknown, cb: unknown) => {
       (cb as (err: null, result: { stdout: string; stderr: string }) => void)(
         null, { stdout: 'ok\n', stderr: '' }
@@ -26,33 +26,25 @@ describe('AiService - Claude CLI', () => {
       return {} as ReturnType<typeof exec>;
     });
 
-    const result = await service.complete({ model_tier: 'free', user_prompt: 'say ok' });
+    for (const tier of ['free', 'cheap', 'smart', 'unknown']) {
+      jest.clearAllMocks();
+      mockExec.mockImplementation((_cmd: string, _opts: unknown, cb: unknown) => {
+        (cb as (err: null, result: { stdout: string; stderr: string }) => void)(
+          null, { stdout: 'ok\n', stderr: '' }
+        );
+        return {} as ReturnType<typeof exec>;
+      });
 
-    expect(mockExec).toHaveBeenCalledWith(
-      expect.stringContaining('--model haiku'),
-      expect.any(Object),
-      expect.any(Function),
-    );
-    expect(result.text).toBe('ok');
-    expect(result.model_used).toBe('claude-haiku');
-  });
+      const result = await service.complete({ model_tier: tier, user_prompt: 'say ok' });
 
-  it('invokes claude CLI with sonnet model for smart tier', async () => {
-    mockExec.mockImplementation((_cmd: string, _opts: unknown, cb: unknown) => {
-      (cb as (err: null, result: { stdout: string; stderr: string }) => void)(
-        null, { stdout: 'done\n', stderr: '' }
+      expect(mockExec).toHaveBeenCalledWith(
+        expect.stringContaining('--model sonnet'),
+        expect.any(Object),
+        expect.any(Function),
       );
-      return {} as ReturnType<typeof exec>;
-    });
-
-    const result = await service.complete({ model_tier: 'smart', user_prompt: 'say done' });
-
-    expect(mockExec).toHaveBeenCalledWith(
-      expect.stringContaining('--model sonnet'),
-      expect.any(Object),
-      expect.any(Function),
-    );
-    expect(result.model_used).toBe('claude-sonnet');
+      expect(result.text).toBe('ok');
+      expect(result.model_used).toBe('claude-sonnet');
+    }
   });
 
   it('throws InternalServerErrorException when CLI fails', async () => {
@@ -73,7 +65,7 @@ describe('AiService - Claude CLI', () => {
       return {} as ReturnType<typeof exec>;
     });
 
-    const result = await service.complete({ model_tier: 'cheap', user_prompt: 'evaluate' });
+    const result = await service.complete({ model_tier: 'free', user_prompt: 'evaluate' });
 
     expect(result.status).toBe('pass');
     expect(result.score).toBe(10);
