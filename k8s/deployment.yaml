@@ -21,6 +21,10 @@ spec:
       labels:
         app: ai-microservice
     spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: app
           image: localhost:5000/ai-microservice:latest
@@ -62,3 +66,6 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
+          env:
+            - name: HOME
+              value: /home/ssf

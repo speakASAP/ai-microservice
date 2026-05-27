@@ -1,7 +1,7 @@
 # AI Microservice — NestJS
 # Multi-stage: builder compiles TypeScript, runner is lean production image
 
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
 
@@ -14,10 +14,9 @@ COPY src/ ./src/
 RUN npm run build
 
 # ---- runner ----
-FROM node:20-alpine AS runner
+FROM node:20-slim AS runner
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-
+# node:20-slim already has user 'node' at uid 1000 — use it directly
 WORKDIR /app
 
 COPY package*.json ./
@@ -25,8 +24,8 @@ RUN npm ci --omit=dev --legacy-peer-deps
 
 COPY --from=builder /app/dist ./dist
 
-RUN chown -R appuser:appgroup /app
-USER appuser
+RUN chown -R node:node /app
+USER node
 
 EXPOSE 3380
 
