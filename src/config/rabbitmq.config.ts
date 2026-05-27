@@ -10,19 +10,6 @@ export function getRabbitMQConfig(): RabbitMQConfig {
         options: { durable: true },
       },
     ],
-    queues: [
-      {
-        name: 'claude-code-execute-queue',
-        options: {
-          durable: true,
-          arguments: {
-            'x-dead-letter-exchange': 'claude-code-dlx',
-          },
-        },
-        exchange: 'claude-code-exchange',
-        routingKey: 'claude-code.execute',
-      },
-    ],
     connectionInitOptions: { wait: false },
   };
 }

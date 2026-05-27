@@ -1,24 +1,43 @@
 #!/usr/bin/env bash
+# Validates that key ai-microservice source artifacts exist and are consistent.
 set -euo pipefail
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
-INDEX="docs/superpowers/LLM_UNIFIED_GATEWAY_TASK_INDEX.md"
-STAGES="docs/superpowers/plans/2026-04-12-unified-llm-gateway-stages.md"
-MASTER="docs/agents/master-prompt-llm-gateway.md"
-SMOKE="scripts/smoke-unified-llm.sh"
 fail() { echo "FAIL: $*" >&2; exit 1; }
-[[ -f "$INDEX" ]] || fail "missing $INDEX"
-[[ -f "$STAGES" ]] || fail "missing $STAGES"
-[[ -f "$MASTER" ]] || fail "missing $MASTER"
-[[ -f "$SMOKE" ]] || fail "missing $SMOKE (copy from section 2 of LLM_GATEWAY_SETUP.md first)"
-[[ -x "$SMOKE" ]] || fail "$SMOKE must be executable (chmod +x)"
-for id in T-UG-00 T-UG-01 T-UG-02 T-UG-03 T-UG-04 T-UG-05 T-UG-06 T-UG-07; do
-  grep -q "$id" "$INDEX" || fail "task id $id not found in $INDEX"
+ok()   { echo "OK:   $*"; }
+
+# TypeScript build compiles cleanly
+cd "$ROOT"
+npm run build 2>&1 || fail "TypeScript build failed"
+ok "TypeScript build"
+
+# Required source files exist
+for f in \
+  src/main.ts \
+  src/app.module.ts \
+  src/health.controller.ts \
+  src/ai/ai.service.ts \
+  src/ai/ai.controller.ts \
+  src/claude-code/claude-code.service.ts \
+  Dockerfile \
+  k8s/deployment.yaml \
+  k8s/external-secret.yaml; do
+  [[ -f "$ROOT/$f" ]] || fail "missing $ROOT/$f"
+  ok "$f"
 done
-for vid in V-UG-00 V-UG-01 V-UG-03 V-UG-04 V-UG-06 V-UG-07; do
-  grep -q "$vid" "$INDEX" || fail "validator id $vid not found in $INDEX"
-done
-grep -q "Stage 0" "$STAGES" || fail "Stage 0 missing in $STAGES"
-grep -q "Stage 5" "$STAGES" || fail "Stage 5 missing in $STAGES"
-echo "OK: LLM gateway task artifacts validated"
-exit 0
+
+# ANTHROPIC_API_KEY is referenced in ai.service.ts (not hardcoded)
+grep -q "ANTHROPIC_API_KEY" "$ROOT/src/ai/ai.service.ts" || fail "ANTHROPIC_API_KEY not referenced in ai.service.ts"
+ok "ANTHROPIC_API_KEY env reference in ai.service.ts"
+
+# No Python files in src/
+PY_COUNT=$(find "$ROOT/src" -name "*.py" | wc -l)
+[[ "$PY_COUNT" -eq 0 ]] || fail "Python files found in src/ — expected zero"
+ok "No Python in src/"
+
+# Smoke test script is executable
+[[ -x "$ROOT/scripts/smoke-unified-llm.sh" ]] || fail "smoke-unified-llm.sh is not executable"
+ok "smoke-unified-llm.sh is executable"
+
+echo ""
+echo "All checks passed."

@@ -5,14 +5,9 @@ import { JobStatus } from '../job-status.enum';
  * Contains full job execution details including results, logs, and validation output.
  */
 export class JobStatusResponseDto {
-  /** Unique job identifier */
-  jobId: string;
-
-  /** Parent task ID (links to orchestrator task) */
-  taskId: string;
-
-  /** Current job status (queued | executing | success | failed | timeout) */
-  status: JobStatus;
+  jobId!: string;
+  taskId!: string;
+  status!: JobStatus;
 
   /** Timestamp when job execution started (null if not yet started) */
   startedAt?: Date;

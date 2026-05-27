@@ -31,35 +31,22 @@ log_warn() {
   echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
+# Require jq for JSON parsing
+if ! command -v jq &> /dev/null; then
+  log_error "jq is required. Install with: apt-get install jq"
+  exit 1
+fi
+
 # Function to extract jobId from JSON response
 extract_job_id() {
   local json_response="$1"
-
-  # Try jq first
-  if command -v jq &> /dev/null; then
-    echo "$json_response" | jq -r '.jobId' 2>/dev/null
-  else
-    # Fallback to python3
-    if command -v python3 &> /dev/null; then
-      echo "$json_response" | python3 -c "import sys, json; print(json.load(sys.stdin).get('jobId', ''))" 2>/dev/null
-    else
-      log_error "Neither jq nor python3 found. Cannot parse JSON response."
-      exit 1
-    fi
-  fi
+  echo "$json_response" | jq -r '.jobId' 2>/dev/null
 }
 
 # Function to extract status from JSON response
 extract_status() {
   local json_response="$1"
-
-  if command -v jq &> /dev/null; then
-    echo "$json_response" | jq -r '.status' 2>/dev/null
-  else
-    if command -v python3 &> /dev/null; then
-      echo "$json_response" | python3 -c "import sys, json; print(json.load(sys.stdin).get('status', ''))" 2>/dev/null
-    fi
-  fi
+  echo "$json_response" | jq -r '.status' 2>/dev/null
 }
 
 # Function to submit a job
@@ -74,7 +61,8 @@ submit_job() {
   log_info "  Branch: $branch"
   log_info "  Instructions: $instructions"
 
-  local task_id=$(python3 -c "import uuid; print(uuid.uuid4())" 2>/dev/null || echo "$(date +%s)")
+  local task_id
+  task_id="$(cat /proc/sys/kernel/random/uuid 2>/dev/null || printf '%s-%s-%s-%s-%s' "$(head -c4 /dev/urandom | xxd -p)" "$(head -c2 /dev/urandom | xxd -p)" "$(head -c2 /dev/urandom | xxd -p)" "$(head -c2 /dev/urandom | xxd -p)" "$(head -c6 /dev/urandom | xxd -p)" 2>/dev/null || date +%s)"
 
   local payload=$(cat <<EOF
 {

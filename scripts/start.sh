@@ -1,38 +1,30 @@
 #!/bin/bash
-
-# AI Microservice Start Script
-# Starts all AI microservice containers
-
+# Start ai-microservice in Kubernetes (primary) or local dev mode.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-cd "$PROJECT_DIR"
+MODE="${1:-k8s}"
 
-echo "🚀 Starting AI Microservice"
-echo "=================================="
-
-# Check if .env file exists
-if [ ! -f .env ]; then
-  echo "⚠️  Warning: .env file not found. Using defaults from .env.example"
-  if [ -f .env.example ]; then
-    echo "📋 Please copy .env.example to .env and configure it"
-  fi
-fi
-
-# Start services
-echo ""
-echo "Starting services..."
-docker compose -f docker-compose.blue.yml up -d
-
-echo ""
-echo "✅ AI Microservice started"
-echo ""
-echo "Services:"
-docker compose -f docker-compose.blue.yml ps
-
-echo ""
-echo "To view logs: docker compose -f docker-compose.blue.yml logs -f"
-echo "To check status: ./scripts/status.sh"
-
+case "$MODE" in
+  k8s)
+    echo "Starting ai-microservice in Kubernetes..."
+    kubectl rollout restart deployment/ai-microservice -n statex-apps
+    kubectl rollout status deployment/ai-microservice -n statex-apps --timeout=120s
+    echo "Done. Check: kubectl logs -n statex-apps -l app=ai-microservice -f"
+    ;;
+  dev)
+    cd "$PROJECT_DIR"
+    if [ ! -f .env ]; then
+      echo "Warning: .env not found. Copy .env.example to .env and fill in ANTHROPIC_API_KEY."
+    fi
+    npm run build && node dist/main.js
+    ;;
+  *)
+    echo "Usage: $0 [k8s|dev]"
+    echo "  k8s  - restart K8s deployment (default)"
+    echo "  dev  - build and run locally"
+    exit 1
+    ;;
+esac

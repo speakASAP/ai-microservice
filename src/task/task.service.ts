@@ -1,4 +1,5 @@
-import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { AiService } from '../ai/ai.service';
 import type { TaskDraftDto } from './dto/task-draft.dto';
 import type { TaskDraftResponse, TaskPriority } from './dto/task-draft-response.dto';
 
@@ -16,18 +17,11 @@ function toTaskPriority(value: unknown): TaskPriority {
 
 @Injectable()
 export class TaskService {
+  constructor(private readonly aiService: AiService) {}
 
   async draftTask(dto: TaskDraftDto): Promise<TaskDraftResponse> {
     if (!dto.transcript && !dto.textNote) {
       throw new BadRequestException('At least one of transcript or textNote is required');
-    }
-
-    // Read at call time so tests can control the env var per-test
-    const litellmBaseUrl = process.env.LITELLM_BASE_URL;
-    const litellmApiKey = process.env.LITELLM_MASTER_KEY ?? '';
-
-    if (!litellmBaseUrl) {
-      throw new InternalServerErrorException('LITELLM_BASE_URL is not configured');
     }
 
     const userContent = [
@@ -35,30 +29,15 @@ export class TaskService {
       dto.textNote ? `Note: ${dto.textNote}` : '',
     ].filter(Boolean).join('\n');
 
-    const res = await fetch(`${litellmBaseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${litellmApiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'smart',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userContent },
-        ],
-        temperature: 0.3,
-      }),
-      signal: AbortSignal.timeout(30_000),
+    const result = await this.aiService.complete({
+      model_tier: 'smart',
+      system_prompt: SYSTEM_PROMPT,
+      user_prompt: userContent,
+      max_tokens: 512,
+      output_schema: { type: 'object' },
     });
 
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new InternalServerErrorException(`LiteLLM error: ${errText}`);
-    }
-
-    const body = await res.json() as { choices: { message: { content: string } }[] };
-    const raw = body.choices?.[0]?.message?.content ?? '';
+    const raw = result.text ?? '';
 
     try {
       const parsed = JSON.parse(raw) as { title?: string; description?: string; priority?: string; deadline?: string };
@@ -70,7 +49,6 @@ export class TaskService {
         modelTier: 'smart',
       };
     } catch {
-      // AI returned non-JSON — fall back to raw text as description
       return {
         title: (dto.transcript ?? dto.textNote ?? 'Nový úkol').slice(0, 80),
         description: raw || dto.transcript || dto.textNote || '',

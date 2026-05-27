@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.env
+*.md
+admin-panel/
+docs/
+scripts/
+coverage/
+.npm-cache/

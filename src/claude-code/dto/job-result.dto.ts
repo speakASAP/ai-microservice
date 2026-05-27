@@ -6,17 +6,9 @@ import { JobStatus } from '../job-status.enum';
  * Contains execution results, logs, and validation outcome.
  */
 export class JobResultDto {
-  /** Unique identifier assigned by job queue */
-  jobId: string;
-
-  /** References parent task for tracing */
-  taskId: string;
-
-  /**
-   * Job state: QUEUED (waiting), EXECUTING (in progress),
-   * SUCCESS (completed), FAILED (error), TIMEOUT (exceeded limit)
-   */
-  status: JobStatus;
+  jobId!: string;
+  taskId!: string;
+  status!: JobStatus;
 
   /** ISO 8601 timestamp when execution started */
   @Type(() => Date)

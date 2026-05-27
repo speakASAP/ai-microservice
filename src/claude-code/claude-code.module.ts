@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { RabbitModule } from '@golevelup/nestjs-rabbitmq';
+import { RabbitMQModule } from '@golevelup/nestjs-rabbitmq';
 import { ClaudeCodeController } from './claude-code.controller';
 import { ClaudeCodeService } from './claude-code.service';
 import { ClaudeCodeConsumer } from './claude-code.consumer';
@@ -15,7 +15,7 @@ import { getRabbitMQConfig } from '../config/rabbitmq.config';
 @Module({
   imports: [
     TypeOrmModule.forFeature([ClaudeCodeJob]),
-    RabbitModule.forRoot(getRabbitMQConfig()),
+    RabbitMQModule.forRoot(RabbitMQModule, getRabbitMQConfig()),
   ],
   controllers: [ClaudeCodeController],
   providers: [ClaudeCodeService, ClaudeCodeConsumer, LoggingClient],

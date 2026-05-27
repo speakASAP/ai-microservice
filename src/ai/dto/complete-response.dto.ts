@@ -5,9 +5,9 @@ export interface CompleteResponse {
   text: string;
   /** Model tier used for this request */
   model_used: string;
-  /** Real token count from LiteLLM usage.prompt_tokens */
+  /** Input token count from Anthropic API usage */
   inputTokens: number;
-  /** Real token count from LiteLLM usage.completion_tokens */
+  /** Output token count from Anthropic API usage */
   outputTokens: number;
   /** Sum of inputTokens + outputTokens — used by business-orchestrator for budget tracking */
   token_usage_estimate: number;

@@ -1,74 +1,30 @@
 #!/bin/bash
-
-# AI Microservice Status Script
-# Checks the status of all AI microservice containers
-
+# Show live status of ai-microservice in Kubernetes.
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-cd "$PROJECT_DIR"
+NAMESPACE="statex-apps"
+SERVICE="ai-microservice"
 
 echo "=========================================="
 echo "AI Microservice Status"
 echo "=========================================="
-
-# Load ports from .env if available
-if [ -f .env ]; then
-  source .env
-fi
-
-AI_ORCHESTRATOR_PORT=${AI_ORCHESTRATOR_PORT:-3380}
-
-# Check if containers are running
 echo ""
-echo "📋 Container Status:"
-if docker ps --format '{{.Names}}' | grep -q "ai-microservice"; then
-  echo "✅ AI Microservice containers are running"
-  docker ps --filter "name=ai-microservice" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-else
-  echo "❌ No AI Microservice containers are running"
-fi
 
-# Check network
-echo ""
-echo "🌐 Network Status:"
-if docker network inspect nginx-network >/dev/null 2>&1; then
-  if docker network inspect nginx-network | grep -q "ai-microservice"; then
-    echo "✅ Connected to nginx-network"
-  else
-    echo "⚠️  Not connected to nginx-network"
-  fi
-else
-  echo "⚠️  nginx-network not found"
-fi
+echo "Pods:"
+kubectl get pods -n "$NAMESPACE" -l app="$SERVICE" -o wide
 
-# Check AI Orchestrator health
 echo ""
-echo "🏥 AI Orchestrator Health Check:"
-if docker ps --format '{{.Names}}' | grep -q "ai-microservice-orchestrator"; then
-  ORCHESTRATOR_CONTAINER=$(docker ps --format '{{.Names}}' | grep "ai-microservice-orchestrator" | head -1)
-  if docker exec "$ORCHESTRATOR_CONTAINER" curl -f "http://localhost:${AI_ORCHESTRATOR_PORT}/health" >/dev/null 2>&1; then
-    echo "✅ AI Orchestrator health check passed"
-    docker exec "$ORCHESTRATOR_CONTAINER" curl -s "http://localhost:${AI_ORCHESTRATOR_PORT}/health" | jq . 2>/dev/null || docker exec "$ORCHESTRATOR_CONTAINER" curl -s "http://localhost:${AI_ORCHESTRATOR_PORT}/health"
-  else
-    echo "⚠️  AI Orchestrator health check failed"
-  fi
-else
-  echo "❌ AI Orchestrator container not running"
-fi
+echo "Recent logs (20 lines):"
+kubectl logs -n "$NAMESPACE" -l app="$SERVICE" --tail=20 2>/dev/null || echo "(no logs)"
 
-# Show recent logs
 echo ""
-echo "📝 Recent Logs (AI Orchestrator, last 20 lines):"
-if docker ps --format '{{.Names}}' | grep -q "ai-microservice-orchestrator"; then
-  ORCHESTRATOR_CONTAINER=$(docker ps --format '{{.Names}}' | grep "ai-microservice-orchestrator" | head -1)
-  docker logs --tail=20 "$ORCHESTRATOR_CONTAINER"
+echo "Health check:"
+POD=$(kubectl get pod -n "$NAMESPACE" -l app="$SERVICE" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+if [ -n "$POD" ]; then
+  kubectl exec -n "$NAMESPACE" "$POD" -- wget -qO- http://localhost:3380/health 2>/dev/null || echo "Health check failed"
 else
-  echo "No logs available (container not running)"
+  echo "No running pod found"
 fi
 
 echo ""
 echo "=========================================="
-

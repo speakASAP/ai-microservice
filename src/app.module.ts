@@ -7,6 +7,8 @@ import { InferenceLog } from './database/entities/inference-log.entity';
 import { VoiceModule } from './voice/voice.module';
 import { TaskModule } from './task/task.module';
 import { AiModule } from './ai/ai.module';
+import { EmailTriageModule } from './email-triage/email-triage.module';
+import { ShopAssistantModule } from './shop-assistant/shop-assistant.module';
 import { ServiceIdentityModule } from './service-identity/service-identity.module';
 import { InferenceLogInterceptor } from './service-identity/inference-log.interceptor';
 import { HealthController } from './health.controller';
@@ -15,13 +17,14 @@ import { HealthController } from './health.controller';
   imports: [
     TypeOrmModule.forRoot({
       type: 'postgres',
-      host: process.env.POSTGRES_HOST || 'localhost',
-      port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
-      username: process.env.POSTGRES_USER || 'postgres',
-      password: process.env.POSTGRES_PASSWORD,
-      database: process.env.POSTGRES_DB || 'ai_microservice',
+      url: process.env.DATABASE_URL,
+      host: process.env.DATABASE_URL ? undefined : (process.env.DB_HOST || process.env.POSTGRES_HOST || 'localhost'),
+      port: process.env.DATABASE_URL ? undefined : parseInt(process.env.DB_PORT || process.env.POSTGRES_PORT || '5432', 10),
+      username: process.env.DATABASE_URL ? undefined : (process.env.DB_USER || process.env.POSTGRES_USER || 'postgres'),
+      password: process.env.DATABASE_URL ? undefined : (process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD),
+      database: process.env.DATABASE_URL ? undefined : (process.env.DB_NAME || process.env.POSTGRES_DB || 'ai_microservice'),
       entities: [ClaudeCodeJob, InferenceLog],
-      synchronize: process.env.NODE_ENV !== 'production',
+      synchronize: process.env.NODE_ENV !== 'production' || process.env.DB_SYNC === 'true' || process.env.DB_AUTO_CREATE === 'true',
       logging: process.env.DEBUG_SQL === 'true',
     }),
     TypeOrmModule.forFeature([InferenceLog]),
@@ -30,6 +33,8 @@ import { HealthController } from './health.controller';
     VoiceModule,
     TaskModule,
     AiModule,
+    EmailTriageModule,
+    ShopAssistantModule,
   ],
   controllers: [HealthController],
   providers: [

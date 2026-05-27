@@ -1,48 +1,43 @@
 #!/usr/bin/env bash
+# Smoke test for ai-microservice NestJS endpoints.
+# Tests /health and POST /ai/complete via the ingress (https://ai.alfares.cz) or localhost.
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
-load_env() {
-  local f="$ROOT/.env"
-  [[ -f "$f" ]] || return 0
-  set -a
-  # shellcheck source=/dev/null
-  source "$f" 2>/dev/null || true
-  set +a
-}
-load_env
+
 HOST="${AI_SERVICE_HOST:-localhost}"
-ORCH_PORT="${AI_ORCHESTRATOR_PORT:-3380}"
-LITELLM_PORT="${LITELLM_LOCAL_PORT:-4000}"
-pass() { echo "OK $*"; }
-skip() { echo "SKIP $*"; }
+PORT="${AI_SERVICE_PORT:-3380}"
+BASE="http://${HOST}:${PORT}"
+
+pass() { echo "OK  $*"; }
+fail() { echo "FAIL $*" >&2; FAILED=1; }
+FAILED=0
+
 have_curl() { command -v curl >/dev/null 2>&1; }
-have_docker() { command -v docker >/dev/null 2>&1; }
-litellm_container() {
-  if [[ -n "${LITELLM_DOCKER_CONTAINER:-}" ]]; then
-    echo "${LITELLM_DOCKER_CONTAINER}"
-    return
-  fi
-  docker ps --format '{{.Names}}' 2>/dev/null | grep -E 'litellm' | head -1 || true
-}
-if have_curl; then
-  code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 8 "http://${HOST}:${ORCH_PORT}/health" 2>/dev/null || echo 000)"
-  [[ "$code" == "200" ]] && pass "orchestrator /health" || echo "WARN orchestrator /health HTTP ${code}" >&2
-  code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 2 --max-time 5 "http://${HOST}:${LITELLM_PORT}/health/liveliness" 2>/dev/null || echo 000)"
-  if [[ "$code" == "200" ]]; then
-    pass "litellm liveliness (host ${HOST}:${LITELLM_PORT})"
-  else
-    c="$(litellm_container)"
-    if [[ -n "$c" ]] && have_docker; then
-      if docker exec "$c" python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=6).read()" 2>/dev/null; then
-        pass "litellm liveliness (docker exec $c localhost:4000)"
-      else
-        skip "litellm host HTTP ${code} and docker exec $c failed (publish 4000 or set LITELLM_DOCKER_CONTAINER)"
-      fi
-    else
-      skip "litellm not on ${HOST}:${LITELLM_PORT} (HTTP ${code}); no running litellm container for docker fallback"
-    fi
-  fi
+
+if ! have_curl; then
+  echo "SKIP: curl not available"
+  exit 0
 fi
-echo "OK: smoke-unified-llm finished"
-exit 0
+
+# 1. Health check
+code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 8 "${BASE}/health" || echo 000)"
+[[ "$code" == "200" ]] && pass "/health returned 200" || fail "/health returned HTTP ${code}"
+
+# 2. POST /ai/complete — only if ANTHROPIC_API_KEY available in env
+if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+  body='{"model_tier":"free","user_prompt":"Reply with the single word: OK"}'
+  response="$(curl -sS --connect-timeout 5 --max-time 30 \
+    -X POST "${BASE}/ai/complete" \
+    -H 'Content-Type: application/json' \
+    -d "$body" || echo '{}')"
+  if echo "$response" | grep -q '"model_used"'; then
+    model_used="$(echo "$response" | grep -o '"model_used":"[^"]*"' | head -1)"
+    pass "/ai/complete responded — ${model_used}"
+  else
+    fail "/ai/complete unexpected response: ${response:0:200}"
+  fi
+else
+  echo "SKIP /ai/complete: ANTHROPIC_API_KEY not set in environment"
+fi
+
+echo "Smoke test finished${FAILED:+ — FAILURES DETECTED}"
+exit $FAILED
