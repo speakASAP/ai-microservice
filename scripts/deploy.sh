@@ -13,6 +13,11 @@ RED='\033[0;31m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# shellcheck disable=SC1091
+source "$(dirname "$PROJECT_ROOT")/shared/scripts/load-deploy-phase-timing.sh" "$PROJECT_ROOT" 2>/dev/null \
+  || source "$HOME/Documents/Github/shared/scripts/load-deploy-phase-timing.sh" "$PROJECT_ROOT" \
+  || { echo "Error: deploy timing library not found" >&2; exit 1; }
+
 SERVICE_NAME="ai-microservice"
 NAMESPACE="statex-apps"
 REGISTRY="localhost:5000"
@@ -66,52 +71,43 @@ echo "║       AI Microservice - Kubernetes Deployment          ║"
 echo "╚════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
-# ── Phase 1: Build Docker image ──────────────────────────────
-preflight_service_health
+deploy_timing_init "$SERVICE_NAME"
+deploy_timing_run_phase "Preflight" preflight_service_health
 
-echo -e "${YELLOW}[1/5] Building image: ${IMAGE}...${NC}"
+deploy_timing_phase_start "Build image"
+echo -e "${YELLOW}Building image: ${IMAGE}...${NC}"
 docker build --no-cache -t "$IMAGE" -t "$IMAGE_LATEST" "$PROJECT_ROOT"
 echo -e "${GREEN}✅ Image built${NC}"
+deploy_timing_phase_end "Build image"
 
-# ── Phase 2: Push to local registry ──────────────────────────
-echo -e "${YELLOW}[2/5] Pushing to registry...${NC}"
+deploy_timing_phase_start "Push image"
+echo -e "${YELLOW}Pushing to registry...${NC}"
 docker push "$IMAGE"
 docker push "$IMAGE_LATEST"
 echo -e "${GREEN}✅ Image pushed: ${IMAGE}${NC}"
+deploy_timing_phase_end "Push image"
 
-# ── Phase 3: Apply K8s manifests ─────────────────────────────
-echo -e "${YELLOW}[3/5] Applying K8s manifests...${NC}"
+deploy_timing_phase_start "Apply K8s manifests"
+echo -e "${YELLOW}Applying K8s manifests...${NC}"
 kubectl apply -f "$PROJECT_ROOT/k8s/configmap.yaml" -n "${NAMESPACE}"
 kubectl apply -f "$PROJECT_ROOT/k8s/external-secret.yaml" -n "${NAMESPACE}"
 kubectl apply -f "$PROJECT_ROOT/k8s/deployment.yaml" -n "${NAMESPACE}"
 kubectl apply -f "$PROJECT_ROOT/k8s/service.yaml" -n "${NAMESPACE}"
 kubectl apply -f "$PROJECT_ROOT/k8s/ingress.yaml" -n "${NAMESPACE}"
-# Legacy drift: bare `env: [{name: LITELLM_BASE_URL}]` shadows ConfigMap and forces OpenRouter-only /ai/complete 503s.
 kubectl patch deployment/"${SERVICE_NAME}" -n "${NAMESPACE}" --type=json \
   -p='[{"op":"remove","path":"/spec/template/spec/containers/0/env"}]' 2>/dev/null || true
 echo -e "${GREEN}✅ Manifests applied${NC}"
+deploy_timing_phase_end "Apply K8s manifests"
 
-# ── Phase 4: Rollout & Status ────────────────────────────────
-echo -e "${YELLOW}[4/5] Restarting deployment and waiting for rollout...${NC}"
+deploy_timing_phase_start "Wait for rollout"
+echo -e "${YELLOW}Restarting deployment and waiting for rollout...${NC}"
 kubectl rollout restart deployment/${SERVICE_NAME} -n "${NAMESPACE}"
-if ! kubectl rollout status deployment/${SERVICE_NAME} \
-  -n "${NAMESPACE}" \
-  --timeout=120s; then
-  echo -e "${YELLOW}Rollout did not complete in time. Diagnosing terminating pods...${NC}"
-  kubectl get pods -n "${NAMESPACE}" -l app=${SERVICE_NAME} -o wide || true
-  TERMINATING_PODS=$(kubectl get pods -n "${NAMESPACE}" -l app=${SERVICE_NAME} --no-headers 2>/dev/null | awk '$3=="Terminating"{print $1}')
-  if [ -n "$TERMINATING_PODS" ]; then
-    echo -e "${YELLOW}Force deleting stuck terminating pods...${NC}"
-    for pod in $TERMINATING_PODS; do
-      kubectl delete pod -n "${NAMESPACE}" "$pod" --grace-period=0 --force || true
-    done
-  fi
-  kubectl rollout status deployment/${SERVICE_NAME} -n "${NAMESPACE}" --timeout=120s
-fi
+deploy_timing_k8s_rollout_wait kubectl "$SERVICE_NAME" "$NAMESPACE"
 echo -e "${GREEN}✅ Rollout complete${NC}"
+deploy_timing_phase_end "Wait for rollout"
 
-# ── Phase 5: Health check ────────────────────────────────────
-echo -e "${YELLOW}[5/5] Verifying health...${NC}"
+deploy_timing_phase_start "Health check"
+echo -e "${YELLOW}Verifying health...${NC}"
 POD=$(kubectl get pod -n "${NAMESPACE}" \
   -l app=${SERVICE_NAME} \
   -o jsonpath='{.items[0].metadata.name}')
@@ -142,14 +138,11 @@ else
   kubectl logs -n "${NAMESPACE}" "$POD" --tail=60 || true
 fi
 echo -e ""
+deploy_timing_phase_end "Health check"
 
-# ── Done ─────────────────────────────────────────────────────
-echo -e "${GREEN}"
-echo "╔════════════════════════════════════════════════════════╗"
-echo "║       ✅ AI Microservice Deployment successful!        ║"
-echo "╚════════════════════════════════════════════════════════╝"
+deploy_timing_finish_success "AI Microservice"
 echo "Image:    ${IMAGE}"
 echo "Namespace: ${NAMESPACE}"
 echo "Pods:     $(kubectl get pods -n ${NAMESPACE} -l app=${SERVICE_NAME} --no-headers | wc -l) running"
-
-echo -e "${NC}"
+DEPLOY_TIMING_FINISHED=1
+exit 0
