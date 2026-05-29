@@ -64,7 +64,7 @@ spec:
               memory: "512Mi"
               cpu: "50m"
             limits:
-              memory: "1500Mi"
+              memory: "2500Mi"
               cpu: "1000m"
           env:
             - name: HOME

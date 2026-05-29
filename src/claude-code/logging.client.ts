@@ -1,4 +1,8 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
+import { Inject } from "@nestjs/common";
+
+export const LOGGING_URL_TOKEN = 'LOGGING_URL';
+export const LOGGING_FETCH_TOKEN = 'LOGGING_FETCH';
 
 export type LogLevel = "info" | "warn" | "error" | "debug";
 
@@ -8,8 +12,8 @@ export class LoggingClient {
   private readonly fetchFn: typeof fetch;
 
   constructor(
-    url?: string,
-    fetchFn?: typeof fetch,
+    @Optional() @Inject(LOGGING_URL_TOKEN) url?: string,
+    @Optional() @Inject(LOGGING_FETCH_TOKEN) fetchFn?: typeof fetch,
   ) {
     this.url =
       url ??

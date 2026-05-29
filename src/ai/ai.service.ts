@@ -12,6 +12,8 @@ const ELEVATED_TIERS = new Set(['smart', 'premium']);
 
 const CC_CLI = process.env.CC_CLI_PATH || '/home/ssf/.local/bin/claude';
 const CC_TIMEOUT_MS = Number(process.env.CC_CLI_TIMEOUT_MS || 120_000);
+// Max concurrent claude processes to prevent OOM under the pod memory limit
+const CC_MAX_CONCURRENT = Number(process.env.CC_MAX_CONCURRENT || 2);
 
 interface CcJsonResult {
   result?: string;
@@ -84,6 +86,7 @@ function cliFailureResult(model: string, detail: string): AiCompleteResult {
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
+  private activeProcesses = 0;
 
   async complete(dto: AiCompleteRequestInput): Promise<AiCompleteResult> {
     const model = DEFAULT_MODEL;
@@ -102,6 +105,11 @@ export class AiService {
     }
     fullPrompt += dto.user_prompt;
 
+    if (this.activeProcesses >= CC_MAX_CONCURRENT) {
+      this.logger.warn(`claude CLI concurrency limit reached (${CC_MAX_CONCURRENT} active); rejecting request`);
+      return cliFailureResult(model, `claude CLI concurrency limit reached (${CC_MAX_CONCURRENT} active)`);
+    }
+
     const tmpFile = join(tmpdir(), `ai-complete-${randomUUID()}.txt`);
     writeFileSync(tmpFile, fullPrompt, 'utf-8');
 
@@ -113,6 +121,7 @@ export class AiService {
       stdinFd = undefined;
     }
 
+    this.activeProcesses++;
     let stdout = '';
     try {
       stdout = await new Promise<string>((resolve, reject) => {
@@ -168,6 +177,7 @@ export class AiService {
       this.logger.error(`claude CLI failed: ${detail.slice(0, 300)}`);
       return cliFailureResult(model, `claude CLI failed: ${detail}`);
     } finally {
+      this.activeProcesses--;
       if (stdinFd !== undefined) { try { closeSync(stdinFd); } catch { /* ignore */ } }
       try { if (existsSync(tmpFile)) unlinkSync(tmpFile); } catch { /* ignore */ }
     }
