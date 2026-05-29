@@ -13,6 +13,7 @@ import {
   ShopComparePricesResponseSchema,
   ShopExtractLocationResponseSchema,
 } from './shop-assistant.contract';
+import { HealthResponseSchema } from './http-responses.contract';
 import { parseOrThrow } from './parse-or-throw';
 import { ContractViolationError } from './contract-violation.error';
 
@@ -35,6 +36,17 @@ describe('AiCompleteRequestSchema', () => {
     for (const tier of ['free', 'cheap', 'smart', 'premium']) {
       expect(AiCompleteRequestSchema.safeParse({ model_tier: tier, user_prompt: 'hi' }).success).toBe(true);
     }
+  });
+
+  it('schemaVersion defaults to 1.0 when omitted', () => {
+    const result = AiCompleteRequestSchema.safeParse({ model_tier: 'free', user_prompt: 'hi' });
+    expect(result.success).toBe(true);
+    expect(result.data!.schemaVersion).toBe('1.0');
+  });
+
+  it('rejects non-1.0 schemaVersion', () => {
+    const result = AiCompleteRequestSchema.safeParse({ model_tier: 'free', user_prompt: 'hi', schemaVersion: '2.0' });
+    expect(result.success).toBe(false);
   });
 });
 
@@ -300,5 +312,22 @@ describe('ShopExtractLocationResponseSchema', () => {
   });
   it('rejects missing region field', () => {
     expect(ShopExtractLocationResponseSchema.safeParse({ augmented_query: null }).success).toBe(false);
+  });
+});
+
+describe('HealthResponseSchema', () => {
+  it('accepts valid health response', () => {
+    const result = HealthResponseSchema.safeParse({ status: 'ok', service: 'ai-microservice' });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects invalid status value', () => {
+    const result = HealthResponseSchema.safeParse({ status: 'running', service: 'ai-microservice' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects missing service field', () => {
+    const result = HealthResponseSchema.safeParse({ status: 'ok' });
+    expect(result.success).toBe(false);
   });
 });
