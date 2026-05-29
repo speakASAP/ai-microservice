@@ -1,5 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiService } from '../ai/ai.service';
+import { ModelTierSchema, type ModelTier } from '../contracts/ai-complete.contract';
+
+function resolveModelTier(model?: string): ModelTier {
+  const parsed = ModelTierSchema.safeParse(model ?? 'free');
+  return parsed.success ? parsed.data : 'free';
+}
 
 const DEFAULT_REFINE_QUERY_PROMPT =
   'Extract a single web product search query from: "{{user_input}}". Reply with ONE short search query only (max 200 chars), no other text.';
@@ -90,7 +96,7 @@ export class ShopAssistantService {
     }
 
     const result = await this.aiService.complete({
-      model_tier: model ?? 'free',
+      model_tier: resolveModelTier(model),
       system_prompt: 'You are a search query refiner. Output only the refined query, no explanation.',
       user_prompt: textContent,
       max_tokens: 100,
@@ -157,7 +163,7 @@ export class ShopAssistantService {
     }
 
     const result = await this.aiService.complete({
-      model_tier: model ?? 'free',
+      model_tier: resolveModelTier(model),
       system_prompt: 'Format search results clearly for the user.',
       user_prompt: textContent,
       max_tokens: 500,
@@ -201,7 +207,7 @@ export class ShopAssistantService {
     }
 
     const result = await this.aiService.complete({
-      model_tier: model ?? 'free',
+      model_tier: resolveModelTier(model),
       system_prompt: 'You are a shopping comparison assistant.',
       user_prompt: textContent,
       max_tokens: 500,
@@ -236,7 +242,7 @@ export class ShopAssistantService {
     }
 
     const result = await this.aiService.complete({
-      model_tier: model ?? 'free',
+      model_tier: resolveModelTier(model),
       system_prompt: 'Extract delivery region from user shopping request. Return short phrase or empty string.',
       user_prompt: textContent,
       max_tokens: 60,
