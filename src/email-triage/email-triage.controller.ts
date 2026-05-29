@@ -11,6 +11,17 @@ import {
 import { Public } from '../service-identity/public.decorator';
 import { EmailTriageService } from './email-triage.service';
 import { AiService } from '../ai/ai.service';
+import {
+  parseOrThrow,
+  EmailIngestRequestSchema,
+  EmailIngestResponseSchema,
+  EmailClassifyRequestSchema,
+  EmailClassifyResponseSchema,
+  EmailExtractRequestSchema,
+  EmailExtractResponseSchema,
+  EmailDecideRequestSchema,
+  EmailDecideResponseSchema,
+} from '../contracts';
 
 function coerceUseLlm(value: unknown): boolean {
   if (value == null) return false;
@@ -51,26 +62,31 @@ export class EmailTriageController {
         HttpStatus.BAD_REQUEST,
       );
     }
+    const validated = parseOrThrow(EmailIngestRequestSchema, body, 'email-triage.ingest.request');
     const t0 = Date.now();
-    const { payload, error, escalation_reason } = this.emailTriageService.validateAndNormalize(body);
+    const { payload, error, escalation_reason } = this.emailTriageService.validateAndNormalize(validated);
     const duration_ms = Date.now() - t0;
     if (error) {
       throw new HttpException({ error, escalation_reason: escalation_reason ?? 'incomplete_data' }, HttpStatus.BAD_REQUEST);
     }
-    return { success: true, payload, duration_ms, model_used: 'schema-validator' };
+    return parseOrThrow(
+      EmailIngestResponseSchema,
+      { success: true as const, payload, duration_ms, model_used: 'schema-validator' },
+      'email-triage.ingest.response',
+    );
   }
 
   @Post('classify')
   @HttpCode(HttpStatus.OK)
-  async classify(@Body() body: Record<string, unknown>) {
+  async classify(@Body() body: unknown) {
+    const validated = parseOrThrow(EmailClassifyRequestSchema, body, 'email-triage.classify.request');
     const t0 = Date.now();
-    const payload = (body.payload && typeof body.payload === 'object' && !Array.isArray(body.payload)
-      ? body.payload
-      : body) as Record<string, unknown>;
+    const payload = (validated.payload && typeof validated.payload === 'object' && !Array.isArray(validated.payload)
+      ? validated.payload
+      : validated) as Record<string, unknown>;
     const msgId = payload.message_id != null ? String(payload.message_id) : undefined;
 
-    const useLlmRaw = body.use_llm;
-    const useLlm = useLlmRaw !== undefined ? coerceUseLlm(useLlmRaw) : this.llmClassifierDefault;
+    const useLlm = validated.use_llm !== undefined ? coerceUseLlm(validated.use_llm) : this.llmClassifierDefault;
 
     let result: Record<string, unknown> | null = null;
     let llmFallbackReason: string | null = null;
@@ -100,57 +116,52 @@ export class EmailTriageController {
     }
 
     const classifyResult: Record<string, unknown> = result ?? (this.emailTriageService.classifyPayload(payload) as unknown as Record<string, unknown>);
-
     const duration_ms = Date.now() - t0;
-    const out: Record<string, unknown> = {
-      success: true,
+
+    const out = {
+      success: true as const,
       intent: classifyResult.intent,
       confidence: classifyResult.confidence,
-      raw_scores: classifyResult.raw_scores ?? null,
-      model_used: classifyResult.model_used ?? 'rule-based',
+      raw_scores: (classifyResult.raw_scores as Record<string, number> | null | undefined) ?? null,
+      model_used: (classifyResult.model_used as string | undefined) ?? 'rule-based',
       duration_ms,
+      ...(classifyResult.llm_output != null ? { llm_output: classifyResult.llm_output } : {}),
+      ...(llmFallbackReason && useLlm ? { llm_fallback_reason: llmFallbackReason.slice(0, 500) } : {}),
     };
-    if (classifyResult.llm_output != null) out.llm_output = classifyResult.llm_output;
-    if (llmFallbackReason && useLlm) out.llm_fallback_reason = llmFallbackReason.slice(0, 500);
-    return out;
+    return parseOrThrow(EmailClassifyResponseSchema, out, 'email-triage.classify.response');
   }
 
   @Post('extract')
   @HttpCode(HttpStatus.OK)
-  extract(@Body() body: Record<string, unknown>) {
-    const payload = (body.payload && typeof body.payload === 'object' && !Array.isArray(body.payload)
-      ? body.payload
-      : body) as Record<string, unknown>;
-    const intent = typeof body.intent === 'string' ? body.intent : undefined;
+  extract(@Body() body: unknown) {
+    const validated = parseOrThrow(EmailExtractRequestSchema, body, 'email-triage.extract.request');
+    const payload = (validated.payload && typeof validated.payload === 'object' && !Array.isArray(validated.payload)
+      ? validated.payload
+      : validated) as Record<string, unknown>;
+    const intent = typeof validated.intent === 'string' ? validated.intent : undefined;
     const result = this.emailTriageService.extractPayload(payload, intent);
-    return { success: true, model_used: 'pattern-extractor', ...result };
+    return parseOrThrow(
+      EmailExtractResponseSchema,
+      { success: true as const, model_used: 'pattern-extractor', ...result },
+      'email-triage.extract.response',
+    );
   }
 
   @Post('decide')
   @HttpCode(HttpStatus.OK)
-  async decide(@Body() body: Record<string, unknown>) {
-    const intent = body.intent;
-    const confidence = body.confidence;
-    if (!intent || typeof intent !== 'string') {
-      throw new HttpException({ error: 'intent is required', escalation_reason: 'incomplete_data' }, HttpStatus.BAD_REQUEST);
-    }
-    if (confidence == null || (typeof confidence !== 'number' && typeof confidence !== 'string')) {
-      throw new HttpException({ error: 'confidence is required', escalation_reason: 'incomplete_data' }, HttpStatus.BAD_REQUEST);
-    }
-    const confFloat = parseFloat(String(confidence));
-    const entities = body.entities && typeof body.entities === 'object' && !Array.isArray(body.entities)
-      ? (body.entities as Record<string, unknown>)
-      : undefined;
+  async decide(@Body() body: unknown) {
+    const validated = parseOrThrow(EmailDecideRequestSchema, body, 'email-triage.decide.request');
+    const confFloat = parseFloat(String(validated.confidence));
+    const entities = validated.entities;
 
-    const useLlmRaw = body.use_llm;
-    const useLlm = useLlmRaw !== undefined ? coerceUseLlm(useLlmRaw) : this.llmDeciderDefault;
+    const useLlm = validated.use_llm !== undefined ? coerceUseLlm(validated.use_llm) : this.llmDeciderDefault;
 
     let result: Record<string, unknown> | null = null;
     let llmFallbackReason: string | null = null;
 
     if (useLlm) {
       try {
-        const text = JSON.stringify({ intent, confidence: confFloat, entities: entities ?? {} });
+        const text = JSON.stringify({ intent: validated.intent, confidence: confFloat, entities: entities ?? {} });
         const llmResult = await this.aiService.complete({
           model_tier: 'free',
           system_prompt:
@@ -166,19 +177,21 @@ export class EmailTriageController {
         }
       } catch (e: unknown) {
         llmFallbackReason = e instanceof Error ? e.message : String(e);
-        this.logger.warn('Email-triage LLM decide failed, falling back to rule-based', { intent, error: llmFallbackReason });
+        this.logger.warn('Email-triage LLM decide failed, falling back to rule-based', { intent: validated.intent, error: llmFallbackReason });
       }
     }
 
-    const decideResult: Record<string, unknown> = result ?? (this.emailTriageService.decideAction(intent, confFloat, undefined, entities) as unknown as Record<string, unknown>);
+    const decideResult: Record<string, unknown> = result ?? (this.emailTriageService.decideAction(validated.intent, confFloat, undefined, entities) as unknown as Record<string, unknown>);
 
-    const out: Record<string, unknown> = {
-      success: true,
+    const out = {
+      success: true as const,
       model_used: (decideResult.model_used as string | undefined) ?? 'rule-based',
-      ...decideResult,
+      action: decideResult.action,
+      escalation_reason: (decideResult.escalation_reason as string | null | undefined) ?? null,
+      queue: (decideResult.queue as string | null | undefined) ?? null,
+      ...(decideResult.llm_output != null ? { llm_output: decideResult.llm_output } : {}),
+      ...(llmFallbackReason && useLlm ? { llm_fallback_reason: llmFallbackReason.slice(0, 500) } : {}),
     };
-    if (decideResult.llm_output != null) out.llm_output = decideResult.llm_output;
-    if (llmFallbackReason && useLlm) out.llm_fallback_reason = llmFallbackReason.slice(0, 500);
-    return out;
+    return parseOrThrow(EmailDecideResponseSchema, out, 'email-triage.decide.response');
   }
 }

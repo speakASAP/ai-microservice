@@ -1,5 +1,6 @@
 export * from './contract-violation.error';
 export * from './parse-or-throw';
+export * from './zod-validation.pipe';
 export * from './ai-complete.contract';
 export * from './claude-code-job.contract';
 export * from './task.contract';

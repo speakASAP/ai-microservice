@@ -46,3 +46,54 @@ export const ShopExtractLocationRequestSchema = z.object({
 export type ShopTranscribeRequest = z.infer<typeof ShopTranscribeRequestSchema>;
 export type ShopRefineQueryRequest = z.infer<typeof ShopRefineQueryRequestSchema>;
 export type ShopSearchRequest = z.infer<typeof ShopSearchRequestSchema>;
+export type ShopPresentationRequest = z.infer<typeof ShopPresentationRequestSchema>;
+export type ShopComparePricesRequest = z.infer<typeof ShopComparePricesRequestSchema>;
+export type ShopExtractLocationRequest = z.infer<typeof ShopExtractLocationRequestSchema>;
+
+export const ShopTranscribeResponseSchema = z.object({
+  schemaVersion: z.literal('1.0').default('1.0'),
+  transcript: z.string(),
+});
+
+export const ShopRefineQueryResponseSchema = z.object({
+  schemaVersion: z.literal('1.0').default('1.0'),
+  query_text: z.string(),
+  refined_params: z.record(z.string(), z.unknown()),
+});
+
+const ShopSearchItemSchema = z.object({
+  title: z.string(),
+  url: z.string(),
+  price: z.unknown().optional(),
+  source: z.string().optional(),
+  position: z.number().int().nonnegative(),
+  snippet: z.string().optional(),
+});
+
+export const ShopSearchResponseSchema = z.object({
+  schemaVersion: z.literal('1.0').default('1.0'),
+  items: z.array(ShopSearchItemSchema),
+});
+
+export const ShopPresentationResponseSchema = z.object({
+  schemaVersion: z.literal('1.0').default('1.0'),
+  formatted_content: z.string(),
+});
+
+export const ShopComparePricesResponseSchema = z.object({
+  schemaVersion: z.literal('1.0').default('1.0'),
+  summary: z.string(),
+});
+
+export const ShopExtractLocationResponseSchema = z.object({
+  schemaVersion: z.literal('1.0').default('1.0'),
+  region: z.string().nullable(),
+  augmented_query: z.string().nullable(),
+});
+
+export type ShopTranscribeResponse = z.infer<typeof ShopTranscribeResponseSchema>;
+export type ShopRefineQueryResponse = z.infer<typeof ShopRefineQueryResponseSchema>;
+export type ShopSearchResponse = z.infer<typeof ShopSearchResponseSchema>;
+export type ShopPresentationResponse = z.infer<typeof ShopPresentationResponseSchema>;
+export type ShopComparePricesResponse = z.infer<typeof ShopComparePricesResponseSchema>;
+export type ShopExtractLocationResponse = z.infer<typeof ShopExtractLocationResponseSchema>;

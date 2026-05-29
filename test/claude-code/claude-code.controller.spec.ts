@@ -41,8 +41,9 @@ describe('ClaudeCodeController', () => {
         expectedOutcome: 'Endpoint returns 200',
       };
 
+      const jobId = randomUUID();
       const response: JobEnqueueResponseDto = {
-        jobId: 'job-123',
+        jobId,
         taskId,
         status: 'queued' as JobStatus,
         createdAt: new Date(),
@@ -52,7 +53,7 @@ describe('ClaudeCodeController', () => {
 
       const result = await controller.executeCode(dto);
 
-      expect(result.jobId).toBe('job-123');
+      expect(result.jobId).toBe(jobId);
       expect(result.status).toBe('queued');
       expect(mockService.enqueueJob).toHaveBeenCalledWith(dto);
     });
@@ -60,8 +61,9 @@ describe('ClaudeCodeController', () => {
 
   describe('GET /ai/claude-code-execute/:jobId', () => {
     it('should return job status when found', async () => {
+      const statusJobId = randomUUID();
       const response: JobStatusResponseDto = {
-        jobId: 'job-123',
+        jobId: statusJobId,
         taskId: randomUUID(),
         status: 'executing' as JobStatus,
         startedAt: new Date(),
@@ -69,11 +71,11 @@ describe('ClaudeCodeController', () => {
 
       mockService.getJobStatus.mockResolvedValue(response);
 
-      const result = await controller.getStatus('job-123') as JobStatusResponseDto;
+      const result = await controller.getStatus(statusJobId) as JobStatusResponseDto;
 
-      expect(result.jobId).toBe('job-123');
+      expect(result.jobId).toBe(statusJobId);
       expect(result.status).toBe('executing');
-      expect(mockService.getJobStatus).toHaveBeenCalledWith('job-123');
+      expect(mockService.getJobStatus).toHaveBeenCalledWith(statusJobId);
     });
 
     it('should return error object when job not found', async () => {

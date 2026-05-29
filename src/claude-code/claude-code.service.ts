@@ -28,7 +28,7 @@ export class ClaudeCodeService {
    * Creates a job record with status=queued and publishes to RabbitMQ.
    */
   async enqueueJob(dto: ExecuteCodeDto): Promise<JobEnqueueResponseDto> {
-    const jobId = `job-${randomUUID()}`;
+    const jobId = randomUUID();
     const timeoutSeconds = dto.timeoutSeconds || 300;
 
     const executionMode = dto.executionMode ?? 'code';
