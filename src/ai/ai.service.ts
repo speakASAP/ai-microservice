@@ -1,13 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { writeFileSync, unlinkSync, existsSync } from 'fs';
+import { spawn } from 'child_process';
+import { writeFileSync, unlinkSync, existsSync, openSync, closeSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 import type { AiCompleteRequestInput } from '../contracts';
-
-const execAsync = promisify(exec);
 
 // model_tier field kept for API compat but ignored — all calls route through CC CLI with sonnet
 const DEFAULT_MODEL = 'sonnet';
@@ -108,29 +105,70 @@ export class AiService {
     const tmpFile = join(tmpdir(), `ai-complete-${randomUUID()}.txt`);
     writeFileSync(tmpFile, fullPrompt, 'utf-8');
 
+    // Open the tmp file as a readable fd to pass as stdin via spawn (avoids shell injection)
+    let stdinFd: number | undefined;
+    try {
+      stdinFd = openSync(tmpFile, 'r');
+    } catch {
+      stdinFd = undefined;
+    }
+
     let stdout = '';
     try {
-      const result = await execAsync(
-        `${CC_CLI} --print --output-format json --model ${model} < ${tmpFile}`,
-        {
-          timeout: CC_TIMEOUT_MS,
-          env: { ...process.env, CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR || '/home/ssf/.claude' },
-        },
-      );
-      stdout = result.stdout;
-    } catch (err: unknown) {
-      const e = err as { stdout?: string; stderr?: string; message?: string };
-      const ccFromStdout = typeof e.stdout === 'string' ? parseCcStdout(e.stdout) : null;
-      if (ccFromStdout && (ccFromStdout.is_error || ccFromStdout.api_error_status)) {
-        this.logger.error(
-          `claude CLI API error: status=${ccFromStdout.api_error_status ?? 'n/a'} ${(ccFromStdout.result ?? '').slice(0, 200)}`,
+      stdout = await new Promise<string>((resolve, reject) => {
+        const child = spawn(
+          CC_CLI,
+          ['--print', '--output-format', 'json', '--model', model],
+          {
+            stdio: [stdinFd !== undefined ? stdinFd : 'pipe', 'pipe', 'pipe'],
+            env: { ...process.env, CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR || '/home/ssf/.claude' },
+          },
         );
-        return ccApiErrorResult(model, ccFromStdout);
+
+        const stdoutChunks: Buffer[] = [];
+        const stderrChunks: Buffer[] = [];
+        child.stdout?.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
+        child.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+
+        const timer = setTimeout(() => {
+          child.kill('SIGTERM');
+          setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* already dead */ } }, 5000);
+          reject(new Error(`AI_HTTP_TIMEOUT: claude CLI did not respond within ${CC_TIMEOUT_MS}ms`));
+        }, CC_TIMEOUT_MS);
+
+        child.on('close', (code, signal) => {
+          clearTimeout(timer);
+          const out = Buffer.concat(stdoutChunks).toString('utf-8');
+          const err = Buffer.concat(stderrChunks).toString('utf-8');
+          if (signal === 'SIGKILL' || signal === 'SIGTERM') {
+            reject(new Error(`claude CLI killed by signal ${signal}: ${err.slice(0, 200)}`));
+          } else if (code !== 0) {
+            // Non-zero exit — check if stdout has a valid CC error envelope before rejecting
+            const ccFromStdout = parseCcStdout(out);
+            if (ccFromStdout && (ccFromStdout.is_error || ccFromStdout.api_error_status)) {
+              resolve(out);
+            } else {
+              reject(new Error(err.trim() || out.trim() || `claude CLI exited with code ${code}`));
+            }
+          } else {
+            resolve(out);
+          }
+        });
+
+        child.on('error', (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+      });
+    } catch (err: unknown) {
+      const detail = err instanceof Error ? err.message : String(err);
+      if (detail.startsWith('AI_HTTP_TIMEOUT')) {
+        throw new Error(detail);
       }
-      const detail = (e.stderr || e.message || 'unknown CLI error').trim();
       this.logger.error(`claude CLI failed: ${detail.slice(0, 300)}`);
       return cliFailureResult(model, `claude CLI failed: ${detail}`);
     } finally {
+      if (stdinFd !== undefined) { try { closeSync(stdinFd); } catch { /* ignore */ } }
       try { if (existsSync(tmpFile)) unlinkSync(tmpFile); } catch { /* ignore */ }
     }
 

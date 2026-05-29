@@ -7,11 +7,15 @@ export class LoggingClient {
   private readonly url: string;
   private readonly fetchFn: typeof fetch;
 
-  constructor() {
+  constructor(
+    url?: string,
+    fetchFn?: typeof fetch,
+  ) {
     this.url =
+      url ??
       process.env.LOGGING_SERVICE_URL ??
       "http://logging-microservice:3367";
-    this.fetchFn = fetch;
+    this.fetchFn = fetchFn ?? fetch;
   }
 
   async log(
