@@ -18,8 +18,48 @@ const CC_TIMEOUT_MS = Number(process.env.CC_CLI_TIMEOUT_MS || 120_000);
 
 interface CcJsonResult {
   result?: string;
+  is_error?: boolean;
+  api_error_status?: number;
   usage?: { input_tokens?: number; output_tokens?: number };
   modelUsage?: Record<string, { inputTokens?: number; outputTokens?: number }>;
+}
+
+function parseCcStdout(stdout: string): CcJsonResult | null {
+  const trimmed = stdout.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed) as CcJsonResult;
+  } catch {
+    return null;
+  }
+}
+
+function isCcEnvelope(cc: CcJsonResult): boolean {
+  return typeof cc.result === 'string'
+    || cc.is_error === true
+    || typeof cc.api_error_status === 'number'
+    || cc.usage !== undefined
+    || cc.modelUsage !== undefined;
+}
+
+function ccApiErrorResult(model: string, cc: CcJsonResult): AiCompleteResult {
+  const message = (cc.result ?? '').trim()
+    || `Claude API error (HTTP ${cc.api_error_status ?? 'unknown'})`;
+  let error_code = 'CLI_FAILED';
+  if (cc.api_error_status === 429) {
+    error_code = 'RATE_LIMIT';
+  } else if (cc.is_error) {
+    error_code = 'MODEL_ERROR';
+  }
+  return {
+    text: '',
+    model_used: `claude-${model}`,
+    inputTokens: 0,
+    outputTokens: 0,
+    token_usage_estimate: 0,
+    error_code,
+    error_message: message.slice(0, 500),
+  };
 }
 
 export type AiCompleteResult = Record<string, unknown> & {
@@ -80,6 +120,13 @@ export class AiService {
       stdout = result.stdout;
     } catch (err: unknown) {
       const e = err as { stdout?: string; stderr?: string; message?: string };
+      const ccFromStdout = typeof e.stdout === 'string' ? parseCcStdout(e.stdout) : null;
+      if (ccFromStdout && (ccFromStdout.is_error || ccFromStdout.api_error_status)) {
+        this.logger.error(
+          `claude CLI API error: status=${ccFromStdout.api_error_status ?? 'n/a'} ${(ccFromStdout.result ?? '').slice(0, 200)}`,
+        );
+        return ccApiErrorResult(model, ccFromStdout);
+      }
       const detail = (e.stderr || e.message || 'unknown CLI error').trim();
       this.logger.error(`claude CLI failed: ${detail.slice(0, 300)}`);
       return cliFailureResult(model, `claude CLI failed: ${detail}`);
@@ -92,8 +139,14 @@ export class AiService {
     let inputTokens = 0;
     let outputTokens = 0;
     try {
-      const ccResult = JSON.parse(stdout.trim()) as CcJsonResult;
-      rawText = ccResult.result ?? '';
+      const ccResult = parseCcStdout(stdout) as CcJsonResult;
+      if (!ccResult) {
+        throw new Error('not json');
+      }
+      if (ccResult.is_error || ccResult.api_error_status) {
+        return ccApiErrorResult(model, ccResult);
+      }
+      rawText = isCcEnvelope(ccResult) ? (ccResult.result ?? '') : stdout.trim();
       if (ccResult.usage) {
         inputTokens = ccResult.usage.input_tokens ?? 0;
         outputTokens = ccResult.usage.output_tokens ?? 0;

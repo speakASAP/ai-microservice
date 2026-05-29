@@ -59,6 +59,26 @@ describe('AiService - Claude CLI', () => {
     expect(result.text).toBe('');
   });
 
+  it('returns RATE_LIMIT when CLI exits non-zero but stdout has 429 JSON', async () => {
+    const rateLimitJson = JSON.stringify({
+      is_error: true,
+      api_error_status: 429,
+      result: "You've hit your session limit",
+    });
+    mockExec.mockImplementation((_cmd: string, _opts: unknown, cb: unknown) => {
+      (cb as (err: Error & { stdout?: string }) => void)(
+        Object.assign(new Error('Command failed'), { stdout: rateLimitJson, stderr: '' }),
+      );
+      return {} as ReturnType<typeof exec>;
+    });
+
+    const result = await service.complete({ model_tier: 'free', user_prompt: 'hi' });
+
+    expect(result.error_code).toBe('RATE_LIMIT');
+    expect(result.error_message).toContain('session limit');
+    expect(result.text).toBe('');
+  });
+
   it('parses JSON response and spreads fields at top level', async () => {
     mockExec.mockImplementation((_cmd: string, _opts: unknown, cb: unknown) => {
       (cb as (err: null, result: { stdout: string; stderr: string }) => void)(
