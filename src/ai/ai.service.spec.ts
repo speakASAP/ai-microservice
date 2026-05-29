@@ -1,6 +1,5 @@
 import { AiService } from './ai.service';
 import { Test } from '@nestjs/testing';
-import { InternalServerErrorException } from '@nestjs/common';
 import { exec } from 'child_process';
 
 jest.mock('child_process', () => ({
@@ -35,7 +34,7 @@ describe('AiService - Claude CLI', () => {
         return {} as ReturnType<typeof exec>;
       });
 
-      const result = await service.complete({ model_tier: tier, user_prompt: 'say ok' });
+      const result = await service.complete({ model_tier: tier as 'free', user_prompt: 'say ok' });
 
       expect(mockExec).toHaveBeenCalledWith(
         expect.stringContaining('--model sonnet'),
@@ -47,14 +46,17 @@ describe('AiService - Claude CLI', () => {
     }
   });
 
-  it('throws InternalServerErrorException when CLI fails', async () => {
+  it('returns error_code CLI_FAILED when CLI fails', async () => {
     mockExec.mockImplementation((_cmd: string, _opts: unknown, cb: unknown) => {
       (cb as (err: Error) => void)(Object.assign(new Error('CLI error'), { stderr: 'auth failed' }));
       return {} as ReturnType<typeof exec>;
     });
 
-    await expect(service.complete({ model_tier: 'free', user_prompt: 'hi' }))
-      .rejects.toThrow(InternalServerErrorException);
+    const result = await service.complete({ model_tier: 'free', user_prompt: 'hi' });
+
+    expect(result.error_code).toBe('CLI_FAILED');
+    expect(result.error_message).toContain('auth failed');
+    expect(result.text).toBe('');
   });
 
   it('parses JSON response and spreads fields at top level', async () => {

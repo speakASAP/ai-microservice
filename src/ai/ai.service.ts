@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { writeFileSync, unlinkSync, existsSync } from 'fs';
@@ -28,7 +28,21 @@ export type AiCompleteResult = Record<string, unknown> & {
   inputTokens: number;
   outputTokens: number;
   token_usage_estimate: number;
+  error_code?: string;
+  error_message?: string;
 };
+
+function cliFailureResult(model: string, detail: string): AiCompleteResult {
+  return {
+    text: '',
+    model_used: `claude-${model}`,
+    inputTokens: 0,
+    outputTokens: 0,
+    token_usage_estimate: 0,
+    error_code: 'CLI_FAILED',
+    error_message: detail.slice(0, 500),
+  };
+}
 
 @Injectable()
 export class AiService {
@@ -66,9 +80,9 @@ export class AiService {
       stdout = result.stdout;
     } catch (err: unknown) {
       const e = err as { stdout?: string; stderr?: string; message?: string };
-      throw new InternalServerErrorException(
-        `claude CLI failed: ${(e.stderr || e.message || '').slice(0, 300)}`,
-      );
+      const detail = (e.stderr || e.message || 'unknown CLI error').trim();
+      this.logger.error(`claude CLI failed: ${detail.slice(0, 300)}`);
+      return cliFailureResult(model, `claude CLI failed: ${detail}`);
     } finally {
       try { if (existsSync(tmpFile)) unlinkSync(tmpFile); } catch { /* ignore */ }
     }

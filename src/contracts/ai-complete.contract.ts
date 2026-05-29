@@ -19,6 +19,8 @@ export const AiCompleteResponseSchema = z.object({
   inputTokens: z.number().int().nonnegative().optional(),
   outputTokens: z.number().int().nonnegative().optional(),
   token_usage_estimate: z.number().int().nonnegative().optional(),
+  error_code: z.string().optional(),
+  error_message: z.string().optional(),
 }).passthrough();
 
 export type ModelTier = z.infer<typeof ModelTierSchema>;
