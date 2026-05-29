@@ -4,7 +4,7 @@ import { BadRequestException } from '@nestjs/common';
 import { AmqpConnection } from '@golevelup/nestjs-rabbitmq';
 import { ClaudeCodeService } from '../../src/claude-code/claude-code.service';
 import { ClaudeCodeJob } from '../../src/database/entities/claude-code-job.entity';
-import { ExecuteCodeDto } from '../../src/claude-code/dto/execute-code.dto';
+import type { ExecuteCodeRequestInput } from '../../src/contracts';
 import { JobStatus } from '../../src/claude-code/job-status.enum';
 import { randomUUID } from 'crypto';
 
@@ -45,7 +45,7 @@ describe('ClaudeCodeService', () => {
   describe('enqueueJob', () => {
     it('should create and save a job record with status=queued', async () => {
       const taskId = randomUUID();
-      const dto: ExecuteCodeDto = {
+      const dto: ExecuteCodeRequestInput = {
         taskId,
         repoPath: '/home/ssf/Documents/Github/beauty',
         branch: 'feat/test',
@@ -96,7 +96,7 @@ describe('ClaudeCodeService', () => {
 
     it('should use default timeout if not provided', async () => {
       const taskId = randomUUID();
-      const dto: ExecuteCodeDto = {
+      const dto: ExecuteCodeRequestInput = {
         taskId,
         repoPath: '/home/ssf/Documents/Github/test',
         branch: 'main',
@@ -257,7 +257,7 @@ describe('ClaudeCodeService', () => {
 
   describe('enqueueJob error handling', () => {
     it('should persist job even if RabbitMQ publish fails', async () => {
-      const dto: ExecuteCodeDto = {
+      const dto: ExecuteCodeRequestInput = {
         taskId: randomUUID(),
         repoPath: '/home/ssf/Documents/Github/beauty',
         branch: 'feat/test',

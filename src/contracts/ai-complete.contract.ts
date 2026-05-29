@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const ModelTierSchema = z.enum(['free', 'cheap', 'smart', 'premium']);
 
 export const AiCompleteRequestSchema = z.object({
-  schemaVersion: z.literal('1.0').default('1.0'),
+  schemaVersion: z.literal('1.0').optional().default('1.0'),
   model_tier: ModelTierSchema,
   user_prompt: z.string().min(1),
   system_prompt: z.string().optional(),
@@ -25,4 +25,5 @@ export const AiCompleteResponseSchema = z.object({
 
 export type ModelTier = z.infer<typeof ModelTierSchema>;
 export type AiCompleteRequest = z.infer<typeof AiCompleteRequestSchema>;
+export type AiCompleteRequestInput = z.input<typeof AiCompleteRequestSchema>;
 export type AiCompleteResponse = z.infer<typeof AiCompleteResponseSchema>;

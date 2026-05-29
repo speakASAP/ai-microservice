@@ -17,4 +17,6 @@ export const TaskDraftResponseSchema = z.object({
 });
 
 export type TaskDraftRequest = z.infer<typeof TaskDraftRequestSchema>;
+export type TaskDraftRequestInput = z.input<typeof TaskDraftRequestSchema>;
 export type TaskDraftResponse = z.infer<typeof TaskDraftResponseSchema>;
+export type TaskDraftResponseInput = z.input<typeof TaskDraftResponseSchema>;

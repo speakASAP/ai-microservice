@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { ClaudeCodeJob } from '../database/entities/claude-code-job.entity';
-import { ExecuteCodeDto } from './dto/execute-code.dto';
+import { ExecuteCodeRequestInput } from '../contracts';
 import { JobEnqueueResponseDto } from './dto/job-enqueue-response.dto';
 import { JobStatusResponseDto } from './dto/job-status-response.dto';
 import { JobStatus } from './job-status.enum';
@@ -27,7 +27,7 @@ export class ClaudeCodeService {
    * Enqueue a new Claude Code job for execution.
    * Creates a job record with status=queued and publishes to RabbitMQ.
    */
-  async enqueueJob(dto: ExecuteCodeDto): Promise<JobEnqueueResponseDto> {
+  async enqueueJob(dto: ExecuteCodeRequestInput): Promise<JobEnqueueResponseDto> {
     const jobId = randomUUID();
     const timeoutSeconds = dto.timeoutSeconds || 300;
 

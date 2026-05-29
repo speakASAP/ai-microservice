@@ -53,13 +53,13 @@ export type ShopExtractLocationRequest = z.infer<typeof ShopExtractLocationReque
 export const ShopTranscribeResponseSchema = z.object({
   schemaVersion: z.literal('1.0').default('1.0'),
   transcript: z.string(),
-});
+}).passthrough();
 
 export const ShopRefineQueryResponseSchema = z.object({
   schemaVersion: z.literal('1.0').default('1.0'),
   query_text: z.string(),
   refined_params: z.record(z.string(), z.unknown()),
-});
+}).passthrough();
 
 const ShopSearchItemSchema = z.object({
   title: z.string(),
@@ -68,28 +68,28 @@ const ShopSearchItemSchema = z.object({
   source: z.string().optional(),
   position: z.number().int().nonnegative(),
   snippet: z.string().optional(),
-});
+}).passthrough();
 
 export const ShopSearchResponseSchema = z.object({
   schemaVersion: z.literal('1.0').default('1.0'),
   items: z.array(ShopSearchItemSchema),
-});
+}).passthrough();
 
 export const ShopPresentationResponseSchema = z.object({
   schemaVersion: z.literal('1.0').default('1.0'),
   formatted_content: z.string(),
-});
+}).passthrough();
 
 export const ShopComparePricesResponseSchema = z.object({
   schemaVersion: z.literal('1.0').default('1.0'),
   summary: z.string(),
-});
+}).passthrough();
 
 export const ShopExtractLocationResponseSchema = z.object({
   schemaVersion: z.literal('1.0').default('1.0'),
   region: z.string().nullable(),
   augmented_query: z.string().nullable(),
-});
+}).passthrough();
 
 export type ShopTranscribeResponse = z.infer<typeof ShopTranscribeResponseSchema>;
 export type ShopRefineQueryResponse = z.infer<typeof ShopRefineQueryResponseSchema>;

@@ -1,7 +1,8 @@
-import { Controller, Post, Get, Body, Param, HttpCode } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, HttpCode, HttpStatus, HttpException, UsePipes } from '@nestjs/common';
 import { ClaudeCodeService } from './claude-code.service';
-import { ExecuteCodeDto } from './dto/execute-code.dto';
-import { parseOrThrow, JobEnqueueResponseSchema, JobStatusResponseSchema } from '../contracts';
+import { ZodValidationPipe } from '../contracts/zod-validation.pipe';
+import { parseOrThrow, ExecuteCodeRequestSchema, JobEnqueueResponseSchema, JobStatusResponseSchema, NotFoundResponseSchema } from '../contracts';
+import type { ExecuteCodeRequestInput } from '../contracts';
 
 @Controller('ai/claude-code-execute')
 export class ClaudeCodeController {
@@ -9,16 +10,18 @@ export class ClaudeCodeController {
 
   @Post()
   @HttpCode(201)
-  async executeCode(@Body() dto: ExecuteCodeDto) {
-    const result = await this.service.enqueueJob(dto);
-    return parseOrThrow(JobEnqueueResponseSchema, result, 'claude-code.enqueue.response');
+  @UsePipes(new ZodValidationPipe(ExecuteCodeRequestSchema))
+  async executeCode(@Body() body: ExecuteCodeRequestInput) {
+    const result = await this.service.enqueueJob(body);
+    return parseOrThrow(JobEnqueueResponseSchema, result, 'claude-code.execute.response');
   }
 
   @Get(':jobId')
   async getStatus(@Param('jobId') jobId: string) {
     const status = await this.service.getJobStatus(jobId);
     if (!status) {
-      return { error: 'Job not found' };
+      const body = parseOrThrow(NotFoundResponseSchema, { error: 'Job not found' }, 'claude-code.status.not-found');
+      throw new HttpException(body, HttpStatus.NOT_FOUND);
     }
     return parseOrThrow(JobStatusResponseSchema, status, 'claude-code.status.response');
   }

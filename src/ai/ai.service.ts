@@ -5,7 +5,7 @@ import { writeFileSync, unlinkSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
-import type { CompleteRequestDto } from './dto/complete-request.dto';
+import type { AiCompleteRequestInput } from '../contracts';
 
 const execAsync = promisify(exec);
 
@@ -88,7 +88,7 @@ function cliFailureResult(model: string, detail: string): AiCompleteResult {
 export class AiService {
   private readonly logger = new Logger(AiService.name);
 
-  async complete(dto: CompleteRequestDto): Promise<AiCompleteResult> {
+  async complete(dto: AiCompleteRequestInput): Promise<AiCompleteResult> {
     const model = DEFAULT_MODEL;
 
     if (dto.model_tier && ELEVATED_TIERS.has(dto.model_tier)) {

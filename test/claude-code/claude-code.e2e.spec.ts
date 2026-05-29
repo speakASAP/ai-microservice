@@ -114,10 +114,10 @@ describe('ClaudeCode E2E', () => {
       expect(['queued', 'executing', 'success', 'failed']).toContain(getRes.body.status);
     });
 
-    it('returns error object for unknown jobId', async () => {
+    it('returns 404 with error object for unknown jobId', async () => {
       const res = await request(app.getHttpServer())
         .get('/ai/claude-code-execute/job-nonexistent-id')
-        .expect(200);
+        .expect(404);
 
       expect(res.body.error).toBe('Job not found');
     });

@@ -1,8 +1,9 @@
-import { Controller, Post, Body, HttpCode } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, UsePipes } from '@nestjs/common';
 import { AiService } from './ai.service';
-import { CompleteRequestDto } from './dto/complete-request.dto';
-import { parseOrThrow, AiCompleteResponseSchema } from '../contracts';
-import type { AiCompleteResponse } from '../contracts';
+import { ZodValidationPipe } from '../contracts/zod-validation.pipe';
+import { parseOrThrow } from '../contracts/parse-or-throw';
+import { AiCompleteRequestSchema, AiCompleteResponseSchema } from '../contracts';
+import type { AiCompleteRequestInput } from '../contracts';
 
 @Controller('ai')
 export class AiController {
@@ -10,8 +11,9 @@ export class AiController {
 
   @Post('complete')
   @HttpCode(200)
-  async complete(@Body() dto: CompleteRequestDto): Promise<AiCompleteResponse> {
-    const result = await this.aiService.complete(dto);
+  @UsePipes(new ZodValidationPipe(AiCompleteRequestSchema))
+  async complete(@Body() body: AiCompleteRequestInput) {
+    const result = await this.aiService.complete(body);
     return parseOrThrow(AiCompleteResponseSchema, result, 'ai.complete.response');
   }
 }

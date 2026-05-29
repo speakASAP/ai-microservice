@@ -1,8 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { HttpException, HttpStatus } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { ClaudeCodeController } from '../../src/claude-code/claude-code.controller';
 import { ClaudeCodeService } from '../../src/claude-code/claude-code.service';
-import { ExecuteCodeDto } from '../../src/claude-code/dto/execute-code.dto';
+import type { ExecuteCodeRequestInput } from '../../src/contracts';
 import { JobEnqueueResponseDto } from '../../src/claude-code/dto/job-enqueue-response.dto';
 import { JobStatusResponseDto } from '../../src/claude-code/dto/job-status-response.dto';
 import { JobStatus } from '../../src/claude-code/job-status.enum';
@@ -33,7 +34,7 @@ describe('ClaudeCodeController', () => {
   describe('POST /ai/claude-code-execute', () => {
     it('should return job_id with status queued', async () => {
       const taskId = randomUUID();
-      const dto: ExecuteCodeDto = {
+      const dto: ExecuteCodeRequestInput = {
         taskId,
         repoPath: '/home/ssf/Documents/Github/beauty',
         branch: 'feat/test',
@@ -78,12 +79,13 @@ describe('ClaudeCodeController', () => {
       expect(mockService.getJobStatus).toHaveBeenCalledWith(statusJobId);
     });
 
-    it('should return error object when job not found', async () => {
+    it('should throw HttpException with 404 when job not found', async () => {
       mockService.getJobStatus.mockResolvedValue(null);
 
-      const result = await controller.getStatus('nonexistent');
-
-      expect(result).toEqual({ error: 'Job not found' });
+      await expect(controller.getStatus('nonexistent')).rejects.toThrow(HttpException);
+      await expect(controller.getStatus('nonexistent')).rejects.toMatchObject({
+        status: HttpStatus.NOT_FOUND,
+      });
       expect(mockService.getJobStatus).toHaveBeenCalledWith('nonexistent');
     });
   });

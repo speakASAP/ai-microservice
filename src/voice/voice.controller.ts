@@ -1,8 +1,12 @@
-import { Controller, Post, Body, HttpCode } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, UsePipes } from '@nestjs/common';
 import { VoiceService } from './voice.service';
-import { TranscribeDto } from './dto/transcribe.dto';
-import { parseOrThrow, TranscribeResponseSchema } from '../contracts';
-import type { TranscribeResponse } from '../contracts';
+import {
+  TranscribeRequestSchema,
+  TranscribeResponseSchema,
+  ZodValidationPipe,
+  parseOrThrow,
+} from '../contracts';
+import type { TranscribeRequestInput, TranscribeResponse } from '../contracts';
 
 @Controller('voice')
 export class VoiceController {
@@ -10,7 +14,8 @@ export class VoiceController {
 
   @Post('transcribe')
   @HttpCode(200)
-  async transcribe(@Body() dto: TranscribeDto): Promise<TranscribeResponse> {
+  @UsePipes(new ZodValidationPipe(TranscribeRequestSchema))
+  async transcribe(@Body() dto: TranscribeRequestInput): Promise<TranscribeResponse> {
     const result = await this.voiceService.transcribe(dto);
     return parseOrThrow(TranscribeResponseSchema, result, 'voice.transcribe.response');
   }

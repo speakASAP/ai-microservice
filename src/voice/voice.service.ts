@@ -1,5 +1,5 @@
 import { Injectable, InternalServerErrorException, BadRequestException } from '@nestjs/common';
-import { TranscribeDto } from './dto/transcribe.dto';
+import type { TranscribeRequestInput } from '../contracts';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const FormData = require('form-data') as typeof import('form-data');
 
@@ -11,7 +11,7 @@ export class VoiceService {
   private readonly storageAccessKey = process.env.STORAGE_ACCESS_KEY;
   private readonly storageSecretKey = process.env.STORAGE_SECRET_KEY;
 
-  async transcribe(dto: TranscribeDto): Promise<{ transcript: string }> {
+  async transcribe(dto: TranscribeRequestInput): Promise<{ transcript: string }> {
     const audioBuffer = await this.fetchFromStorage(dto.fileKey);
     const transcript = await this.callWhisper(audioBuffer, dto.fileKey, dto.language);
     return { transcript };

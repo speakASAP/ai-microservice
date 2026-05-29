@@ -1,8 +1,12 @@
-import { Controller, Post, Body, HttpCode } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, UsePipes } from '@nestjs/common';
 import { TaskService } from './task.service';
-import { TaskDraftDto } from './dto/task-draft.dto';
-import { parseOrThrow, TaskDraftResponseSchema } from '../contracts';
-import type { TaskDraftResponse } from '../contracts';
+import {
+  TaskDraftRequestSchema,
+  TaskDraftResponseSchema,
+  ZodValidationPipe,
+  parseOrThrow,
+} from '../contracts';
+import type { TaskDraftRequestInput, TaskDraftResponse } from '../contracts';
 
 @Controller('task')
 export class TaskController {
@@ -10,7 +14,8 @@ export class TaskController {
 
   @Post('draft')
   @HttpCode(200)
-  async draft(@Body() dto: TaskDraftDto): Promise<TaskDraftResponse> {
+  @UsePipes(new ZodValidationPipe(TaskDraftRequestSchema))
+  async draft(@Body() dto: TaskDraftRequestInput): Promise<TaskDraftResponse> {
     const result = await this.taskService.draftTask(dto);
     return parseOrThrow(TaskDraftResponseSchema, result, 'task.draft.response');
   }

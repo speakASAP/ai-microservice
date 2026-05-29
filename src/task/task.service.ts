@@ -1,7 +1,8 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { AiService } from '../ai/ai.service';
-import type { TaskDraftDto } from './dto/task-draft.dto';
-import type { TaskDraftResponse, TaskPriority } from './dto/task-draft-response.dto';
+import type { TaskDraftRequestInput, TaskDraftResponseInput } from '../contracts';
+
+type TaskPriority = 'low' | 'normal' | 'high';
 
 const SYSTEM_PROMPT = `You are a school task assistant. Given a voice transcript and/or text note from a teacher, extract and reformat into a structured volunteer task for parents.
 Output ONLY valid JSON (no markdown, no explanation): { "title": string, "description": string, "priority": "low"|"normal"|"high", "deadline"?: string }
@@ -19,7 +20,7 @@ function toTaskPriority(value: unknown): TaskPriority {
 export class TaskService {
   constructor(private readonly aiService: AiService) {}
 
-  async draftTask(dto: TaskDraftDto): Promise<TaskDraftResponse> {
+  async draftTask(dto: TaskDraftRequestInput): Promise<TaskDraftResponseInput> {
     if (!dto.transcript && !dto.textNote) {
       throw new BadRequestException('At least one of transcript or textNote is required');
     }

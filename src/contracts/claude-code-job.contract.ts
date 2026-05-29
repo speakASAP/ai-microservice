@@ -40,5 +40,6 @@ export const JobStatusResponseSchema = z.object({
 
 export type ClaudeCodeJobStatus = z.infer<typeof ClaudeCodeJobStatusSchema>;
 export type ExecuteCodeRequest = z.infer<typeof ExecuteCodeRequestSchema>;
+export type ExecuteCodeRequestInput = z.input<typeof ExecuteCodeRequestSchema>;
 export type JobEnqueueResponse = z.infer<typeof JobEnqueueResponseSchema>;
 export type JobStatusResponse = z.infer<typeof JobStatusResponseSchema>;

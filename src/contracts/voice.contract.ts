@@ -12,4 +12,5 @@ export const TranscribeResponseSchema = z.object({
 });
 
 export type TranscribeRequest = z.infer<typeof TranscribeRequestSchema>;
+export type TranscribeRequestInput = z.input<typeof TranscribeRequestSchema>;
 export type TranscribeResponse = z.infer<typeof TranscribeResponseSchema>;

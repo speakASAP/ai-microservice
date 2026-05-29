@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { VoiceController } from '../../src/voice/voice.controller';
 import { VoiceService } from '../../src/voice/voice.service';
-import { TranscribeDto } from '../../src/voice/dto/transcribe.dto';
+import type { TranscribeRequestInput } from '../../src/contracts';
 
 describe('VoiceController', () => {
   let controller: VoiceController;
@@ -20,7 +20,7 @@ describe('VoiceController', () => {
 
   describe('POST /voice/transcribe', () => {
     it('returns transcript for valid file key', async () => {
-      const dto: TranscribeDto = { fileKey: 'uploads/voice-abc.webm', language: 'cs' };
+      const dto: TranscribeRequestInput = { fileKey: 'uploads/voice-abc.webm', language: 'cs' };
       mockService.transcribe.mockResolvedValue({ transcript: 'Dobrý den' });
 
       const result = await controller.transcribe(dto);
@@ -30,7 +30,7 @@ describe('VoiceController', () => {
     });
 
     it('returns transcript without optional language', async () => {
-      const dto: TranscribeDto = { fileKey: 'uploads/voice-xyz.webm' };
+      const dto: TranscribeRequestInput = { fileKey: 'uploads/voice-xyz.webm' };
       mockService.transcribe.mockResolvedValue({ transcript: 'Hello world' });
 
       const result = await controller.transcribe(dto);
@@ -39,7 +39,7 @@ describe('VoiceController', () => {
     });
 
     it('propagates service errors', async () => {
-      const dto: TranscribeDto = { fileKey: 'uploads/missing.webm' };
+      const dto: TranscribeRequestInput = { fileKey: 'uploads/missing.webm' };
       mockService.transcribe.mockRejectedValue(new Error('File not found'));
 
       await expect(controller.transcribe(dto)).rejects.toThrow('File not found');
