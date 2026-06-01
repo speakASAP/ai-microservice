@@ -1,56 +1,28 @@
 import { AiService } from './ai.service';
-import { Test } from '@nestjs/testing';
-import { exec } from 'child_process';
-
-jest.mock('child_process', () => ({
-  exec: jest.fn(),
-}));
-
-const mockExec = exec as jest.MockedFunction<typeof exec>;
+import { LoggingClient } from '../claude-code/logging.client';
 
 describe('AiService - Claude CLI', () => {
   let service: AiService;
+  let loggingClient: jest.Mocked<LoggingClient>;
 
-  beforeEach(async () => {
-    jest.clearAllMocks();
-    const module = await Test.createTestingModule({ providers: [AiService] }).compile();
-    service = module.get(AiService);
+  beforeEach(() => {
+    loggingClient = { log: jest.fn().mockResolvedValue(undefined) } as any;
+    service = new AiService(loggingClient);
   });
 
-  it('invokes claude CLI with sonnet model regardless of model_tier', async () => {
-    mockExec.mockImplementation((_cmd: string, _opts: unknown, cb: unknown) => {
-      (cb as (err: null, result: { stdout: string; stderr: string }) => void)(
-        null, { stdout: 'ok\n', stderr: '' }
-      );
-      return {} as ReturnType<typeof exec>;
-    });
-
+  it('routes all model_tier values to sonnet model via CC CLI', async () => {
     for (const tier of ['free', 'cheap', 'smart', 'unknown']) {
-      jest.clearAllMocks();
-      mockExec.mockImplementation((_cmd: string, _opts: unknown, cb: unknown) => {
-        (cb as (err: null, result: { stdout: string; stderr: string }) => void)(
-          null, { stdout: 'ok\n', stderr: '' }
-        );
-        return {} as ReturnType<typeof exec>;
-      });
+      jest.spyOn(service as any, 'spawnCcCli').mockResolvedValue('ok\n');
 
       const result = await service.complete({ model_tier: tier as 'free', user_prompt: 'say ok' });
 
-      expect(mockExec).toHaveBeenCalledWith(
-        expect.stringContaining('--model sonnet'),
-        expect.any(Object),
-        expect.any(Function),
-      );
       expect(result.text).toBe('ok');
       expect(result.model_used).toBe('claude-sonnet');
     }
   });
 
   it('returns error_code CLI_FAILED when CLI fails', async () => {
-    mockExec.mockImplementation((_cmd: string, _opts: unknown, cb: unknown) => {
-      (cb as (err: Error) => void)(Object.assign(new Error('CLI error'), { stderr: 'auth failed' }));
-      return {} as ReturnType<typeof exec>;
-    });
+    jest.spyOn(service as any, 'spawnCcCli').mockRejectedValue(new Error('auth failed'));
 
     const result = await service.complete({ model_tier: 'free', user_prompt: 'hi' });
 
@@ -59,18 +31,13 @@ describe('AiService - Claude CLI', () => {
     expect(result.text).toBe('');
   });
 
-  it('returns RATE_LIMIT when CLI exits non-zero but stdout has 429 JSON', async () => {
+  it('returns RATE_LIMIT when CLI returns 429 JSON envelope', async () => {
     const rateLimitJson = JSON.stringify({
       is_error: true,
       api_error_status: 429,
       result: "You've hit your session limit",
     });
-    mockExec.mockImplementation((_cmd: string, _opts: unknown, cb: unknown) => {
-      (cb as (err: Error & { stdout?: string }) => void)(
-        Object.assign(new Error('Command failed'), { stdout: rateLimitJson, stderr: '' }),
-      );
-      return {} as ReturnType<typeof exec>;
-    });
+    jest.spyOn(service as any, 'spawnCcCli').mockResolvedValue(rateLimitJson);
 
     const result = await service.complete({ model_tier: 'free', user_prompt: 'hi' });
 
@@ -80,17 +47,71 @@ describe('AiService - Claude CLI', () => {
   });
 
   it('parses JSON response and spreads fields at top level', async () => {
-    mockExec.mockImplementation((_cmd: string, _opts: unknown, cb: unknown) => {
-      (cb as (err: null, result: { stdout: string; stderr: string }) => void)(
-        null, { stdout: '{"status":"pass","score":10}\n', stderr: '' }
-      );
-      return {} as ReturnType<typeof exec>;
-    });
+    jest.spyOn(service as any, 'spawnCcCli').mockResolvedValue('{"status":"pass","score":10}\n');
 
     const result = await service.complete({ model_tier: 'free', user_prompt: 'evaluate' });
 
     expect(result.status).toBe('pass');
     expect(result.score).toBe(10);
     expect(result.text).toBe('{"status":"pass","score":10}');
+  });
+});
+
+describe('AiService telemetry', () => {
+  let service: AiService;
+  let loggingClient: jest.Mocked<LoggingClient>;
+
+  beforeEach(() => {
+    loggingClient = { log: jest.fn().mockResolvedValue(undefined) } as any;
+    service = new AiService(loggingClient);
+  });
+
+  it('emits ai_complete log with compression metadata after successful completion', async () => {
+    jest.spyOn(service as any, 'spawnCcCli').mockResolvedValue(
+      JSON.stringify({
+        result: 'hello world',
+        usage: { input_tokens: 100, output_tokens: 20 },
+      }),
+    );
+
+    await service.complete({
+      model_tier: 'smart',
+      user_prompt: 'say hello',
+      correlation_id: 'test-corr-123',
+    });
+
+    expect(loggingClient.log).toHaveBeenCalledWith(
+      'info',
+      'ai_complete',
+      expect.objectContaining({
+        correlation_id: 'test-corr-123',
+        inputTokens: 100,
+        outputTokens: 20,
+        compression: { rtk: true, caveman: 'lite' },
+      }),
+    );
+  });
+
+  it('emits ai_complete log with zero tokens on CLI failure', async () => {
+    jest.spyOn(service as any, 'spawnCcCli').mockRejectedValue(
+      new Error('claude CLI failed: timeout'),
+    );
+
+    await service.complete({
+      model_tier: 'free',
+      user_prompt: 'say hello',
+      correlation_id: 'test-corr-456',
+    });
+
+    expect(loggingClient.log).toHaveBeenCalledWith(
+      'info',
+      'ai_complete',
+      expect.objectContaining({
+        correlation_id: 'test-corr-456',
+        inputTokens: 0,
+        outputTokens: 0,
+        compression: { rtk: true, caveman: 'lite' },
+      }),
+    );
   });
 });

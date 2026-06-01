@@ -5,6 +5,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 import type { AiCompleteRequestInput } from '../contracts';
+import { LoggingClient } from '../claude-code/logging.client';
 
 // model_tier field kept for API compat but ignored — all calls route through CC CLI with sonnet
 const DEFAULT_MODEL = 'sonnet';
@@ -88,6 +89,8 @@ export class AiService {
   private readonly logger = new Logger(AiService.name);
   private activeProcesses = 0;
 
+  constructor(private readonly loggingClient: LoggingClient) {}
+
   async complete(dto: AiCompleteRequestInput): Promise<AiCompleteResult> {
     const model = DEFAULT_MODEL;
 
@@ -107,6 +110,7 @@ export class AiService {
 
     if (this.activeProcesses >= CC_MAX_CONCURRENT) {
       this.logger.warn(`claude CLI concurrency limit reached (${CC_MAX_CONCURRENT} active); rejecting request`);
+      this.emitTelemetry(dto.correlation_id, `claude-${model}`, 0, 0);
       return cliFailureResult(model, `claude CLI concurrency limit reached (${CC_MAX_CONCURRENT} active)`);
     }
 
@@ -124,57 +128,14 @@ export class AiService {
     this.activeProcesses++;
     let stdout = '';
     try {
-      stdout = await new Promise<string>((resolve, reject) => {
-        const child = spawn(
-          CC_CLI,
-          ['--print', '--output-format', 'json', '--model', model],
-          {
-            stdio: [stdinFd !== undefined ? stdinFd : 'pipe', 'pipe', 'pipe'],
-            env: { ...process.env, CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR || '/home/ssf/.claude' },
-          },
-        );
-
-        const stdoutChunks: Buffer[] = [];
-        const stderrChunks: Buffer[] = [];
-        child.stdout?.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
-        child.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
-
-        const timer = setTimeout(() => {
-          child.kill('SIGTERM');
-          setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* already dead */ } }, 5000);
-          reject(new Error(`AI_HTTP_TIMEOUT: claude CLI did not respond within ${CC_TIMEOUT_MS}ms`));
-        }, CC_TIMEOUT_MS);
-
-        child.on('close', (code, signal) => {
-          clearTimeout(timer);
-          const out = Buffer.concat(stdoutChunks).toString('utf-8');
-          const err = Buffer.concat(stderrChunks).toString('utf-8');
-          if (signal === 'SIGKILL' || signal === 'SIGTERM') {
-            reject(new Error(`claude CLI killed by signal ${signal}: ${err.slice(0, 200)}`));
-          } else if (code !== 0) {
-            // Non-zero exit — check if stdout has a valid CC error envelope before rejecting
-            const ccFromStdout = parseCcStdout(out);
-            if (ccFromStdout && (ccFromStdout.is_error || ccFromStdout.api_error_status)) {
-              resolve(out);
-            } else {
-              reject(new Error(err.trim() || out.trim() || `claude CLI exited with code ${code}`));
-            }
-          } else {
-            resolve(out);
-          }
-        });
-
-        child.on('error', (err) => {
-          clearTimeout(timer);
-          reject(err);
-        });
-      });
+      stdout = await this.spawnCcCli(stdinFd);
     } catch (err: unknown) {
       const detail = err instanceof Error ? err.message : String(err);
       if (detail.startsWith('AI_HTTP_TIMEOUT')) {
         throw new Error(detail);
       }
       this.logger.error(`claude CLI failed: ${detail.slice(0, 300)}`);
+      this.emitTelemetry(dto.correlation_id, `claude-${model}`, 0, 0);
       return cliFailureResult(model, `claude CLI failed: ${detail}`);
     } finally {
       this.activeProcesses--;
@@ -192,6 +153,7 @@ export class AiService {
         throw new Error('not json');
       }
       if (ccResult.is_error || ccResult.api_error_status) {
+        this.emitTelemetry(dto.correlation_id, `claude-${model}`, 0, 0);
         return ccApiErrorResult(model, ccResult);
       }
       rawText = isCcEnvelope(ccResult) ? (ccResult.result ?? '') : stdout.trim();
@@ -226,6 +188,7 @@ export class AiService {
       }
     }
 
+    this.emitTelemetry(dto.correlation_id, `claude-${model}`, inputTokens, outputTokens);
     return {
       ...parsedData,
       text: rawText,
@@ -234,5 +197,72 @@ export class AiService {
       outputTokens,
       token_usage_estimate: inputTokens + outputTokens,
     };
+  }
+
+  private spawnCcCli(stdinFd: number | undefined): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      const child = spawn(
+        CC_CLI,
+        ['--print', '--output-format', 'json', '--model', DEFAULT_MODEL],
+        {
+          stdio: [stdinFd !== undefined ? stdinFd : 'pipe', 'pipe', 'pipe'],
+          env: { ...process.env, CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR || '/home/ssf/.claude' },
+        },
+      );
+
+      const stdoutChunks: Buffer[] = [];
+      const stderrChunks: Buffer[] = [];
+      child.stdout?.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
+      child.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
+
+      const timer = setTimeout(() => {
+        child.kill('SIGTERM');
+        const killTimer = setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* already dead */ } }, 5000);
+        child.once('close', () => clearTimeout(killTimer));  // clear SIGKILL if process exits cleanly after SIGTERM
+        reject(new Error(`AI_HTTP_TIMEOUT: claude CLI did not respond within ${CC_TIMEOUT_MS}ms`));
+      }, CC_TIMEOUT_MS);
+
+      child.on('close', (code, signal) => {
+        clearTimeout(timer);
+        const out = Buffer.concat(stdoutChunks).toString('utf-8');
+        const err = Buffer.concat(stderrChunks).toString('utf-8');
+        if (signal === 'SIGKILL' || signal === 'SIGTERM') {
+          reject(new Error(`claude CLI killed by signal ${signal}: ${err.slice(0, 200)}`));
+        } else if (code !== 0) {
+          // Non-zero exit — check if stdout has a valid CC error envelope before rejecting
+          const ccFromStdout = parseCcStdout(out);
+          if (ccFromStdout && (ccFromStdout.is_error || ccFromStdout.api_error_status)) {
+            resolve(out);
+          } else {
+            reject(new Error(err.trim() || out.trim() || `claude CLI exited with code ${code}`));
+          }
+        } else {
+          resolve(out);
+        }
+      });
+
+      child.on('error', (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  }
+
+  private emitTelemetry(
+    correlationId: string | undefined,
+    modelUsed: string,
+    inputTokens: number,
+    outputTokens: number,
+  ): void {
+    this.loggingClient
+      .log('info', 'ai_complete', {
+        correlation_id: correlationId,
+        model_used: modelUsed,
+        inputTokens,
+        outputTokens,
+        token_usage_estimate: inputTokens + outputTokens,
+        compression: { rtk: true, caveman: 'lite' },
+      })
+      .catch(() => { /* logging must never crash the service */ });
   }
 }
