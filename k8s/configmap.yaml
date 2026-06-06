@@ -52,7 +52,9 @@ data:
   ASR_MODE: "free"
   AI_MODE: "free"
 
-  # Claude Code CLI — all LLM inference routes through CC CLI
+  # LiteLLM routes /ai/complete (free/cheap/smart tiers).
+  AI_COMPLETE_ROUTER: "litellm"
+  # Claude Code jobs (/ai/claude-code-execute) — separate from /ai/complete
   CC_CLI_PATH: "/home/ssf/.local/bin/claude"
   CLAUDE_CONFIG_DIR: "/home/ssf/.claude"
   CC_CLI_TIMEOUT_MS: "120000"

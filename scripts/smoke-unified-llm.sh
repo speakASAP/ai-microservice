@@ -22,8 +22,8 @@ fi
 code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 8 "${BASE}/health" || echo 000)"
 [[ "$code" == "200" ]] && pass "/health returned 200" || fail "/health returned HTTP ${code}"
 
-# 2. POST /ai/complete — only if ANTHROPIC_API_KEY available in env
-if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+# 2. POST /ai/complete — when LiteLLM or Anthropic configured
+if [[ -n "${LITELLM_BASE_URL:-}" && -n "${LITELLM_MASTER_KEY:-}" ]] || [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
   body='{"model_tier":"free","user_prompt":"Reply with the single word: OK"}'
   response="$(curl -sS --connect-timeout 5 --max-time 30 \
     -X POST "${BASE}/ai/complete" \
@@ -36,7 +36,7 @@ if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
     fail "/ai/complete unexpected response: ${response:0:200}"
   fi
 else
-  echo "SKIP /ai/complete: ANTHROPIC_API_KEY not set in environment"
+  echo "SKIP /ai/complete: set LITELLM_BASE_URL+LITELLM_MASTER_KEY or ANTHROPIC_API_KEY"
 fi
 
 echo "Smoke test finished${FAILED:+ — FAILURES DETECTED}"

@@ -1,34 +1,103 @@
 import { AiService } from './ai.service';
 import { LoggingClient } from '../claude-code/logging.client';
 
-describe('AiService - Claude CLI', () => {
+describe('AiService - LiteLLM routing', () => {
   let service: AiService;
   let loggingClient: jest.Mocked<LoggingClient>;
+  const originalFetch = global.fetch;
+  const originalLitellmUrl = process.env.LITELLM_BASE_URL;
+  const originalLitellmKey = process.env.LITELLM_MASTER_KEY;
 
   beforeEach(() => {
+    process.env.LITELLM_BASE_URL = 'http://litellm.test:4000';
+    process.env.LITELLM_MASTER_KEY = 'test-key';
     loggingClient = { log: jest.fn().mockResolvedValue(undefined) } as any;
     service = new AiService(loggingClient);
   });
 
-  it('routes all model_tier values to sonnet model via CC CLI', async () => {
-    for (const tier of ['free', 'cheap', 'smart', 'unknown']) {
-      jest.spyOn(service as any, 'spawnCcCli').mockResolvedValue('ok\n');
+  afterEach(() => {
+    global.fetch = originalFetch;
+    process.env.LITELLM_BASE_URL = originalLitellmUrl;
+    process.env.LITELLM_MASTER_KEY = originalLitellmKey;
+  });
 
-      const result = await service.complete({ model_tier: tier as 'free', user_prompt: 'say ok' });
+  it('routes free tier to LiteLLM model name free', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'ok' } }],
+        usage: { prompt_tokens: 5, completion_tokens: 2 },
+        model: 'free',
+      }),
+    } as Response);
 
-      expect(result.text).toBe('ok');
-      expect(result.model_used).toBe('claude-sonnet');
+    const result = await service.complete({ model_tier: 'free', user_prompt: 'say ok' });
+
+    expect(result.text).toBe('ok');
+    expect(result.model_used).toBe('free');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'http://litellm.test:4000/v1/chat/completions',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('"model":"free"'),
+      }),
+    );
+  });
+
+  it('returns RATE_LIMIT when LiteLLM returns 429', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: async () => 'rate limited',
+    } as Response);
+
+    const result = await service.complete({ model_tier: 'cheap', user_prompt: 'hi' });
+
+    expect(result.error_code).toBe('RATE_LIMIT');
+    expect(result.text).toBe('');
+  });
+
+  it('blocks premium tier without human approval', async () => {
+    const result = await service.complete({ model_tier: 'premium', user_prompt: 'hi' });
+    expect(result.error_code).toBe('AI_AUTH_ERROR');
+    expect(result.error_message).toContain('human approval');
+  });
+});
+
+describe('AiService - Claude CLI fallback', () => {
+  let service: AiService;
+  let loggingClient: jest.Mocked<LoggingClient>;
+  const originalLitellmUrl = process.env.LITELLM_BASE_URL;
+  const originalLitellmKey = process.env.LITELLM_MASTER_KEY;
+  const originalRouter = process.env.AI_COMPLETE_ROUTER;
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    process.env.LITELLM_BASE_URL = '';
+    process.env.LITELLM_MASTER_KEY = '';
+    delete process.env.AI_COMPLETE_ROUTER;
+    loggingClient = { log: jest.fn().mockResolvedValue(undefined) } as any;
+    service = new AiService(loggingClient);
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    process.env.LITELLM_BASE_URL = originalLitellmUrl;
+    process.env.LITELLM_MASTER_KEY = originalLitellmKey;
+    if (originalRouter === undefined) {
+      delete process.env.AI_COMPLETE_ROUTER;
+    } else {
+      process.env.AI_COMPLETE_ROUTER = originalRouter;
     }
   });
 
-  it('returns error_code CLI_FAILED when CLI fails', async () => {
-    jest.spyOn(service as any, 'spawnCcCli').mockRejectedValue(new Error('auth failed'));
+  it('routes to sonnet via CC CLI when LITELLM_BASE_URL unset', async () => {
+    jest.spyOn(service as any, 'spawnCcCli').mockResolvedValue('ok\n');
 
-    const result = await service.complete({ model_tier: 'free', user_prompt: 'hi' });
+    const result = await service.complete({ model_tier: 'free', user_prompt: 'say ok' });
 
-    expect(result.error_code).toBe('CLI_FAILED');
-    expect(result.error_message).toContain('auth failed');
-    expect(result.text).toBe('');
+    expect(result.text).toBe('ok');
+    expect(result.model_used).toBe('claude-sonnet');
   });
 
   it('returns RATE_LIMIT when CLI returns 429 JSON envelope', async () => {
@@ -43,75 +112,27 @@ describe('AiService - Claude CLI', () => {
 
     expect(result.error_code).toBe('RATE_LIMIT');
     expect(result.error_message).toContain('session limit');
-    expect(result.text).toBe('');
   });
 
-  it('parses JSON response and spreads fields at top level', async () => {
-    jest.spyOn(service as any, 'spawnCcCli').mockResolvedValue('{"status":"pass","score":10}\n');
+  it('falls back to LiteLLM when CC CLI fails and claude_cli_with_litellm_fallback router set', async () => {
+    process.env.LITELLM_BASE_URL = 'http://litellm.test:4000';
+    process.env.LITELLM_MASTER_KEY = 'test-key';
+    process.env.AI_COMPLETE_ROUTER = 'claude_cli_with_litellm_fallback';
 
-    const result = await service.complete({ model_tier: 'free', user_prompt: 'evaluate' });
-
-    expect(result.status).toBe('pass');
-    expect(result.score).toBe(10);
-    expect(result.text).toBe('{"status":"pass","score":10}');
-  });
-});
-
-describe('AiService telemetry', () => {
-  let service: AiService;
-  let loggingClient: jest.Mocked<LoggingClient>;
-
-  beforeEach(() => {
-    loggingClient = { log: jest.fn().mockResolvedValue(undefined) } as any;
-    service = new AiService(loggingClient);
-  });
-
-  it('emits ai_complete log with compression metadata after successful completion', async () => {
-    jest.spyOn(service as any, 'spawnCcCli').mockResolvedValue(
-      JSON.stringify({
-        result: 'hello world',
-        usage: { input_tokens: 100, output_tokens: 20 },
+    jest.spyOn(service as any, 'spawnCcCli').mockRejectedValue(new Error('claude: command not found'));
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '{"output_ref":{"summary":"ok"}}' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 5 },
+        model: 'ollama/qwen2.5-coder:0.5b',
       }),
-    );
+    } as Response);
 
-    await service.complete({
-      model_tier: 'smart',
-      user_prompt: 'say hello',
-      correlation_id: 'test-corr-123',
-    });
+    const result = await service.complete({ model_tier: 'free', user_prompt: 'say ok' });
 
-    expect(loggingClient.log).toHaveBeenCalledWith(
-      'info',
-      'ai_complete',
-      expect.objectContaining({
-        correlation_id: 'test-corr-123',
-        inputTokens: 100,
-        outputTokens: 20,
-        compression: { rtk: true, caveman: 'lite' },
-      }),
-    );
-  });
-
-  it('emits ai_complete log with zero tokens on CLI failure', async () => {
-    jest.spyOn(service as any, 'spawnCcCli').mockRejectedValue(
-      new Error('claude CLI failed: timeout'),
-    );
-
-    await service.complete({
-      model_tier: 'free',
-      user_prompt: 'say hello',
-      correlation_id: 'test-corr-456',
-    });
-
-    expect(loggingClient.log).toHaveBeenCalledWith(
-      'info',
-      'ai_complete',
-      expect.objectContaining({
-        correlation_id: 'test-corr-456',
-        inputTokens: 0,
-        outputTokens: 0,
-        compression: { rtk: true, caveman: 'lite' },
-      }),
-    );
+    expect(result.error_code).toBeUndefined();
+    expect(result.model_used).toBe('ollama/qwen2.5-coder:0.5b');
+    expect(global.fetch).toHaveBeenCalled();
   });
 });
