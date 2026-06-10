@@ -16,7 +16,7 @@
 import { createHmac, timingSafeEqual } from 'crypto';
 
 const CONSUMERS = [
-  'business-orchestrator',
+  'runlayer',
   'statex',
   'shop-assistant',
   'crypto-ai-agent',

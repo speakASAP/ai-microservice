@@ -1,7 +1,7 @@
 import { JwtUtil } from '../../src/service-identity/jwt.util';
 
 const SECRET = 'test-secret-at-least-32-chars-long!!';
-const SERVICE_ID = 'business-orchestrator';
+const SERVICE_ID = 'runlayer';
 
 describe('JwtUtil', () => {
   describe('sign', () => {

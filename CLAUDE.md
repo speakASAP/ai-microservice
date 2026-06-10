@@ -9,7 +9,7 @@
 **Query the RAG before reading source files** — saves 2000-5000 tokens per answer.
 
 ```bash
-kubectl -n statex-apps exec deployment/business-orchestrator -- curl -s -X POST http://docs-rag-microservice:3397/retrieval/agent-context \
+kubectl -n statex-apps exec deployment/ai-microservice -- curl -s -X POST http://docs-rag-microservice:3397/retrieval/agent-context \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $(cat ~/.claude/rag-token)" \
   -d '{"query": "YOUR QUESTION HERE", "maxTokens": 3000}'
@@ -24,7 +24,7 @@ kubectl -n statex-apps exec deployment/business-orchestrator -- curl -s -X POST 
 **Port**: 3380 | **Domain**: <https://ai.alfares.cz>  
 **Stack**: NestJS · LiteLLM sidecar · Ollama · OpenRouter · Gemini  
 **Model tiers**: `free` / `cheap` / `smart` / `premium` — full config in `AGENTS.md`  
-**Consumers**: business-orchestrator, statex, shop-assistant, crypto-ai-agent, agentic-email — see `BUSINESS.md`  
+**Consumers**: runlayer, statex, shop-assistant, crypto-ai-agent, agentic-email — see `BUSINESS.md`  
 **Secrets**: Vault via ESO (`secret/prod/ai-microservice`); local dev: `./scripts/vault-env-gen.sh`
 
 **Ops**: `curl http://ai-microservice:3380/health` · `kubectl logs -n statex-apps -l app=ai-microservice -f` · `./scripts/deploy.sh`

@@ -15,7 +15,7 @@ Centralized AI inference gateway for all Statex services. Routes LLM calls by mo
 
 ## Consumers
 
-business-orchestrator, statex, shop-assistant, crypto-ai-agent, agentic-email.
+runlayer, statex, shop-assistant, crypto-ai-agent, agentic-email.
 
 ## SLA
 

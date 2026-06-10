@@ -115,7 +115,7 @@ npm run test:e2e
 SERVICE_URL=http://localhost:3380 ./scripts/test-claude-code-executor.sh
 ```
 
-## Integration with business-orchestrator
+## Integration with runlayer
 
 The orchestrator coordinator calls POST to enqueue, then polls GET every 5s until terminal:
 
