@@ -224,15 +224,24 @@ function validatePatchScope(patch: string, allowedFiles: string[]): void {
 }
 
 function extractValidatorFeedback(instructions: string): string {
-  const payloadMatch = instructions.match(/Task payload:\s*(\{[\s\S]*?\})\s*Acceptance criteria:/);
-  if (!payloadMatch) return '';
+  const payloadMatch = instructions.match(/Task payload:\s*(\{[\s\S]*?\})(?:\s|\\\\n)*Acceptance criteria:/);
+  if (payloadMatch) {
+    try {
+      const payload = JSON.parse(payloadMatch[1]);
+      if (typeof payload.user_rejection_feedback === 'string') {
+        return payload.user_rejection_feedback.trim();
+      }
+    } catch {
+      // Fall through to direct field extraction below.
+    }
+  }
+
+  const directMatch = instructions.match(/"user_rejection_feedback"\s*:\s*"((?:\\\\.|[^"\\\\])*)"/);
+  if (!directMatch) return '';
   try {
-    const payload = JSON.parse(payloadMatch[1]);
-    return typeof payload.user_rejection_feedback === 'string'
-      ? payload.user_rejection_feedback.trim()
-      : '';
+    return JSON.parse(`"${directMatch[1]}"`).trim();
   } catch {
-    return '';
+    return directMatch[1].trim();
   }
 }
 
