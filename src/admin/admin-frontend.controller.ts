@@ -24,6 +24,7 @@ export class AdminFrontendController {
       return res.redirect(302, this.adminAuth.getAuthLoginUrl());
     }
 
+    res.setHeader('Cache-Control', 'no-store');
     return res.type('html').sendFile(join(ADMIN_PUBLIC_DIR, 'index.html'));
   }
 
@@ -42,6 +43,7 @@ export class AdminFrontendController {
 
     const filePath = join(ADMIN_PUBLIC_DIR, asset);
     if (!existsSync(filePath)) throw new NotFoundException();
+    res.setHeader('Cache-Control', 'no-store');
     return res.type(CONTENT_TYPES[asset]).sendFile(filePath);
   }
 

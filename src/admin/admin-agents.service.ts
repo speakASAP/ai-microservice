@@ -39,10 +39,7 @@ export class AdminAgentsService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    const count = await this.agents.count();
-    if (count > 0) return;
-
-    await this.agents.save(DEFAULT_AGENTS.map((agent) => this.agents.create(agent)));
+    await this.seedMissingDefaults();
   }
 
   async list(query: AiAgentListQuery): Promise<AiAgent[]> {
@@ -91,6 +88,15 @@ export class AdminAgentsService implements OnModuleInit {
   async remove(id: string): Promise<void> {
     const agent = await this.get(id);
     await this.agents.remove(agent);
+  }
+
+  private async seedMissingDefaults(): Promise<void> {
+    for (const defaultAgent of DEFAULT_AGENTS) {
+      if (!defaultAgent.slug) continue;
+      const existing = await this.agents.findOne({ where: { slug: defaultAgent.slug } });
+      if (existing) continue;
+      await this.agents.save(this.agents.create(defaultAgent));
+    }
   }
 
   private async ensureSlugAvailable(slug: string, exceptId?: string): Promise<void> {

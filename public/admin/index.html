@@ -43,8 +43,8 @@
       <main class="workspace">
         <header class="topbar">
           <div>
-            <h1>Agent Registry</h1>
-            <p>Manage prompts, model routing, execution scope, and JSON configuration for AI agents.</p>
+            <h1 id="view-title">Agent Registry</h1>
+            <p id="view-subtitle">Manage prompts, model routing, execution scope, and JSON configuration for AI agents.</p>
           </div>
           <div class="top-actions">
             <button class="ghost icon-button" id="refresh-button" type="button" title="Refresh agents" aria-label="Refresh agents">↻</button>
@@ -60,7 +60,7 @@
           </div>
         </section>
 
-        <section class="status-strip" aria-live="polite">
+        <section class="status-strip view-panel" data-view-panel="agents" aria-live="polite">
           <div class="metric">
             <span>Total</span>
             <strong id="metric-total">0</strong>
@@ -76,7 +76,7 @@
           <div class="message" id="message">Not connected.</div>
         </section>
 
-        <section class="panel-grid">
+        <section class="panel-grid view-panel" data-view-panel="agents">
           <div class="panel list-panel">
             <div class="panel-head">
               <div>
@@ -210,6 +210,36 @@
               </label>
             </div>
           </form>
+        </section>
+
+        <section class="panel view-panel detail-panel" data-view-panel="prompts" hidden>
+          <div class="panel-head">
+            <div>
+              <h2>Prompt Library</h2>
+              <p>System prompts and user templates currently registered for AI agents.</p>
+            </div>
+          </div>
+          <div class="detail-list" id="prompt-list"></div>
+        </section>
+
+        <section class="panel view-panel detail-panel" data-view-panel="models" hidden>
+          <div class="panel-head">
+            <div>
+              <h2>Model Routing</h2>
+              <p>Registered agents grouped by model tier and provider override.</p>
+            </div>
+          </div>
+          <div class="detail-list" id="model-list"></div>
+        </section>
+
+        <section class="panel view-panel detail-panel" data-view-panel="logs" hidden>
+          <div class="panel-head">
+            <div>
+              <h2>Registry Activity</h2>
+              <p>Most recently updated agent definitions in this admin registry.</p>
+            </div>
+          </div>
+          <div class="detail-list" id="log-list"></div>
         </section>
       </main>
     </div>

@@ -1,9 +1,14 @@
 const state = {
   agents: [],
   selectedId: null,
+  view: "agents",
 };
 
 const els = {
+  navItems: Array.from(document.querySelectorAll(".nav-item")),
+  viewPanels: Array.from(document.querySelectorAll("[data-view-panel]")),
+  viewTitle: document.getElementById("view-title"),
+  viewSubtitle: document.getElementById("view-subtitle"),
   authPanel: document.getElementById("auth-panel"),
   refreshButton: document.getElementById("refresh-button"),
   newAgentButton: document.getElementById("new-agent-button"),
@@ -22,6 +27,28 @@ const els = {
   metricTotal: document.getElementById("metric-total"),
   metricActive: document.getElementById("metric-active"),
   metricTiers: document.getElementById("metric-tiers"),
+  promptList: document.getElementById("prompt-list"),
+  modelList: document.getElementById("model-list"),
+  logList: document.getElementById("log-list"),
+};
+
+const viewCopy = {
+  agents: {
+    title: "Agent Registry",
+    subtitle: "Manage prompts, model routing, execution scope, and JSON configuration for AI agents.",
+  },
+  prompts: {
+    title: "Prompt Library",
+    subtitle: "Review the system prompts and user templates used by registered agents.",
+  },
+  models: {
+    title: "Model Routing",
+    subtitle: "Compare model tiers, provider overrides, token limits, and temperatures.",
+  },
+  logs: {
+    title: "Registry Activity",
+    subtitle: "Review recently updated agent definitions and admin registry changes.",
+  },
 };
 
 function setMessage(text, type = "") {
@@ -121,6 +148,86 @@ function renderAgents() {
   }
 }
 
+function renderPromptView() {
+  els.promptList.innerHTML = "";
+  for (const agent of state.agents) {
+    const item = document.createElement("article");
+    item.className = "detail-item";
+    item.innerHTML = `
+      <div class="detail-item-head">
+        <div>
+          <h3>${escapeHtml(agent.name)}</h3>
+          <span>${escapeHtml(agent.serviceScope || "unscoped")} ${agent.routePath ? "· " + escapeHtml(agent.routePath) : ""}</span>
+        </div>
+        <span class="pill ${escapeHtml(agent.status || "draft")}">${escapeHtml(agent.status || "draft")}</span>
+      </div>
+      <div class="prompt-grid">
+        <label>System prompt<textarea readonly rows="4">${escapeHtml(agent.systemPrompt || "")}</textarea></label>
+        <label>User template<textarea readonly rows="4">${escapeHtml(agent.userPromptTemplate || "")}</textarea></label>
+      </div>
+    `;
+    els.promptList.appendChild(item);
+  }
+  if (!state.agents.length) renderEmptyDetail(els.promptList, "No prompts are registered yet.");
+}
+
+function renderModelView() {
+  els.modelList.innerHTML = "";
+  const tiers = ["free", "cheap", "smart", "premium"];
+  for (const tier of tiers) {
+    const agents = state.agents.filter((agent) => (agent.modelTier || "free") === tier);
+    const item = document.createElement("article");
+    item.className = "detail-item";
+    item.innerHTML = `
+      <div class="detail-item-head">
+        <div>
+          <h3>${tier[0].toUpperCase() + tier.slice(1)}</h3>
+          <span>${agents.length === 1 ? "1 agent" : `${agents.length} agents`}</span>
+        </div>
+        <span class="pill tier">${tier}</span>
+      </div>
+      <div class="route-list">
+        ${agents.map((agent) => `
+          <div class="route-row">
+            <strong>${escapeHtml(agent.name)}</strong>
+            <span>${escapeHtml(agent.providerModel || "default route")} · temp ${escapeHtml(agent.temperature || "0.20")} · ${escapeHtml(agent.maxTokens || 1000)} tokens</span>
+          </div>
+        `).join("") || '<div class="empty-detail">No agents use this tier.</div>'}
+      </div>
+    `;
+    els.modelList.appendChild(item);
+  }
+}
+
+function renderLogView() {
+  els.logList.innerHTML = "";
+  const recent = [...state.agents].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)).slice(0, 25);
+  for (const agent of recent) {
+    const item = document.createElement("article");
+    item.className = "activity-row";
+    item.innerHTML = `
+      <span class="activity-time">${formatDate(agent.updatedAt)}</span>
+      <strong>${escapeHtml(agent.name)}</strong>
+      <span>${escapeHtml(agent.serviceScope || "unscoped")} · ${escapeHtml(agent.slug || "")}</span>
+    `;
+    els.logList.appendChild(item);
+  }
+  if (!recent.length) renderEmptyDetail(els.logList, "No registry activity is available yet.");
+}
+
+function renderEmptyDetail(container, text) {
+  const item = document.createElement("div");
+  item.className = "empty-detail";
+  item.textContent = text;
+  container.appendChild(item);
+}
+
+function renderCurrentView() {
+  if (state.view === "prompts") renderPromptView();
+  if (state.view === "models") renderModelView();
+  if (state.view === "logs") renderLogView();
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -142,8 +249,22 @@ async function loadAgents() {
   }
   summarize();
   renderAgents();
+  renderCurrentView();
   if (state.selectedId) fillForm(state.agents.find((agent) => agent.id === state.selectedId));
   else resetForm();
+}
+
+function setView(view) {
+  state.view = view;
+  els.navItems.forEach((item) => item.classList.toggle("active", item.dataset.view === view));
+  els.viewPanels.forEach((panel) => {
+    panel.hidden = panel.dataset.viewPanel !== view;
+  });
+  const copy = viewCopy[view] || viewCopy.agents;
+  els.viewTitle.textContent = copy.title;
+  els.viewSubtitle.textContent = copy.subtitle;
+  renderCurrentView();
+  if (view !== "agents") setMessage(`${copy.title} loaded.`, "ok");
 }
 
 function selectAgent(id) {
@@ -230,8 +351,13 @@ els.refreshButton.addEventListener("click", async () => {
 });
 
 els.newAgentButton.addEventListener("click", () => {
+  setView("agents");
   resetForm();
   setMessage("Ready to create a new agent.", "");
+});
+
+els.navItems.forEach((item) => {
+  item.addEventListener("click", () => setView(item.dataset.view || "agents"));
 });
 
 els.searchInput.addEventListener("input", debounce(() => loadAgents().catch((error) => setMessage(error.message, "error")), 250));
