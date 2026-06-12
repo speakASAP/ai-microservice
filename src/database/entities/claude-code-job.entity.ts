@@ -39,7 +39,7 @@ export class ClaudeCodeJob {
   model?: string;
 
   @Column('varchar', { length: 32, default: 'claude-code', name: 'implementation_provider' })
-  implementationProvider!: 'claude-code' | 'codex';
+  implementationProvider!: 'claude-code' | 'codex' | 'ollama' | 'openrouter' | 'litellm';
 
   @Column('text', { nullable: true })
   intent?: string;

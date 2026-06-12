@@ -9,6 +9,6 @@ export class JobEnqueueResponseDto {
   taskId!: string;
   status!: JobStatus;
   createdAt!: Date;
-  implementationProvider?: 'claude-code' | 'codex';
+  implementationProvider?: 'claude-code' | 'codex' | 'ollama' | 'openrouter' | 'litellm';
   intentChecksum?: string;
 }

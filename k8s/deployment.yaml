@@ -78,6 +78,8 @@ spec:
             - name: claude-config
               mountPath: /home/ssf/.claude
               readOnly: true
+            - name: codex-config
+              mountPath: /home/ssf/.codex
             - name: github-root
               mountPath: /home/ssf/Documents/Github
       volumes:
@@ -89,6 +91,10 @@ spec:
           hostPath:
             path: /home/ssf/.claude
             type: Directory
+        - name: codex-config
+          hostPath:
+            path: /home/ssf/.codex
+            type: DirectoryOrCreate
         - name: github-root
           hostPath:
             path: /home/ssf/Documents/Github

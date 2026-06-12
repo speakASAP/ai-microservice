@@ -148,7 +148,7 @@ export class ClaudeCodeService {
       gitDiff: string;
       validationPassed: boolean;
       validationOutput: string;
-      implementationProvider: 'claude-code' | 'codex';
+      implementationProvider: 'claude-code' | 'codex' | 'ollama' | 'openrouter' | 'litellm';
     }>,
   ): Promise<void> {
     // Validate status transitions if status is being updated

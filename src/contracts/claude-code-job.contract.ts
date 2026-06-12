@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const ClaudeCodeJobStatusSchema = z.enum(['queued', 'executing', 'success', 'failed', 'timeout', 'retrying']);
-export const ImplementationProviderSchema = z.enum(['claude-code', 'codex']);
+export const ImplementationProviderSchema = z.enum(['claude-code', 'codex', 'ollama', 'openrouter', 'litellm']);
 
 export const ExecuteCodeRequestSchema = z.object({
   schemaVersion: z.literal('1.0').default('1.0'),

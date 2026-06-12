@@ -21,7 +21,14 @@ const CODEX_MODEL = () => process.env.CODEX_MODEL?.trim() || undefined;
 const CODEX_SANDBOX = () => process.env.CODEX_SANDBOX?.trim() || 'workspace-write';
 const CODEX_PRINT_SANDBOX = () => process.env.CODEX_PRINT_SANDBOX?.trim() || 'read-only';
 const CODEX_APPROVAL_POLICY = () => process.env.CODEX_APPROVAL_POLICY?.trim() || 'never';
-const RATE_LIMIT_FALLBACK_PROVIDER = () => process.env.CLAUDE_CODE_RATE_LIMIT_FALLBACK_PROVIDER?.trim() || 'codex';
+const RATE_LIMIT_FALLBACK_PROVIDER = () => process.env.CLAUDE_CODE_RATE_LIMIT_FALLBACK_PROVIDER?.trim() || 'litellm';
+const LITELLM_BASE_URL = () => process.env.LITELLM_BASE_URL?.replace(/\/$/, '') || '';
+const LITELLM_MASTER_KEY = () => process.env.LITELLM_MASTER_KEY || '';
+const LITELLM_FALLBACK_MODELS = () => (process.env.CLAUDE_CODE_LITELLM_FALLBACK_MODELS || 'free,cheap')
+  .split(',')
+  .map((model) => model.trim())
+  .filter(Boolean);
+const LITELLM_TIMEOUT_MS = () => Number(process.env.CLAUDE_CODE_LITELLM_TIMEOUT_MS || 120_000);
 const RETRY_BACKOFF_MS = [30_000, 90_000, 270_000];
 
 function shellQuote(value: string): string {
@@ -33,7 +40,19 @@ function resolveProvider(provider?: string): ImplementationProvider {
 }
 
 function providerLabel(provider: ImplementationProvider): string {
-  return provider === 'codex' ? 'Codex' : 'Claude Code';
+  if (provider === 'codex') return 'Codex';
+  if (provider === 'ollama') return 'Ollama';
+  if (provider === 'openrouter') return 'OpenRouter';
+  if (provider === 'litellm') return 'LiteLLM';
+  return 'Claude Code';
+}
+
+function providerForLiteLlmModel(model: string): ImplementationProvider {
+  const normalized = model.toLowerCase();
+  if (normalized === 'cheap') return 'openrouter';
+  if (normalized.includes('openrouter')) return 'openrouter';
+  if (normalized === 'free' || normalized.endsWith('-fallback') || normalized.includes('ollama')) return 'ollama';
+  return 'litellm';
 }
 
 function resolveModel(
@@ -132,11 +151,158 @@ function isRateLimitOutput(stdout = '', stderr = ''): boolean {
   );
 }
 
-function shouldFallbackToCodex(provider: ImplementationProvider, exitCode: number, stdout = '', stderr = ''): boolean {
+function shouldFallbackAfterClaudeLimit(provider: ImplementationProvider, exitCode: number, stdout = '', stderr = ''): boolean {
   return provider === 'claude-code'
     && exitCode !== 0
-    && RATE_LIMIT_FALLBACK_PROVIDER() === 'codex'
     && isRateLimitOutput(stdout, stderr);
+}
+
+function shouldFallbackToCodex(provider: ImplementationProvider, exitCode: number, stdout = '', stderr = ''): boolean {
+  return shouldFallbackAfterClaudeLimit(provider, exitCode, stdout, stderr)
+    && RATE_LIMIT_FALLBACK_PROVIDER() === 'codex';
+}
+
+function shouldFallbackToLiteLlm(provider: ImplementationProvider, exitCode: number, stdout = '', stderr = ''): boolean {
+  return shouldFallbackAfterClaudeLimit(provider, exitCode, stdout, stderr)
+    && ['litellm', 'ollama', 'openrouter'].includes(RATE_LIMIT_FALLBACK_PROVIDER());
+}
+
+function extractPatch(text: string): string {
+  const fenced = text.match(/```(?:diff|patch)?\s*([\s\S]*?)```/i);
+  const candidate = (fenced?.[1] ?? text).trim();
+  const diffIndex = candidate.indexOf('diff --git ');
+  if (diffIndex >= 0) return candidate.slice(diffIndex).trim();
+  try {
+    const parsed = JSON.parse(candidate);
+    if (typeof parsed.patch === 'string') return parsed.patch.trim();
+    if (typeof parsed.diff === 'string') return parsed.diff.trim();
+  } catch {
+    // Not JSON; handled below.
+  }
+  return '';
+}
+
+async function readRepoContext(worktreePath: string, instructions: string): Promise<string> {
+  const chunks: string[] = [];
+  try {
+    const { stdout } = await execAsync("find . -maxdepth 4 -type f ! -path './node_modules/*' ! -path './.git/*' ! -path './dist/*' | sort | head -180", { cwd: worktreePath });
+    chunks.push(`File tree:\n${stdout.trim()}`);
+  } catch (error) {
+    chunks.push(`File tree unavailable: ${String(error).slice(0, 200)}`);
+  }
+
+  const candidateFiles = Array.from(new Set([
+    ...Array.from(instructions.matchAll(/[A-Za-z0-9_./-]+\.(?:json|ts|tsx|js|jsx|md|yml|yaml)/g)).map((match) => match[0]),
+    'package.json',
+  ])).filter((file) => !file.includes('node_modules') && !file.startsWith('/'));
+
+  for (const file of candidateFiles.slice(0, 12)) {
+    const normalized = file.replace(/^\.\//, '');
+    const fullPath = path.join(worktreePath, normalized);
+    if (!fullPath.startsWith(worktreePath)) continue;
+    try {
+      const stat = fs.statSync(fullPath);
+      if (!stat.isFile() || stat.size > 25_000) continue;
+      chunks.push(`\n--- ${normalized} ---\n${fs.readFileSync(fullPath, 'utf8')}`);
+    } catch {
+      // File may not exist; keep going.
+    }
+  }
+
+  return chunks.join('\n');
+}
+
+async function requestLiteLlmPatch(model: string, prompt: string, timeoutMs: number): Promise<string> {
+  const baseUrl = LITELLM_BASE_URL();
+  const token = LITELLM_MASTER_KEY();
+  if (!baseUrl || !token) {
+    throw new Error('LiteLLM fallback is not configured: LITELLM_BASE_URL and LITELLM_MASTER_KEY are required');
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a deterministic patch generator. Return ONLY a unified git diff starting with diff --git. Do not use markdown, JSON, explanations, or prose.',
+          },
+          { role: 'user', content: prompt },
+        ],
+      }),
+      signal: controller.signal,
+    });
+    const raw = await response.text();
+    if (!response.ok) {
+      throw new Error(`LiteLLM ${model} HTTP ${response.status}: ${raw.slice(0, 500)}`);
+    }
+    const json = JSON.parse(raw);
+    return String(json.choices?.[0]?.message?.content ?? json.choices?.[0]?.text ?? '').trim();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function applyLiteLlmFallbackPatch(
+  worktreePath: string,
+  instructions: string,
+  claudeLimitOutput: string,
+): Promise<{ provider: ImplementationProvider; stdout: string; stderr: string; exitCode: number }> {
+  const context = await readRepoContext(worktreePath, instructions);
+  const prompt = [
+    'Claude Code is rate-limited. Implement the requested coding task by returning a patch only.',
+    'The patch will be applied with git apply in the repository root.',
+    'Do not change unrelated files. If validator feedback names exact files, edit only those files.',
+    '',
+    `Original task instructions:\n${instructions}`,
+    '',
+    `Claude rate-limit output:\n${claudeLimitOutput}`,
+    '',
+    `Repository context:\n${context}`,
+  ].join('\n');
+
+  const errors: string[] = [];
+  for (const model of LITELLM_FALLBACK_MODELS()) {
+    try {
+      const raw = await requestLiteLlmPatch(model, prompt, LITELLM_TIMEOUT_MS());
+      const patch = extractPatch(raw);
+      if (!patch) {
+        errors.push(`${model}: model did not return a unified diff; output=${raw.slice(0, 500)}`);
+        continue;
+      }
+      const patchPath = path.join('/tmp', `litellm-fallback-${Date.now()}-${Math.random().toString(16).slice(2)}.diff`);
+      fs.writeFileSync(patchPath, patch, 'utf8');
+      try {
+        await execAsync(`git apply --whitespace=nowarn ${shellQuote(patchPath)}`, { cwd: worktreePath, timeout: 30_000, maxBuffer: 2 * 1024 * 1024 });
+      } finally {
+        try { fs.unlinkSync(patchPath); } catch { /* ignore */ }
+      }
+      return {
+        provider: providerForLiteLlmModel(model),
+        stdout: [`[RunLayer] Claude Code rate-limited; applied LiteLLM fallback patch via ${model}.`, raw].join('\n\n'),
+        stderr: '',
+        exitCode: 0,
+      };
+    } catch (error) {
+      errors.push(`${model}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  return {
+    provider: 'litellm',
+    stdout: '[RunLayer] Claude Code rate-limited; LiteLLM fallback attempted but did not apply a patch.',
+    stderr: errors.join('\n'),
+    exitCode: 1,
+  };
 }
 
 /**
@@ -324,7 +490,27 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
         try { fs.unlinkSync(instructionsFile); } catch { /* ignore */ }
       }
 
-      if (shouldFallbackToCodex(effectiveProvider, exitCode, stdout, stderr)) {
+      if (shouldFallbackToLiteLlm(effectiveProvider, exitCode, stdout, stderr)) {
+        const claudeLimitOutput = [stdout, stderr].filter(Boolean).join('\n').trim();
+        const fallback = await applyLiteLlmFallbackPatch(worktreePath, instructions, claudeLimitOutput);
+        effectiveProvider = fallback.provider;
+        stdout = fallback.stdout;
+        stderr = fallback.stderr;
+        exitCode = fallback.exitCode;
+
+        await this.service.updateJobExecution(jobId, {
+          implementationProvider: effectiveProvider,
+          stdout,
+          stderr,
+        });
+        await this.loggingClient.log(exitCode === 0 ? 'warn' : 'error', 'Claude Code rate-limited; used LiteLLM fallback', {
+          jobId,
+          repoPath,
+          branch,
+          implementationProvider: effectiveProvider,
+          exitCode,
+        });
+      } else if (shouldFallbackToCodex(effectiveProvider, exitCode, stdout, stderr)) {
         const claudeLimitOutput = [stdout, stderr].filter(Boolean).join('\n').trim();
         effectiveProvider = 'codex';
         effectiveModel = resolveModel(effectiveProvider, executionMode, undefined);

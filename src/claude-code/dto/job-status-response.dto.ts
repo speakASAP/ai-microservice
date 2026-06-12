@@ -8,7 +8,7 @@ export class JobStatusResponseDto {
   jobId!: string;
   taskId!: string;
   status!: JobStatus;
-  implementationProvider?: 'claude-code' | 'codex';
+  implementationProvider?: 'claude-code' | 'codex' | 'ollama' | 'openrouter' | 'litellm';
   intent?: string;
   intentChecksum?: string;
 
