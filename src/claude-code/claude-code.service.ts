@@ -148,6 +148,7 @@ export class ClaudeCodeService {
       gitDiff: string;
       validationPassed: boolean;
       validationOutput: string;
+      implementationProvider: 'claude-code' | 'codex';
     }>,
   ): Promise<void> {
     // Validate status transitions if status is being updated

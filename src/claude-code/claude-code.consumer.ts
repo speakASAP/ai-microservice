@@ -21,6 +21,7 @@ const CODEX_MODEL = () => process.env.CODEX_MODEL?.trim() || undefined;
 const CODEX_SANDBOX = () => process.env.CODEX_SANDBOX?.trim() || 'workspace-write';
 const CODEX_PRINT_SANDBOX = () => process.env.CODEX_PRINT_SANDBOX?.trim() || 'read-only';
 const CODEX_APPROVAL_POLICY = () => process.env.CODEX_APPROVAL_POLICY?.trim() || 'never';
+const RATE_LIMIT_FALLBACK_PROVIDER = () => process.env.CLAUDE_CODE_RATE_LIMIT_FALLBACK_PROVIDER?.trim() || 'codex';
 const RETRY_BACKOFF_MS = [30_000, 90_000, 270_000];
 
 function shellQuote(value: string): string {
@@ -59,12 +60,10 @@ function buildCodeCommand(
     return [
       shellQuote(CODEX_CLI()),
       'exec',
-      '--cd',
+      '-C',
       shellQuote(worktreePath),
       '--sandbox',
       shellQuote(CODEX_SANDBOX()),
-      '--ask-for-approval',
-      shellQuote(CODEX_APPROVAL_POLICY()),
       modelFlag(model),
       '-',
       '<',
@@ -99,12 +98,10 @@ function buildPrintCommand(
     return [
       shellQuote(CODEX_CLI()),
       'exec',
-      '--cd',
+      '-C',
       shellQuote(repoPath),
       '--sandbox',
       shellQuote(CODEX_PRINT_SANDBOX()),
-      '--ask-for-approval',
-      shellQuote(CODEX_APPROVAL_POLICY()),
       modelFlag(model),
       '-',
       '<',
@@ -122,6 +119,24 @@ function buildPrintCommand(
     '<',
     shellQuote(instructionsFile),
   ].filter(Boolean).join(' ');
+}
+
+function isRateLimitOutput(stdout = '', stderr = ''): boolean {
+  const combined = `${stdout}\n${stderr}`.toLowerCase();
+  return (
+    combined.includes('session limit') ||
+    combined.includes('rate limit') ||
+    combined.includes('rate_limit') ||
+    combined.includes('too many requests') ||
+    combined.includes('429')
+  );
+}
+
+function shouldFallbackToCodex(provider: ImplementationProvider, exitCode: number, stdout = '', stderr = ''): boolean {
+  return provider === 'claude-code'
+    && exitCode !== 0
+    && RATE_LIMIT_FALLBACK_PROVIDER() === 'codex'
+    && isRateLimitOutput(stdout, stderr);
 }
 
 /**
@@ -229,6 +244,8 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
     } = msg;
     const provider = resolveProvider(implementationProvider);
     const resolvedModel = resolveModel(provider, executionMode, model);
+    let effectiveProvider = provider;
+    let effectiveModel = resolvedModel;
 
     this.logger.log(
       JSON.stringify({
@@ -307,6 +324,45 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
         try { fs.unlinkSync(instructionsFile); } catch { /* ignore */ }
       }
 
+      if (shouldFallbackToCodex(effectiveProvider, exitCode, stdout, stderr)) {
+        const claudeLimitOutput = [stdout, stderr].filter(Boolean).join('\n').trim();
+        effectiveProvider = 'codex';
+        effectiveModel = resolveModel(effectiveProvider, executionMode, undefined);
+        stdout = [
+          '[RunLayer] Claude Code returned a rate/session limit; retrying the same job with Codex.',
+          claudeLimitOutput,
+        ].filter(Boolean).join('\n\n');
+        stderr = '';
+        exitCode = 0;
+
+        await this.service.updateJobExecution(jobId, {
+          implementationProvider: effectiveProvider,
+          stdout,
+          stderr,
+        });
+        await this.loggingClient.log('warn', 'Claude Code rate-limited; falling back to Codex', {
+          jobId,
+          repoPath,
+          branch,
+          implementationProvider: effectiveProvider,
+        });
+
+        try {
+          fs.writeFileSync(instructionsFile, instructions, 'utf-8');
+          const { stdout: codexOutput } = await execAsync(
+            buildCodeCommand(effectiveProvider, worktreePath, instructionsFile, effectiveModel),
+            { timeout: timeoutSeconds * 1000, maxBuffer: 10 * 1024 * 1024 },
+          );
+          stdout = [stdout, codexOutput].filter(Boolean).join('\n\n');
+        } catch (error: any) {
+          exitCode = error.code || 1;
+          stdout = [stdout, error.stdout || ''].filter(Boolean).join('\n\n');
+          stderr = error.stderr || error.message || '';
+        } finally {
+          try { fs.unlinkSync(instructionsFile); } catch { /* ignore */ }
+        }
+      }
+
       // Get git diff
       let gitDiff = '';
       try {
@@ -355,6 +411,7 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
         gitDiff,
         validationPassed,
         validationOutput,
+        implementationProvider: effectiveProvider,
         completedAt: new Date(),
       });
 
@@ -365,14 +422,14 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
           status: finalStatus,
           exitCode,
           durationMs: new Date().getTime() - startedAt.getTime(),
-          implementationProvider: provider,
+          implementationProvider: effectiveProvider,
         }),
       );
       await this.loggingClient.log('info', 'Claude Code Job Completed', {
         jobId,
         status: finalStatus,
         exitCode,
-        implementationProvider: provider,
+        implementationProvider: effectiveProvider,
       });
 
       // Clean up worktree

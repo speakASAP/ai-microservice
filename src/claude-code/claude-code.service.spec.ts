@@ -33,6 +33,7 @@ describe('ClaudeCodeService', () => {
       gitDiff: null,
       validationPassed: null,
       validationOutput: null,
+      implementationProvider: 'codex',
     });
 
     const status = await service.getJobStatus('550e8400-e29b-41d4-a716-446655440000');
@@ -41,6 +42,7 @@ describe('ClaudeCodeService', () => {
       jobId: '550e8400-e29b-41d4-a716-446655440000',
       taskId: '550e8400-e29b-41d4-a716-446655440001',
       status: 'queued',
+      implementationProvider: 'codex',
     });
     expect(JobStatusResponseSchema.safeParse(status).success).toBe(true);
   });
