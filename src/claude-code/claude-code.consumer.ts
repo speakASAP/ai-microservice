@@ -178,16 +178,22 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
       let stderr = '';
       let exitCode = 0;
 
+      const instructionsFile = path.join('/tmp', `cc-code-${jobId}.txt`);
       try {
+        fs.writeFileSync(instructionsFile, instructions, 'utf-8');
+        const modelFlag = model ? `--model ${model}` : '';
+        const escapedWorktreePath = worktreePath.replace(/"/g, '\"');
         const { stdout: cmdOutput } = await execAsync(
-          `claude code --repo-path ${worktreePath} --instructions "${instructions.replace(/"/g, '\\"')}" --max-tokens 4000`,
-          { timeout: timeoutSeconds * 1000 },
+          `cd "${escapedWorktreePath}" && ${CC_CLI()} --print --allow-dangerously-skip-permissions --add-dir "${escapedWorktreePath}" ${modelFlag} < "${instructionsFile}"`,
+          { timeout: timeoutSeconds * 1000, maxBuffer: 10 * 1024 * 1024 },
         );
         stdout = cmdOutput;
       } catch (error: any) {
         exitCode = error.code || 1;
         stdout = error.stdout || '';
         stderr = error.stderr || '';
+      } finally {
+        try { fs.unlinkSync(instructionsFile); } catch { /* ignore */ }
       }
 
       // Get git diff
