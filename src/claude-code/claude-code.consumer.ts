@@ -184,7 +184,7 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
         const modelFlag = model ? `--model ${model}` : '';
         const escapedWorktreePath = worktreePath.replace(/"/g, '\"');
         const { stdout: cmdOutput } = await execAsync(
-          `cd "${escapedWorktreePath}" && ${CC_CLI()} --print --allow-dangerously-skip-permissions --add-dir "${escapedWorktreePath}" ${modelFlag} < "${instructionsFile}"`,
+          `cd "${escapedWorktreePath}" && ${CC_CLI()} --print --dangerously-skip-permissions --permission-mode bypassPermissions --add-dir "${escapedWorktreePath}" ${modelFlag} < "${instructionsFile}"`,
           { timeout: timeoutSeconds * 1000, maxBuffer: 10 * 1024 * 1024 },
         );
         stdout = cmdOutput;
