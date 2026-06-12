@@ -38,6 +38,15 @@ export class ClaudeCodeJob {
   @Column('varchar', { length: 128, nullable: true })
   model?: string;
 
+  @Column('varchar', { length: 32, default: 'claude-code', name: 'implementation_provider' })
+  implementationProvider!: 'claude-code' | 'codex';
+
+  @Column('text', { nullable: true })
+  intent?: string;
+
+  @Column('varchar', { length: 128, nullable: true, name: 'intent_checksum' })
+  intentChecksum?: string;
+
   @Column('varchar', { default: 'queued' })
   status!: 'queued' | 'executing' | 'success' | 'failed' | 'timeout' | 'retrying';
 

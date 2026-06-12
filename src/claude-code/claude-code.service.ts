@@ -1,7 +1,7 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { ClaudeCodeJob } from '../database/entities/claude-code-job.entity';
 import { ExecuteCodeRequestInput } from '../contracts';
 import { JobEnqueueResponseDto } from './dto/job-enqueue-response.dto';
@@ -33,6 +33,8 @@ export class ClaudeCodeService {
 
     const executionMode = dto.executionMode ?? 'code';
     const model = dto.model ?? (executionMode === 'print' ? process.env.CC_PRINT_MODEL : undefined);
+    const implementationProvider = dto.implementationProvider ?? 'claude-code';
+    const intentChecksum = dto.intentChecksum ?? this.hashIntent(dto.intent);
 
     const job = this.jobRepository.create({
       jobId,
@@ -45,6 +47,9 @@ export class ClaudeCodeService {
       validationScript: dto.validationScript,
       executionMode,
       model,
+      implementationProvider,
+      intent: dto.intent,
+      intentChecksum,
       status: 'queued' as JobStatus,
     });
 
@@ -66,6 +71,9 @@ export class ClaudeCodeService {
           validationScript: dto.validationScript,
           executionMode,
           model,
+          implementationProvider,
+          intent: dto.intent,
+          intentChecksum,
         },
       );
       this.logger.log(JSON.stringify({
@@ -74,6 +82,7 @@ export class ClaudeCodeService {
         taskId: dto.taskId,
         repoPath: dto.repoPath,
         branch: dto.branch,
+        implementationProvider,
       }));
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -86,6 +95,8 @@ export class ClaudeCodeService {
       taskId: saved.taskId,
       status: saved.status as JobStatus,
       createdAt: saved.createdAt,
+      implementationProvider: saved.implementationProvider,
+      intentChecksum: saved.intentChecksum,
     };
   }
 
@@ -103,6 +114,9 @@ export class ClaudeCodeService {
       jobId: job.jobId,
       taskId: job.taskId,
       status: job.status as JobStatus,
+      implementationProvider: job.implementationProvider,
+      intent: job.intent ?? undefined,
+      intentChecksum: job.intentChecksum ?? undefined,
       startedAt: job.startedAt ?? undefined,
       completedAt: job.completedAt ?? undefined,
       exitCode: job.exitCode ?? undefined,
@@ -238,5 +252,11 @@ export class ClaudeCodeService {
       .orderBy('job.createdAt', 'ASC')
       .limit(limit)
       .getMany();
+  }
+
+  private hashIntent(intent?: string): string | undefined {
+    const normalized = intent?.trim();
+    if (!normalized) return undefined;
+    return createHash('sha256').update(normalized).digest('hex');
   }
 }

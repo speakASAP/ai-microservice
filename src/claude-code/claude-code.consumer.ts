@@ -7,6 +7,7 @@ import { RabbitSubscribe, AmqpConnection } from '@golevelup/nestjs-rabbitmq';
 import { ClaudeCodeService } from './claude-code.service';
 import { LoggingClient } from './logging.client';
 import { JobStatus } from './job-status.enum';
+import type { ImplementationProvider } from '../contracts';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
@@ -15,7 +16,113 @@ import * as path from 'path';
 const execAsync = promisify(exec);
 const CC_CLI = () => process.env.CC_CLI_PATH?.trim() || 'claude';
 const CC_PRINT_MODEL = () => process.env.CC_PRINT_MODEL?.trim() || 'claude-sonnet-4-6';
+const CODEX_CLI = () => process.env.CODEX_CLI_PATH?.trim() || 'codex';
+const CODEX_MODEL = () => process.env.CODEX_MODEL?.trim() || undefined;
+const CODEX_SANDBOX = () => process.env.CODEX_SANDBOX?.trim() || 'workspace-write';
+const CODEX_PRINT_SANDBOX = () => process.env.CODEX_PRINT_SANDBOX?.trim() || 'read-only';
+const CODEX_APPROVAL_POLICY = () => process.env.CODEX_APPROVAL_POLICY?.trim() || 'never';
 const RETRY_BACKOFF_MS = [30_000, 90_000, 270_000];
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function resolveProvider(provider?: string): ImplementationProvider {
+  return provider === 'codex' ? 'codex' : 'claude-code';
+}
+
+function providerLabel(provider: ImplementationProvider): string {
+  return provider === 'codex' ? 'Codex' : 'Claude Code';
+}
+
+function resolveModel(
+  provider: ImplementationProvider,
+  executionMode: 'code' | 'print',
+  model?: string,
+): string | undefined {
+  if (model) return model;
+  if (provider === 'codex') return CODEX_MODEL();
+  return executionMode === 'print' ? CC_PRINT_MODEL() : undefined;
+}
+
+function modelFlag(model?: string): string {
+  return model ? `--model ${shellQuote(model)}` : '';
+}
+
+function buildCodeCommand(
+  provider: ImplementationProvider,
+  worktreePath: string,
+  instructionsFile: string,
+  model?: string,
+): string {
+  if (provider === 'codex') {
+    return [
+      shellQuote(CODEX_CLI()),
+      'exec',
+      '--cd',
+      shellQuote(worktreePath),
+      '--sandbox',
+      shellQuote(CODEX_SANDBOX()),
+      '--ask-for-approval',
+      shellQuote(CODEX_APPROVAL_POLICY()),
+      modelFlag(model),
+      '-',
+      '<',
+      shellQuote(instructionsFile),
+    ].filter(Boolean).join(' ');
+  }
+
+  return [
+    'cd',
+    shellQuote(worktreePath),
+    '&&',
+    shellQuote(CC_CLI()),
+    '--print',
+    '--dangerously-skip-permissions',
+    '--permission-mode',
+    'bypassPermissions',
+    '--add-dir',
+    shellQuote(worktreePath),
+    modelFlag(model),
+    '<',
+    shellQuote(instructionsFile),
+  ].filter(Boolean).join(' ');
+}
+
+function buildPrintCommand(
+  provider: ImplementationProvider,
+  repoPath: string,
+  instructionsFile: string,
+  model?: string,
+): string {
+  if (provider === 'codex') {
+    return [
+      shellQuote(CODEX_CLI()),
+      'exec',
+      '--cd',
+      shellQuote(repoPath),
+      '--sandbox',
+      shellQuote(CODEX_PRINT_SANDBOX()),
+      '--ask-for-approval',
+      shellQuote(CODEX_APPROVAL_POLICY()),
+      modelFlag(model),
+      '-',
+      '<',
+      shellQuote(instructionsFile),
+    ].filter(Boolean).join(' ');
+  }
+
+  return [
+    'cd',
+    shellQuote(repoPath),
+    '&&',
+    shellQuote(CC_CLI()),
+    '--print',
+    modelFlag(model),
+    '<',
+    shellQuote(instructionsFile),
+  ].filter(Boolean).join(' ');
+}
 
 /**
  * Determines if an error is retryable (transient) vs permanent.
@@ -83,6 +190,7 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
           job.validationScript,
           job.executionMode ?? 'code',
           job.model,
+          job.implementationProvider,
           0,
           job.maxRetries ?? 3,
         );
@@ -117,19 +225,24 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
       validationScript,
       executionMode = 'code',
       model,
+      implementationProvider,
     } = msg;
+    const provider = resolveProvider(implementationProvider);
+    const resolvedModel = resolveModel(provider, executionMode, model);
 
     this.logger.log(
       JSON.stringify({
         event: 'Claude Code Job Executing',
         jobId,
         repoPath,
+        implementationProvider: provider,
       }),
     );
     await this.loggingClient.log('info', 'Claude Code Job Executing', {
       jobId,
       repoPath,
       branch,
+      implementationProvider: provider,
     });
 
     try {
@@ -141,7 +254,7 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
       });
 
       if (executionMode === 'print') {
-        await this.executePrintJob(jobId, repoPath, instructions, timeoutSeconds, model ?? CC_PRINT_MODEL(), startedAt);
+        await this.executePrintJob(jobId, repoPath, instructions, timeoutSeconds, provider, resolvedModel, startedAt);
         return;
       }
 
@@ -169,9 +282,9 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
         { cwd: repoPath, timeout: timeoutSeconds * 1000 },
       );
 
-      // Execute claude code
+      // Execute implementation provider
       this.logger.debug(
-        `Executing claude code in ${worktreePath} with branch ${branch}`,
+        `Executing ${providerLabel(provider)} in ${worktreePath} with branch ${branch}`,
       );
 
       let stdout = '';
@@ -181,10 +294,8 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
       const instructionsFile = path.join('/tmp', `cc-code-${jobId}.txt`);
       try {
         fs.writeFileSync(instructionsFile, instructions, 'utf-8');
-        const modelFlag = model ? `--model ${model}` : '';
-        const escapedWorktreePath = worktreePath.replace(/"/g, '\"');
         const { stdout: cmdOutput } = await execAsync(
-          `cd "${escapedWorktreePath}" && ${CC_CLI()} --print --dangerously-skip-permissions --permission-mode bypassPermissions --add-dir "${escapedWorktreePath}" ${modelFlag} < "${instructionsFile}"`,
+          buildCodeCommand(provider, worktreePath, instructionsFile, resolvedModel),
           { timeout: timeoutSeconds * 1000, maxBuffer: 10 * 1024 * 1024 },
         );
         stdout = cmdOutput;
@@ -254,12 +365,14 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
           status: finalStatus,
           exitCode,
           durationMs: new Date().getTime() - startedAt.getTime(),
+          implementationProvider: provider,
         }),
       );
       await this.loggingClient.log('info', 'Claude Code Job Completed', {
         jobId,
         status: finalStatus,
         exitCode,
+        implementationProvider: provider,
       });
 
       // Clean up worktree
@@ -318,6 +431,7 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
           job.validationScript,
           job.executionMode ?? 'code',
           job.model,
+          job.implementationProvider,
           delayMs,
           maxRetries,
         );
@@ -356,7 +470,8 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
     repoPath: string,
     instructions: string,
     timeoutSeconds: number,
-    model: string,
+    implementationProvider: ImplementationProvider,
+    model: string | undefined,
     startedAt: Date,
   ): Promise<void> {
     const tmpFile = path.join('/tmp', `cc-print-${jobId}.txt`);
@@ -366,9 +481,8 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
 
     try {
       fs.writeFileSync(tmpFile, instructions, 'utf-8');
-      const modelFlag = model ? `--model ${model}` : '';
       const { stdout: out } = await execAsync(
-        `cd "${repoPath.replace(/"/g, '\\"')}" && ${CC_CLI()} --print ${modelFlag} < "${tmpFile}"`,
+        buildPrintCommand(implementationProvider, repoPath, tmpFile, model),
         { timeout: timeoutSeconds * 1000, maxBuffer: 10 * 1024 * 1024 },
       );
       stdout = out;
@@ -389,12 +503,13 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
       completedAt: new Date(),
     });
 
-    await this.loggingClient.log('info', 'Claude Code Print Job Completed', {
+    await this.loggingClient.log('info', `${providerLabel(implementationProvider)} Print Job Completed`, {
       jobId,
       status: finalStatus,
       exitCode,
       durationMs: Date.now() - startedAt.getTime(),
       model,
+      implementationProvider,
     });
   }
 
@@ -411,9 +526,11 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
     validationScript: string | undefined,
     executionMode: 'code' | 'print',
     model: string | undefined,
+    implementationProvider: ImplementationProvider | undefined,
     delayMs: number,
     maxRetries: number,
   ): void {
+    const provider = resolveProvider(implementationProvider);
     const message = {
       jobId,
       repoPath,
@@ -423,6 +540,7 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
       validationScript,
       executionMode,
       model,
+      implementationProvider: provider,
     };
 
     setTimeout(async () => {
@@ -474,6 +592,7 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
           validationScript: job.validationScript,
           executionMode: job.executionMode ?? 'code',
           model: job.model,
+          implementationProvider: job.implementationProvider,
         }, null);
       }
     } catch (error) {

@@ -2,11 +2,13 @@
 
 Centralized AI processing service for the Statex ecosystem. Routes LLM calls by model tier, provides NLP, ASR, Document AI, and prototype generation.
 
-**Stack**: NestJS · LiteLLM · Ollama · OpenRouter · Gemini — see `SYSTEM.md`
+**Stack**: NestJS · LiteLLM · Ollama · OpenRouter · Gemini · Claude Code · Codex — see `SYSTEM.md`
 
 ## Features
 
 - AI Orchestrator — central coordination, `POST /ai/complete` (LLM gateway)
+- Intent preservation system for AI-microservice goals and implementation jobs
+- Implementation execution engine with `claude-code` and `codex` providers
 - NLP, ASR, Document AI, Prototype Generator, Template Repository
 - Free AI Service, AI Workers, Gemini AI Service, Data Viz Service
 - Email-triage agents (Ingest, Classifier, Extractor, Decider) for agentic-email-processing-system
@@ -61,6 +63,7 @@ docker compose -f docker-compose.blue.yml logs -f
 ## API Endpoints — AI Orchestrator
 
 - `POST /ai/complete` — LLM gateway (`model_tier`, `system_prompt`, `user_prompt`, `output_schema?`, `max_tokens?`, `correlation_id?`) · JWT required · see `docs/model-tier-endpoints.md`
+- `POST /ai/claude-code-execute` — implementation job executor; accepts `implementationProvider` (`claude-code` default, `codex` optional), `intent`, and `intentChecksum` · JWT required · see `docs/INTENT_PRESERVATION.md`
 - `POST /api/process-submission` · `GET /api/status/{id}` · `GET /api/results/{id}` · `GET /health`
 - `POST /api/shop-assistant/transcribe` — ASR
 - `POST /api/shop-assistant/refine-query` — COMMUNICATION agent

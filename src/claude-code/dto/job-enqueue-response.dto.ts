@@ -9,4 +9,6 @@ export class JobEnqueueResponseDto {
   taskId!: string;
   status!: JobStatus;
   createdAt!: Date;
+  implementationProvider?: 'claude-code' | 'codex';
+  intentChecksum?: string;
 }

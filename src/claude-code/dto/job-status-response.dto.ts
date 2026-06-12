@@ -8,6 +8,9 @@ export class JobStatusResponseDto {
   jobId!: string;
   taskId!: string;
   status!: JobStatus;
+  implementationProvider?: 'claude-code' | 'codex';
+  intent?: string;
+  intentChecksum?: string;
 
   /** Timestamp when job execution started (null if not yet started) */
   startedAt?: Date;

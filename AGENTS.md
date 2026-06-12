@@ -8,6 +8,17 @@ Query the RAG service first — saves 2000-5000 tokens per query:
 
 Infrastructure service — provides LLM inference to other agents, does not self-coordinate.
 
+## Intent Preservation
+
+Every goal against AI microservice must preserve user intent from intake to execution:
+- Capture `intent` before planning or enqueueing implementation work.
+- Include `intent` on `/ai/claude-code-execute` jobs; include `intentChecksum` when the caller already has one.
+- Treat returned `intentChecksum` as the continuity marker for follow-up jobs, validation, and review.
+- Change intent only when a newer user instruction explicitly changes the objective.
+- Validate outputs against the intent, not only build/test success.
+
+See `docs/INTENT_PRESERVATION.md`.
+
 ## Model Tier → Model Mapping
 
 Canonical router definitions live in **`litellm_config.yaml`** (edit there first; keep this table in sync).
@@ -18,6 +29,17 @@ cheap:   openrouter/google/gemma-3-27b-it:free   # OpenRouter; LiteLLM fallback 
 smart:   gemini/gemini-2.0-flash             # Gemini API key; LiteLLM fallback → smart-fallback (same Ollama model)
 premium: anthropic/claude-sonnet-4-6          # BLOCKED — human approval required per call (not routed in LiteLLM)
 ```
+
+## Implementation Providers
+
+Implementation jobs use `/ai/claude-code-execute` and accept `implementationProvider`:
+
+```yaml
+claude-code: default; uses CC_CLI_PATH and CLAUDE_CONFIG_DIR
+codex:       optional; uses CODEX_CLI_PATH, CODEX_HOME, CODEX_SANDBOX, CODEX_APPROVAL_POLICY
+```
+
+The endpoint name remains `claude-code-execute` for backward compatibility, but callers should set `implementationProvider=codex` when they want Codex to implement a job.
 
 ## Fallback chain (LiteLLM proxy)
 
