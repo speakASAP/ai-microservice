@@ -250,7 +250,7 @@ function applyStructuredValidatorFallback(
   instructions: string,
   strictOnlyEditFiles: string[],
 ): string | null {
-  const feedback = extractValidatorFeedback(instructions);
+  const feedback = extractValidatorFeedback(instructions) || instructions;
   const normalizedFeedback = feedback.toLowerCase();
   if (
     strictOnlyEditFiles.length !== 1
