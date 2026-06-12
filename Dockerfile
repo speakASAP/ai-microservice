@@ -25,6 +25,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev --legacy-peer-deps
 
 COPY --from=builder /app/dist ./dist
+COPY public ./public
 
 RUN chown -R node:node /app
 USER node

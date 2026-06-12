@@ -199,6 +199,11 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
       // Get git diff
       let gitDiff = '';
       try {
+        await execAsync('git add -N .', { cwd: worktreePath });
+      } catch (e) {
+        this.logger.warn(`Failed to mark untracked files for diff: ${e}`);
+      }
+      try {
         const { stdout: diffOutput } = await execAsync(`git diff`, {
           cwd: worktreePath,
         });

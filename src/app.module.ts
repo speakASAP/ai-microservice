@@ -4,11 +4,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ClaudeCodeModule } from './claude-code/claude-code.module';
 import { ClaudeCodeJob } from './database/entities/claude-code-job.entity';
 import { InferenceLog } from './database/entities/inference-log.entity';
+import { AiAgent } from './database/entities/ai-agent.entity';
 import { VoiceModule } from './voice/voice.module';
 import { TaskModule } from './task/task.module';
 import { AiModule } from './ai/ai.module';
 import { EmailTriageModule } from './email-triage/email-triage.module';
 import { ShopAssistantModule } from './shop-assistant/shop-assistant.module';
+import { AdminModule } from './admin/admin.module';
 import { ServiceIdentityModule } from './service-identity/service-identity.module';
 import { InferenceLogInterceptor } from './service-identity/inference-log.interceptor';
 import { HealthController } from './health.controller';
@@ -23,7 +25,7 @@ import { HealthController } from './health.controller';
       username: process.env.DATABASE_URL ? undefined : (process.env.DB_USER || process.env.POSTGRES_USER || 'postgres'),
       password: process.env.DATABASE_URL ? undefined : (process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD),
       database: process.env.DATABASE_URL ? undefined : (process.env.DB_NAME || process.env.POSTGRES_DB || 'ai_microservice'),
-      entities: [ClaudeCodeJob, InferenceLog],
+      entities: [ClaudeCodeJob, InferenceLog, AiAgent],
       synchronize: process.env.NODE_ENV !== 'production' || process.env.DB_SYNC === 'true' || process.env.DB_AUTO_CREATE === 'true',
       logging: process.env.DEBUG_SQL === 'true',
     }),
@@ -35,6 +37,7 @@ import { HealthController } from './health.controller';
     AiModule,
     EmailTriageModule,
     ShopAssistantModule,
+    AdminModule,
   ],
   controllers: [HealthController],
   providers: [

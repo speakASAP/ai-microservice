@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Microservice Admin</title>
+    <link rel="stylesheet" href="/admin/assets/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="rail" aria-label="Admin navigation">
+        <div class="brand">
+          <span class="brand-mark">AI</span>
+          <div>
+            <strong>AI Microservice</strong>
+            <span>Admin</span>
+          </div>
+        </div>
+        <nav>
+          <button class="nav-item active" type="button" data-view="agents">
+            <span class="icon">◎</span>
+            <span>Agents</span>
+          </button>
+          <button class="nav-item" type="button" data-view="prompts">
+            <span class="icon">¶</span>
+            <span>Prompts</span>
+          </button>
+          <button class="nav-item" type="button" data-view="models">
+            <span class="icon">◌</span>
+            <span>Models</span>
+          </button>
+          <button class="nav-item" type="button" data-view="logs">
+            <span class="icon">≡</span>
+            <span>Logs</span>
+          </button>
+        </nav>
+        <div class="rail-note">
+          <span class="status-dot"></span>
+          <span>ai.alfares.cz</span>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <h1>Agent Registry</h1>
+            <p>Manage prompts, model routing, execution scope, and JSON configuration for AI agents.</p>
+          </div>
+          <div class="top-actions">
+            <button class="ghost icon-button" id="refresh-button" type="button" title="Refresh agents" aria-label="Refresh agents">↻</button>
+            <button class="primary" id="new-agent-button" type="button"><span>＋</span> New Agent</button>
+          </div>
+        </header>
+
+        <section class="auth-panel" id="auth-panel">
+          <div>
+            <h2>Service token required</h2>
+            <p>The admin API uses the existing service JWT guard. Enter a bearer token to list and modify agents.</p>
+          </div>
+          <form id="token-form" class="token-form">
+            <input id="token-input" name="token" type="password" placeholder="Bearer token" autocomplete="off" />
+            <button type="submit">Connect</button>
+            <button id="clear-token-button" class="ghost" type="button">Clear</button>
+          </form>
+        </section>
+
+        <section class="status-strip" aria-live="polite">
+          <div class="metric">
+            <span>Total</span>
+            <strong id="metric-total">0</strong>
+          </div>
+          <div class="metric">
+            <span>Active</span>
+            <strong id="metric-active">0</strong>
+          </div>
+          <div class="metric">
+            <span>Model tiers</span>
+            <strong id="metric-tiers">0</strong>
+          </div>
+          <div class="message" id="message">Not connected.</div>
+        </section>
+
+        <section class="panel-grid">
+          <div class="panel list-panel">
+            <div class="panel-head">
+              <div>
+                <h2>Agents</h2>
+                <p id="list-summary">No agents loaded</p>
+              </div>
+            </div>
+            <div class="filters">
+              <input id="search-input" type="search" placeholder="Search name, slug, scope" />
+              <select id="status-filter" aria-label="Filter by status">
+                <option value="">All status</option>
+                <option value="active">Active</option>
+                <option value="draft">Draft</option>
+                <option value="disabled">Disabled</option>
+              </select>
+              <select id="model-filter" aria-label="Filter by model tier">
+                <option value="">All tiers</option>
+                <option value="free">Free</option>
+                <option value="cheap">Cheap</option>
+                <option value="smart">Smart</option>
+                <option value="premium">Premium</option>
+              </select>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Scope</th>
+                    <th>Tier</th>
+                    <th>Status</th>
+                    <th>Updated</th>
+                  </tr>
+                </thead>
+                <tbody id="agent-list"></tbody>
+              </table>
+              <div class="empty-state" id="empty-state">No agents match the current filters.</div>
+            </div>
+          </div>
+
+          <form class="panel editor-panel" id="agent-form">
+            <div class="panel-head editor-head">
+              <div>
+                <h2 id="editor-title">Create agent</h2>
+                <p id="editor-subtitle">Define prompt, routing, and runtime configuration.</p>
+              </div>
+              <div class="editor-actions">
+                <button class="ghost icon-button" id="duplicate-button" type="button" title="Duplicate selected agent" aria-label="Duplicate selected agent">⧉</button>
+                <button class="danger icon-button" id="delete-button" type="button" title="Delete selected agent" aria-label="Delete selected agent">⌫</button>
+                <button class="primary" type="submit"><span>✓</span> Save</button>
+              </div>
+            </div>
+
+            <input type="hidden" name="id" />
+            <div class="form-grid two">
+              <label>
+                Name
+                <input name="name" required placeholder="Shop Query Refiner" />
+              </label>
+              <label>
+                Slug
+                <input name="slug" required placeholder="shop-query-refiner" />
+              </label>
+              <label>
+                Status
+                <select name="status">
+                  <option value="active">Active</option>
+                  <option value="draft">Draft</option>
+                  <option value="disabled">Disabled</option>
+                </select>
+              </label>
+              <label>
+                Service scope
+                <input name="serviceScope" required placeholder="shop-assistant" />
+              </label>
+              <label class="wide">
+                Route path
+                <input name="routePath" placeholder="/api/shop-assistant/refine-query" />
+              </label>
+              <label class="wide">
+                Description
+                <input name="description" placeholder="What this agent owns and when it is used" />
+              </label>
+            </div>
+
+            <div class="model-row">
+              <fieldset>
+                <legend>Model tier</legend>
+                <label><input type="radio" name="modelTier" value="free" /> Free</label>
+                <label><input type="radio" name="modelTier" value="cheap" /> Cheap</label>
+                <label><input type="radio" name="modelTier" value="smart" /> Smart</label>
+                <label><input type="radio" name="modelTier" value="premium" /> Premium</label>
+              </fieldset>
+              <label>
+                Provider model
+                <input name="providerModel" placeholder="gemini/gemini-2.0-flash" />
+              </label>
+              <label>
+                Temperature
+                <input name="temperature" type="number" min="0" max="2" step="0.01" />
+              </label>
+              <label>
+                Max tokens
+                <input name="maxTokens" type="number" min="1" step="1" />
+              </label>
+            </div>
+
+            <label>
+              Tags
+              <input name="tags" placeholder="shop-assistant, search, production" />
+            </label>
+
+            <label>
+              System prompt
+              <textarea name="systemPrompt" rows="5" spellcheck="false"></textarea>
+            </label>
+
+            <label>
+              User prompt template
+              <textarea name="userPromptTemplate" rows="7" spellcheck="false"></textarea>
+            </label>
+
+            <div class="form-grid two">
+              <label>
+                Output schema JSON
+                <textarea name="outputSchema" rows="7" spellcheck="false" placeholder='{"answer":"string"}'></textarea>
+              </label>
+              <label>
+                Metadata JSON
+                <textarea name="metadata" rows="7" spellcheck="false" placeholder='{"source":"src/..."}'></textarea>
+              </label>
+            </div>
+          </form>
+        </section>
+      </main>
+    </div>
+    <script src="/admin/assets/app.js" defer></script>
+  </body>
+</html>
