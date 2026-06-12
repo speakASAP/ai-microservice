@@ -2,7 +2,7 @@
 
 ```yaml
 id: GOAL-06
-status: in_progress
+status: done
 owner: orchestrator
 dependencies:
   - GOAL-03

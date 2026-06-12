@@ -28,6 +28,7 @@ IMAGE_LATEST="${REGISTRY}/${SERVICE_NAME}:latest"
 PORT="3380"
 PUBLIC_BASE_URL="${AI_SERVICE_PUBLIC_URL:-https://ai.alfares.cz}"
 ROLLBACK_PREVIOUS_IMAGE=""
+ROLLBACK_PREVIOUS_IMAGE_ID=""
 ROLLBACK_PREVIOUS_REVISION=""
 
 log_ts() {
@@ -74,6 +75,8 @@ capture_rollback_context() {
   echo -e "${YELLOW}Capturing rollback context...${NC}"
   ROLLBACK_PREVIOUS_IMAGE="$(kubectl get deployment/"${SERVICE_NAME}" -n "${NAMESPACE}" \
     -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
+  ROLLBACK_PREVIOUS_IMAGE_ID="$(kubectl get pods -n "${NAMESPACE}" -l app="${SERVICE_NAME}" \
+    -o jsonpath='{.items[0].status.containerStatuses[0].imageID}' 2>/dev/null || true)"
   ROLLBACK_PREVIOUS_REVISION="$(kubectl rollout history deployment/"${SERVICE_NAME}" -n "${NAMESPACE}" 2>/dev/null \
     | awk 'NF && $1 ~ /^[0-9]+$/ {revision=$1} END {print revision}')"
 
@@ -81,6 +84,12 @@ capture_rollback_context() {
     log_ts "Previous image: ${ROLLBACK_PREVIOUS_IMAGE}"
   else
     log_ts "Previous image: unavailable"
+  fi
+
+  if [ -n "$ROLLBACK_PREVIOUS_IMAGE_ID" ]; then
+    log_ts "Previous image ID: ${ROLLBACK_PREVIOUS_IMAGE_ID}"
+  else
+    log_ts "Previous image ID: unavailable"
   fi
 
   if [ -n "$ROLLBACK_PREVIOUS_REVISION" ]; then
@@ -92,7 +101,20 @@ capture_rollback_context() {
 
 run_smoke_checks() {
   echo -e "${YELLOW}Running production smoke checks against ${PUBLIC_BASE_URL}...${NC}"
-  AI_SERVICE_BASE_URL="$PUBLIC_BASE_URL" "$PROJECT_ROOT/scripts/smoke-unified-llm.sh"
+  local service_token="${AI_SERVICE_TOKEN:-}"
+
+  if [ -z "$service_token" ]; then
+    local jwt_secret
+    jwt_secret="$(kubectl get secret ai-microservice-secret -n "${NAMESPACE}" -o jsonpath='{.data.JWT_SECRET}' 2>/dev/null | base64 -d 2>/dev/null || true)"
+    if [ -n "$jwt_secret" ] && command -v node >/dev/null 2>&1; then
+      service_token="$(JWT_SECRET="$jwt_secret" node -e "const crypto=require('crypto'); const secret=process.env.JWT_SECRET; const b64=(v)=>Buffer.from(JSON.stringify(v)).toString('base64url'); const now=Math.floor(Date.now()/1000); const header={alg:'HS256',typ:'JWT'}; const payload={serviceId:'deployment-smoke',iss:'ai-microservice',iat:now,exp:now+600}; const unsigned=b64(header)+'.'+b64(payload); const sig=crypto.createHmac('sha256',secret).update(unsigned).digest('base64url'); process.stdout.write(unsigned+'.'+sig);")"
+      log_ts "Generated short-lived deployment smoke service token"
+    else
+      log_ts "AI_SERVICE_TOKEN unavailable; protected smoke checks will be skipped"
+    fi
+  fi
+
+  AI_SERVICE_BASE_URL="$PUBLIC_BASE_URL" AI_SERVICE_TOKEN="$service_token" "$PROJECT_ROOT/scripts/smoke-unified-llm.sh"
   echo -e "${GREEN}✅ Smoke checks passed${NC}"
 }
 
@@ -100,11 +122,18 @@ print_rollback_evidence() {
   echo -e "${BLUE}Rollback evidence:${NC}"
   echo "Current image:  ${IMAGE}"
   echo "Previous image: ${ROLLBACK_PREVIOUS_IMAGE:-unknown}"
+  echo "Previous image ID: ${ROLLBACK_PREVIOUS_IMAGE_ID:-unknown}"
   echo "Rollout history:"
-  kubectl rollout history deployment/"${SERVICE_NAME}" -n "${NAMESPACE}" || true
+  local history
+  history="$(kubectl rollout history deployment/"${SERVICE_NAME}" -n "${NAMESPACE}" 2>/dev/null || true)"
+  echo "$history"
 
-  if [ -n "$ROLLBACK_PREVIOUS_REVISION" ]; then
+  if [ -n "$ROLLBACK_PREVIOUS_REVISION" ] && echo "$history" | awk '{print $1}' | grep -qx "$ROLLBACK_PREVIOUS_REVISION"; then
     echo "Rollback command: kubectl rollout undo deployment/${SERVICE_NAME} -n ${NAMESPACE} --to-revision=${ROLLBACK_PREVIOUS_REVISION}"
+  elif [ -n "$ROLLBACK_PREVIOUS_IMAGE_ID" ]; then
+    echo "Rollback command: kubectl set image deployment/${SERVICE_NAME} app=${ROLLBACK_PREVIOUS_IMAGE_ID} -n ${NAMESPACE} && kubectl rollout status deployment/${SERVICE_NAME} -n ${NAMESPACE}"
+  elif [ -n "$ROLLBACK_PREVIOUS_IMAGE" ]; then
+    echo "Rollback command: kubectl set image deployment/${SERVICE_NAME} app=${ROLLBACK_PREVIOUS_IMAGE} -n ${NAMESPACE} && kubectl rollout status deployment/${SERVICE_NAME} -n ${NAMESPACE}"
   else
     echo "Rollback command: kubectl rollout undo deployment/${SERVICE_NAME} -n ${NAMESPACE}"
   fi

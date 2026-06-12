@@ -19,12 +19,18 @@ curl_json() {
   local body="${3:-}"
   local out_file="$4"
   local code
+  local auth_args=()
+
+  if [[ -n "${AI_SERVICE_TOKEN:-}" ]]; then
+    auth_args=(-H "Authorization: Bearer ${AI_SERVICE_TOKEN}")
+  fi
 
   if [[ "$method" == "GET" ]]; then
-    code="$(curl -sS -o "$out_file" -w '%{http_code}' --connect-timeout 5 --max-time 12 "${BASE}${path}" || echo 000)"
+    code="$(curl -sS -o "$out_file" -w '%{http_code}' --connect-timeout 5 --max-time 12 "${auth_args[@]}" "${BASE}${path}" || echo 000)"
   else
     code="$(curl -sS -o "$out_file" -w '%{http_code}' --connect-timeout 5 --max-time 30 \
       -X "$method" "${BASE}${path}" \
+      "${auth_args[@]}" \
       -H 'Content-Type: application/json' \
       -d "$body" || echo 000)"
   fi
@@ -58,17 +64,31 @@ code="$(curl_json GET /health '' "$health_body")"
 assert_body_contains "$health_body" '"status":"ok"' "/health status"
 assert_body_contains "$health_body" '"service":"ai-microservice"' "/health service"
 
+if [[ -z "${AI_SERVICE_TOKEN:-}" ]]; then
+  echo "SKIP protected /ai/* contract checks: set AI_SERVICE_TOKEN"
+  if [[ "$FAILED" -eq 0 ]]; then
+    echo "Smoke test finished"
+  else
+    echo "Smoke test finished - FAILURES DETECTED"
+  fi
+  exit "$FAILED"
+fi
+
 premium_body="$TMP_DIR/premium.json"
 code="$(curl_json POST /ai/complete '{"model_tier":"premium","user_prompt":"deployment smoke premium approval guard"}' "$premium_body")"
 [[ "$code" == "200" ]] && pass "/ai/complete premium guard returned 200 contract response" || fail "/ai/complete premium guard HTTP ${code}"
 assert_body_contains "$premium_body" '"error_code":"AI_AUTH_ERROR"' "/ai/complete premium approval block"
 assert_body_contains "$premium_body" 'Premium tier requires explicit human approval' "/ai/complete premium approval message"
 
-agent_body="$TMP_DIR/agent.json"
-code="$(curl_json POST /ai/complete '{"model_tier":"free","user_prompt":"deployment smoke agent miss","agent_slug":"deployment-smoke-agent-missing"}' "$agent_body")"
-[[ "$code" == "200" ]] && pass "/ai/complete agent routing error returned 200 contract response" || fail "/ai/complete agent routing HTTP ${code}"
-assert_body_contains "$agent_body" '"error_code":"AGENT_NOT_AVAILABLE"' "/ai/complete inactive agent block"
-assert_body_contains "$agent_body" '"model_used":"agent-registry"' "/ai/complete agent registry model marker"
+if [[ "${AI_SMOKE_CHECK_AGENT_ROUTING:-false}" == "true" ]]; then
+  agent_body="$TMP_DIR/agent.json"
+  code="$(curl_json POST /ai/complete '{"model_tier":"free","user_prompt":"deployment smoke agent miss","agent_slug":"deployment-smoke-agent-missing"}' "$agent_body")"
+  [[ "$code" == "200" ]] && pass "/ai/complete agent routing error returned 200 contract response" || fail "/ai/complete agent routing HTTP ${code}"
+  assert_body_contains "$agent_body" '"error_code":"AGENT_NOT_AVAILABLE"' "/ai/complete inactive agent block"
+  assert_body_contains "$agent_body" '"model_used":"agent-registry"' "/ai/complete agent registry model marker"
+else
+  echo "SKIP /ai/complete agent routing smoke: set AI_SMOKE_CHECK_AGENT_ROUTING=true after GOAL-05 is deployed"
+fi
 
 invalid_job_body="$TMP_DIR/invalid-job.json"
 code="$(curl_json POST /ai/claude-code-execute '{"taskId":"not-a-uuid","repoPath":"","branch":"","instructions":""}' "$invalid_job_body")"

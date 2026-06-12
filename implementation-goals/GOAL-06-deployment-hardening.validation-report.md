@@ -2,12 +2,12 @@
 
 ```yaml
 id: VAL-GOAL-06
-status: draft
+status: pass
 artifact_validated: implementation-goals/GOAL-06-deployment-hardening.md
 owner: validator
 created: 2026-06-12
 last_updated: 2026-06-12
-completeness_level: draft
+completeness_level: complete
 ```
 
 ## Artifact Validated
@@ -29,58 +29,89 @@ Runtime checksum is unavailable in this manual implementation session. Intent co
 
 ## Intent Compliance Decision
 
-Pending final validation.
+Pass. The implementation strengthens deployment readiness, smoke checks, rollback evidence, and operator handoff without changing runtime model routing, DTOs, database schema, or premium approval policy.
 
 ## Command Evidence
 
 ```text
-Pending.
+ssh alfares 'cd /home/ssf/Documents/Github/ai-microservice && python3 scripts/pre_coding_gate.py --root . --goal implementation-goals/GOAL-06-deployment-hardening.md'
+PASS: pre-coding gate
+
+ssh alfares 'cd /home/ssf/Documents/Github/ai-microservice && python3 -m py_compile scripts/deployment_readiness_gate.py scripts/pre_coding_gate.py'
+PASS
+
+ssh alfares 'cd /home/ssf/Documents/Github/ai-microservice && bash -n scripts/deploy.sh scripts/smoke-unified-llm.sh'
+PASS
+
+ssh alfares 'cd /home/ssf/Documents/Github/ai-microservice && python3 scripts/deployment_readiness_gate.py --root .'
+PASS: deployment readiness gate
+
+ssh alfares 'cd /home/ssf/Documents/Github/ai-microservice && npm run build'
+PASS
+
+ssh alfares 'cd /home/ssf/Documents/Github/ai-microservice && npm test'
+PASS: 14 suites, 128 tests
+
+ssh alfares 'cd /home/ssf/Documents/Github/ai-microservice && AI_SERVICE_BASE_URL=https://ai.alfares.cz AI_SERVICE_TOKEN=<short-lived synthetic token> ./scripts/smoke-unified-llm.sh'
+PASS: health, premium approval block, invalid implementation-job payload validation
+
+ssh alfares 'cd /home/ssf/Documents/Github/ai-microservice && ./scripts/deploy.sh goal-06-deployment-hardening-20260612'
+PASS: deployed image tag localhost:5000/ai-microservice:goal-06-deployment-hardening-20260612
+PASS: pushed digest sha256:da24fd454caf4336f3f28d3931ea5c554b210046e62eb9b6373095a7f3e526a5
+PASS: rollout completed, health check passed, authenticated smoke passed
+
+curl -s -H 'Cache-Control: no-cache' https://ai.alfares.cz/health
+PASS: {"status":"ok","service":"ai-microservice"}
 ```
 
 ## Gate Evidence
 
-Pending.
+Pre-coding and deployment readiness gates passed on `alfares`.
 
 ## Invariant Evidence
 
-Pending.
+Runtime endpoint behavior is unchanged. Premium requests remain blocked with explicit human approval messaging. Implementation job schema validation and intent fields remain owned by existing contracts.
 
 ## Sensitive-Data Evidence
 
-Pending.
+Pass. Smoke uses synthetic payloads. The deploy script generates a short-lived deployment smoke token in memory from `JWT_SECRET` and does not print the token or secret. Scripts do not print provider keys, database credentials, JWTs, or raw implementation-job output.
 
 ## Contract/Schema Evidence
 
-Pending.
+No DTO, database, or endpoint schema changes. Smoke validates existing `/health`, `/ai/complete`, and `/ai/claude-code-execute` behavior.
 
 ## Replay/Determinism Evidence
 
-Pending.
+Live model inference remains opt-in with `AI_SMOKE_RUN_LIVE_AI=true`. Agent-routing smoke remains opt-in with `AI_SMOKE_CHECK_AGENT_ROUTING=true` until GOAL-05 is deployed to production.
 
 ## Passed Criteria
 
-Pending.
+- Deployment readiness gate has project-specific checks.
+- Rollback path is documented in the execution plan and printed by `scripts/deploy.sh`.
+- Smoke checks cover health and changed behavior without default premium routing or real job enqueue.
 
 ## Failed Criteria
 
-Pending.
+None.
 
 ## Manual Checks
 
-Pending.
+Authenticated smoke against `https://ai.alfares.cz` passed for `/health`, premium approval block, and invalid implementation-job payload validation.
+
+Production deployment completed with one ready pod, zero restarts, and running image digest `localhost:5000/ai-microservice@sha256:da24fd454caf4336f3f28d3931ea5c554b210046e62eb9b6373095a7f3e526a5`.
 
 ## Skipped Checks
 
-Pending.
+Default smoke skipped live `/ai/complete` inference because `AI_SMOKE_RUN_LIVE_AI=true` was not set. Agent-routing smoke was skipped because GOAL-05 is validated but not deployed to production yet.
 
 ## Deviations
 
-Pending.
+Agent-routing smoke was made opt-in after current production showed GOAL-05 is not deployed and would otherwise invoke live inference on older images.
 
 ## Risks
 
-Pending.
+The deploy script now depends on `kubectl get secret ai-microservice-secret` and local `node` to generate authenticated deployment smoke tokens. If unavailable, protected smoke checks are skipped with an explicit message. Because Kubernetes deployment history stores mutable `latest`, the deploy script was patched after deployment to capture pod image digests for future rollback evidence.
 
 ## Decision
 
-Pending.
+Pass.

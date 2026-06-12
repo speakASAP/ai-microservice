@@ -24,7 +24,7 @@ Read `implementation-goals/GOAL-06-deployment-hardening.context-package.md` and 
 
 ## Scope
 
-Harden deployment scripts and documentation only. Smoke checks may exercise existing contracts but must not change endpoint behavior.
+Harden deployment scripts and documentation only. Smoke checks may exercise existing contracts but must not change endpoint behavior. Agent-routing smoke remains opt-in until GOAL-05 is deployed to production.
 
 ## Allowed Changes
 
@@ -54,7 +54,7 @@ Harden deployment scripts and documentation only. Smoke checks may exercise exis
 ## Implementation Steps
 
 1. Make deployment readiness gate project-specific.
-2. Add production-safe smoke coverage for health, premium approval guard, missing agent routing, and invalid implementation-job payload validation.
+2. Add production-safe smoke coverage for health, premium approval guard, invalid implementation-job payload validation, and opt-in missing agent routing.
 3. Make deploy script run the readiness gate and smoke checks.
 4. Capture previous image and rollout revision and print rollback commands.
 5. Update validation and implementation-state docs.

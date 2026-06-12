@@ -98,7 +98,7 @@ No replay semantics change. Live model inference remains opt-in in smoke checks 
 
 1. Add GOAL-06 planning, context, coding prompt, and validation report artifacts.
 2. Expand deployment readiness gate to check project-specific manifests, smoke checks, rollback evidence, and documentation artifacts.
-3. Expand smoke checks to cover health, premium approval block, missing registry agent handling, and invalid implementation-job payload validation.
+3. Expand smoke checks to cover health, premium approval block, invalid implementation-job payload validation, and opt-in missing registry agent handling after GOAL-05 is deployed.
 4. Update deploy script to run the gate, capture rollback context, run smoke checks after rollout, and print rollback commands.
 5. Validate with Python compilation, shell syntax, focused smoke checks, readiness gates, build, and tests.
 

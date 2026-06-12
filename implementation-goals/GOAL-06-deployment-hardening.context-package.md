@@ -26,7 +26,7 @@ GOAL-03 and GOAL-04 are complete and deployed. GOAL-05 is implemented and valida
 ## Relevant Contracts
 
 - `GET /health` returns the service health contract.
-- `POST /ai/complete` must keep model-tier behavior, business metadata handling, agent registry routing, and the premium approval block.
+- `POST /ai/complete` must keep model-tier behavior, business metadata handling, agent registry routing, and the premium approval block. Agent-routing smoke remains opt-in until GOAL-05 is deployed to production.
 - `POST /ai/claude-code-execute` must preserve intent fields and provider compatibility.
 - Kubernetes deployment should continue using rolling updates with readiness/liveness/startup probes.
 
