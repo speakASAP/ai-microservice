@@ -30,9 +30,30 @@ const LITELLM_FALLBACK_MODELS = () => (process.env.CLAUDE_CODE_LITELLM_FALLBACK_
   .filter(Boolean);
 const LITELLM_TIMEOUT_MS = () => Number(process.env.CLAUDE_CODE_LITELLM_TIMEOUT_MS || 120_000);
 const RETRY_BACKOFF_MS = [30_000, 90_000, 270_000];
+const LOG_SUMMARY_LIMIT = 600;
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function redactSensitive(value = ''): string {
+  return value
+    .replace(/(authorization\s*[:=]\s*bearer\s+)[^\s'"`]+/gi, '$1[REDACTED]')
+    .replace(/((?:api[_-]?key|token|secret|password|passwd|pwd)\s*[:=]\s*)[^\s'"`]+/gi, '$1[REDACTED]')
+    .replace(/-----BEGIN [^-]+ PRIVATE KEY-----[\s\S]*?-----END [^-]+ PRIVATE KEY-----/g, '[REDACTED_PRIVATE_KEY]')
+    .replace(/\b(?:sk|pk|rk|ghp|glpat|xox[baprs])_[A-Za-z0-9_=-]{16,}\b/g, '[REDACTED_TOKEN]')
+    .replace(/\b[A-Za-z0-9+/]{32,}={0,2}\b/g, '[REDACTED_SECRET]');
+}
+
+function summarizeForLog(value?: string, limit = LOG_SUMMARY_LIMIT): string {
+  const normalized = redactSensitive(value ?? '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return 'No detail recorded.';
+  return normalized.length > limit ? `${normalized.slice(0, limit)}... [truncated]` : normalized;
+}
+
+function isTimeoutError(error: any): boolean {
+  const message = String(error?.message ?? '').toLowerCase();
+  return Boolean(error?.killed || error?.signal || message.includes('timed out') || message.includes('timeout'));
 }
 
 function resolveProvider(provider?: string): ImplementationProvider {
@@ -605,6 +626,7 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
       let stdout = '';
       let stderr = '';
       let exitCode = 0;
+      let timedOut = false;
 
       const instructionsFile = path.join('/tmp', `cc-code-${jobId}.txt`);
       try {
@@ -618,6 +640,7 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
         exitCode = error.code || 1;
         stdout = error.stdout || '';
         stderr = error.stderr || '';
+        timedOut = isTimeoutError(error);
       } finally {
         try { fs.unlinkSync(instructionsFile); } catch { /* ignore */ }
       }
@@ -676,6 +699,7 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
           exitCode = error.code || 1;
           stdout = [stdout, error.stdout || ''].filter(Boolean).join('\n\n');
           stderr = error.stderr || error.message || '';
+          timedOut = isTimeoutError(error);
         } finally {
           try { fs.unlinkSync(instructionsFile); } catch { /* ignore */ }
         }
@@ -714,13 +738,13 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
           validationPassed = false;
           validationOutput = error.stderr || error.stdout || error.message;
           this.logger.warn(
-            `Validation failed for job ${jobId}: ${validationOutput}`,
+            `Validation failed for job ${jobId}: ${summarizeForLog(validationOutput)}`,
           );
         }
       }
 
       // Update job with results
-      const finalStatus = exitCode === 0 ? JobStatus.SUCCESS : JobStatus.FAILED;
+      const finalStatus = timedOut ? JobStatus.TIMEOUT : exitCode === 0 ? JobStatus.SUCCESS : JobStatus.FAILED;
       await this.service.updateJobExecution(jobId, {
         status: finalStatus as JobStatus,
         exitCode,
@@ -775,7 +799,7 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
             jobId,
             retryCount: nextRetry + 1,
             delayMs,
-            error: error.message,
+            error: summarizeForLog(error.message),
           }),
         );
         await this.loggingClient.log(
@@ -785,7 +809,7 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
             jobId,
             retryCount: nextRetry + 1,
             delayMs,
-            error: error.message,
+            error: summarizeForLog(error.message),
           },
         );
 
@@ -818,14 +842,14 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
             jobId,
             retryCount,
             maxRetries,
-            error: error.message,
+            error: summarizeForLog(error.message),
           }),
         );
         await this.loggingClient.log('error', 'Claude Code Job Failed', {
           jobId,
           retryCount,
           maxRetries,
-          error: error.message,
+          error: summarizeForLog(error.message),
         });
 
         await this.service.updateJobExecution(jobId, {
@@ -853,6 +877,7 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
     let stdout = '';
     let stderr = '';
     let exitCode = 0;
+    let timedOut = false;
 
     try {
       fs.writeFileSync(tmpFile, instructions, 'utf-8');
@@ -865,17 +890,19 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
       exitCode = error.code || 1;
       stdout = error.stdout || '';
       stderr = error.stderr || error.message || '';
+      timedOut = isTimeoutError(error);
     } finally {
       try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
     }
 
-    const finalStatus = exitCode === 0 ? JobStatus.SUCCESS : JobStatus.FAILED;
+    const finalStatus = timedOut ? JobStatus.TIMEOUT : exitCode === 0 ? JobStatus.SUCCESS : JobStatus.FAILED;
     await this.service.updateJobExecution(jobId, {
       status: finalStatus as JobStatus,
       exitCode,
       stdout,
       stderr,
       completedAt: new Date(),
+      implementationProvider,
     });
 
     await this.loggingClient.log('info', `${providerLabel(implementationProvider)} Print Job Completed`, {

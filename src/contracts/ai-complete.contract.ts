@@ -10,6 +10,10 @@ export const AiCompleteRequestSchema = z.object({
   output_schema: z.record(z.string(), z.unknown()).optional(),
   max_tokens: z.number().int().positive().optional(),
   correlation_id: z.string().optional(),
+  business_id: z.string().min(1).max(128).optional(),
+  businessId: z.string().min(1).max(128).optional(),
+  agent_slug: z.string().min(1).max(160).optional(),
+  agent_service_scope: z.string().min(1).max(120).optional(),
 });
 
 export const AiCompleteResponseSchema = z.object({
@@ -21,6 +25,10 @@ export const AiCompleteResponseSchema = z.object({
   token_usage_estimate: z.number().int().nonnegative().optional(),
   error_code: z.string().optional(),
   error_message: z.string().optional(),
+  agent_id: z.string().optional(),
+  agent_slug: z.string().optional(),
+  agent_name: z.string().optional(),
+  agent_service_scope: z.string().optional(),
 }).passthrough();
 
 export type ModelTier = z.infer<typeof ModelTierSchema>;

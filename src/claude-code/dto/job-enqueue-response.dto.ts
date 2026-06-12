@@ -11,4 +11,7 @@ export class JobEnqueueResponseDto {
   createdAt!: Date;
   implementationProvider?: 'claude-code' | 'codex' | 'ollama' | 'openrouter' | 'litellm';
   intentChecksum?: string;
+  lifecycleStage?: string;
+  statusDetail?: string;
+  auditSummary?: string;
 }

@@ -75,6 +75,8 @@ describe('ClaudeCode E2E', () => {
           branch: 'main',
           instructions: 'List all files in src/ directory',
           expectedOutcome: 'File listing complete',
+          implementationProvider: 'codex',
+          intent: 'Observe codex implementation job status.',
         })
         .expect(201);
 
@@ -82,6 +84,10 @@ describe('ClaudeCode E2E', () => {
       expect(res.body.status).toBe('queued');
       expect(res.body.taskId).toBeDefined();
       expect(res.body.createdAt).toBeDefined();
+      expect(res.body.implementationProvider).toBe('codex');
+      expect(res.body.intentChecksum).toBeDefined();
+      expect(res.body.lifecycleStage).toBe('queued');
+      expect(res.body.auditSummary).toContain('provider=codex');
     });
 
     it('rejects request missing required fields', async () => {
@@ -112,6 +118,11 @@ describe('ClaudeCode E2E', () => {
 
       expect(getRes.body.jobId).toBe(jobId);
       expect(['queued', 'executing', 'success', 'failed']).toContain(getRes.body.status);
+      expect(getRes.body.implementationProvider).toBe('claude-code');
+      expect(getRes.body.lifecycleStage).toBeDefined();
+      expect(getRes.body.statusDetail).toBeDefined();
+      expect(getRes.body.outputSummary).toContain('stdout_lines=');
+      expect(getRes.body.auditSummary).toContain('provider=claude-code');
     });
 
     it('returns 404 with error object for unknown jobId', async () => {

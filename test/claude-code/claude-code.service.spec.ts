@@ -187,7 +187,7 @@ describe('ClaudeCodeService', () => {
 
       const result = await service.getJobStatus(jobId);
 
-      expect(result).toEqual({
+      expect(result).toEqual(expect.objectContaining({
         jobId: mockJob.jobId,
         taskId: mockJob.taskId,
         status: mockJob.status,
@@ -199,7 +199,12 @@ describe('ClaudeCodeService', () => {
         gitDiff: mockJob.gitDiff,
         validationPassed: mockJob.validationPassed,
         validationOutput: mockJob.validationOutput,
-      });
+        lifecycleStage: 'completed',
+        statusDetail: 'Job completed successfully with claude-code.',
+        outputSummary: expect.stringContaining('stdout_lines=1'),
+        validationSummary: expect.stringContaining('validation=passed'),
+        auditSummary: expect.stringContaining('status=success'),
+      }));
     });
   });
 
@@ -223,7 +228,14 @@ describe('ClaudeCodeService', () => {
 
       expect(mockRepository.update).toHaveBeenCalledWith(
         { jobId },
-        updateData,
+        expect.objectContaining({
+          ...updateData,
+          lifecycleStage: 'completed',
+          statusDetail: expect.stringContaining('completed successfully'),
+          outputSummary: expect.stringContaining('stdout_lines=1'),
+          auditSummary: expect.stringContaining('status=success'),
+          lastObservedAt: expect.any(Date),
+        }),
       );
     });
 

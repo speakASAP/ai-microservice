@@ -6,10 +6,11 @@ import { AdminAgentsService } from './admin-agents.service';
 import { AdminAuthGuard } from './admin-auth.guard';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminFrontendController } from './admin-frontend.controller';
+import { AdminMetaController } from './admin-meta.controller';
 
 @Module({
   imports: [TypeOrmModule.forFeature([AiAgent])],
-  controllers: [AdminAgentsController, AdminFrontendController],
+  controllers: [AdminAgentsController, AdminFrontendController, AdminMetaController],
   providers: [AdminAgentsService, AdminAuthService, AdminAuthGuard],
 })
 export class AdminModule {}

@@ -48,6 +48,11 @@ describe('ClaudeCodeController', () => {
         taskId,
         status: 'queued' as JobStatus,
         createdAt: new Date(),
+        implementationProvider: 'codex',
+        intentChecksum: 'checksum-123',
+        lifecycleStage: 'queued',
+        statusDetail: 'Job accepted and queued for implementation execution.',
+        auditSummary: 'provider=codex status=queued intent_checksum=checksum-123 validation=not_run',
       };
 
       mockService.enqueueJob.mockResolvedValue(response);
@@ -56,6 +61,10 @@ describe('ClaudeCodeController', () => {
 
       expect(result.jobId).toBe(jobId);
       expect(result.status).toBe('queued');
+      expect(result.implementationProvider).toBe('codex');
+      expect(result.intentChecksum).toBe('checksum-123');
+      expect(result.lifecycleStage).toBe('queued');
+      expect(result.auditSummary).toContain('provider=codex');
       expect(mockService.enqueueJob).toHaveBeenCalledWith(dto);
     });
   });
@@ -68,6 +77,12 @@ describe('ClaudeCodeController', () => {
         taskId: randomUUID(),
         status: 'executing' as JobStatus,
         startedAt: new Date(),
+        implementationProvider: 'claude-code',
+        intentChecksum: 'checksum-456',
+        lifecycleStage: 'executing',
+        statusDetail: 'Job is executing with claude-code.',
+        outputSummary: 'stdout_lines=0 stderr_lines=0 git_diff_lines=0',
+        auditSummary: 'provider=claude-code status=executing intent_checksum=checksum-456 validation=not_run',
       };
 
       mockService.getJobStatus.mockResolvedValue(response);
@@ -76,6 +91,10 @@ describe('ClaudeCodeController', () => {
 
       expect(result.jobId).toBe(statusJobId);
       expect(result.status).toBe('executing');
+      expect(result.implementationProvider).toBe('claude-code');
+      expect(result.intentChecksum).toBe('checksum-456');
+      expect(result.lifecycleStage).toBe('executing');
+      expect(result.outputSummary).toContain('stdout_lines=0');
       expect(mockService.getJobStatus).toHaveBeenCalledWith(statusJobId);
     });
 

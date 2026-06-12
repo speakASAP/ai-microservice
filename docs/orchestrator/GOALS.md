@@ -1,4 +1,6 @@
-# Goals: AI Microservice Admin
+# Goals: AI Microservice Orchestrator
+
+This file is the compact operator view. The canonical implementation checkpoint is `docs/IMPLEMENTATION_STATE.md`.
 
 ## G1 - Inspect ecosystem
 - Status: complete
@@ -22,3 +24,16 @@
 - Copy changed files to the remote repo.
 - Deploy with `scripts/deploy.sh`.
 - Verify `/health` and `/admin`.
+
+## G5 - Add Goalkeeper-style orchestrator operating model
+- Status: complete
+- Add one master implementation orchestrator.
+- Store continuation state in `docs/IMPLEMENTATION_STATE.md`.
+- Store executable goals in `implementation-goals/`.
+- Require execution plans, context packages, coding prompts, validation reports, and gates before coding.
+
+## G6 - Add cost tracking per business
+- Status: ready
+- Source: `TASKS.md` backlog.
+- Goal file: `implementation-goals/GOAL-03-cost-tracking.md`.
+- Next required artifact: `implementation-goals/GOAL-03-cost-tracking.execution-plan.md`.

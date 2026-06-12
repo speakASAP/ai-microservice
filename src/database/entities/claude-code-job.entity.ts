@@ -74,6 +74,30 @@ export class ClaudeCodeJob {
   @Column('text', { nullable: true })
   validationOutput?: string;
 
+  @Column('varchar', { length: 64, nullable: true })
+  lifecycleStage?: string;
+
+  @Column('text', { nullable: true })
+  statusDetail?: string;
+
+  @Column('text', { nullable: true })
+  outputSummary?: string;
+
+  @Column('text', { nullable: true })
+  failureSummary?: string;
+
+  @Column('text', { nullable: true })
+  validationSummary?: string;
+
+  @Column('text', { nullable: true })
+  auditSummary?: string;
+
+  @Column('integer', { nullable: true })
+  executionDurationMs?: number;
+
+  @Column('timestamptz', { nullable: true })
+  lastObservedAt?: Date;
+
   @CreateDateColumn()
   createdAt!: Date;
 

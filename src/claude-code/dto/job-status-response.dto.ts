@@ -35,4 +35,34 @@ export class JobStatusResponseDto {
 
   /** Output from validation script execution */
   validationOutput?: string;
+
+  /** Operator-friendly lifecycle stage derived from execution state */
+  lifecycleStage?: string;
+
+  /** Concise status detail safe for status views */
+  statusDetail?: string;
+
+  /** Redacted summary of stdout, stderr, and diff volume */
+  outputSummary?: string;
+
+  /** Redacted failure detail for failed or timed out jobs */
+  failureSummary?: string;
+
+  /** Redacted validation evidence summary */
+  validationSummary?: string;
+
+  /** Audit summary covering provider, lifecycle, intent, and validation */
+  auditSummary?: string;
+
+  /** Runtime duration in milliseconds when known */
+  executionDurationMs?: number;
+
+  /** Timestamp when observability metadata was last refreshed */
+  lastObservedAt?: Date;
+
+  retryCount?: number;
+  maxRetries?: number;
+  nextRetryAt?: Date;
+  lastErrorAt?: Date;
+  errorHistory?: Array<{ attempt: number; error: string; timestamp: string }>;
 }

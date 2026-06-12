@@ -1,5 +1,15 @@
 # Agents: ai-microservice
 
+## Remote-First Working Rule
+
+All implementation and orchestration work for this project must happen on the remote `alfares` server in:
+
+```bash
+/home/ssf/Documents/Github/ai-microservice
+```
+
+Use local files only as a temporary staging mirror when needed, then copy changes to the remote repo and validate on `alfares`.
+
 ## Knowledge Retrieval (query before reading files)
 Query the RAG service first — saves 2000-5000 tokens per query:
 - URL: `http://docs-rag-microservice.statex-apps.svc.cluster.local:3397`

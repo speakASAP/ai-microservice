@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException, 
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, ILike, Repository } from 'typeorm';
 import { AiAgent, AiAgentModelTier, AiAgentStatus } from '../database/entities/ai-agent.entity';
+import { ADMIN_MODEL_CATALOG } from './admin-models';
 
 const STATUSES: AiAgentStatus[] = ['draft', 'active', 'disabled'];
 const MODEL_TIERS: AiAgentModelTier[] = ['free', 'cheap', 'smart', 'premium'];
@@ -55,17 +56,18 @@ export class AdminAgentsService implements OnModuleInit {
       where.push({ ...base, name: like }, { ...base, slug: like }, { ...base, serviceScope: like });
     }
 
-    return this.agents.find({
+    const items = await this.agents.find({
       where: where.length ? where : base,
       order: { updatedAt: 'DESC' },
       take: 250,
     });
+    return items.map((agent) => this.withRuntimeMetadata(agent));
   }
 
   async get(id: string): Promise<AiAgent> {
     const agent = await this.agents.findOne({ where: { id } });
     if (!agent) throw new NotFoundException('AI agent not found');
-    return agent;
+    return this.withRuntimeMetadata(agent);
   }
 
   async create(payload: AiAgentPayload): Promise<AiAgent> {
@@ -94,9 +96,27 @@ export class AdminAgentsService implements OnModuleInit {
     for (const defaultAgent of DEFAULT_AGENTS) {
       if (!defaultAgent.slug) continue;
       const existing = await this.agents.findOne({ where: { slug: defaultAgent.slug } });
-      if (existing) continue;
+      if (existing) {
+        const metadata = mergeMetadata(existing.metadata, defaultAgent.metadata);
+        if (metadata !== existing.metadata) {
+          existing.metadata = metadata;
+          await this.agents.save(existing);
+        }
+        continue;
+      }
       await this.agents.save(this.agents.create(defaultAgent));
     }
+  }
+
+  private withRuntimeMetadata(agent: AiAgent): AiAgent {
+    const model = ADMIN_MODEL_CATALOG.find((item) => item.id === (agent.providerModel || ''))
+      || ADMIN_MODEL_CATALOG.find((item) => item.tier === agent.modelTier && item.id)
+      || ADMIN_MODEL_CATALOG[0];
+    agent.metadata = {
+      ...(agent.metadata || {}),
+      modelInfo: model,
+    };
+    return agent;
   }
 
   private async ensureSlugAvailable(slug: string, exceptId?: string): Promise<void> {
@@ -201,6 +221,22 @@ function normalizeTags(value: unknown): string[] {
   return [];
 }
 
+function mergeMetadata(
+  existing: Record<string, unknown> | null | undefined,
+  defaults: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null | undefined {
+  if (!defaults) return existing;
+  const merged = { ...(existing || {}) };
+  let changed = false;
+  for (const key of ['applications', 'usedBy', 'source', 'variables', 'runtime']) {
+    if (merged[key] === undefined && defaults[key] !== undefined) {
+      merged[key] = defaults[key];
+      changed = true;
+    }
+  }
+  return changed ? merged : existing;
+}
+
 const DEFAULT_AGENTS: Array<Partial<AiAgent>> = [
   {
     name: 'AI Completion Gateway',
@@ -215,7 +251,12 @@ const DEFAULT_AGENTS: Array<Partial<AiAgent>> = [
     systemPrompt: '',
     userPromptTemplate: '{{user_prompt}}',
     tags: ['gateway', 'llm', 'shared'],
-    metadata: { source: 'src/ai/ai.controller.ts', runtime: 'LiteLLM or Claude CLI fallback' },
+    metadata: {
+      applications: ['all consumer services'],
+      usedBy: ['runlayer', 'shop-assistant', 'agentic-email-processing-system', 'task', 'voice'],
+      source: 'src/ai/ai.controller.ts',
+      runtime: 'LiteLLM or Claude CLI fallback',
+    },
   },
   {
     name: 'Shop Query Refiner',
@@ -230,7 +271,12 @@ const DEFAULT_AGENTS: Array<Partial<AiAgent>> = [
     systemPrompt: 'You are a search query refiner. Output only the refined query, no explanation.',
     userPromptTemplate: 'Extract a single web product search query from: "{{user_input}}". Reply with ONE short search query only (max 200 chars), no other text.',
     tags: ['shop-assistant', 'communication', 'search'],
-    metadata: { variables: ['user_input', 'previous_params'], source: 'src/shop-assistant/shop-assistant.service.ts' },
+    metadata: {
+      applications: ['shop-assistant'],
+      usedBy: ['shop-assistant'],
+      variables: ['user_input', 'previous_params'],
+      source: 'src/shop-assistant/shop-assistant.service.ts',
+    },
   },
   {
     name: 'Shop Result Presenter',
@@ -245,7 +291,12 @@ const DEFAULT_AGENTS: Array<Partial<AiAgent>> = [
     systemPrompt: 'Format search results clearly for the user.',
     userPromptTemplate: 'Format these product search results for the user in a clear, readable way (dialog or list). Query: {{queryText}}. Results: {{searchResults}}. Return only the formatted text, no extra commentary.',
     tags: ['shop-assistant', 'presentation'],
-    metadata: { variables: ['queryText', 'searchResults'], source: 'src/shop-assistant/shop-assistant.service.ts' },
+    metadata: {
+      applications: ['shop-assistant'],
+      usedBy: ['shop-assistant'],
+      variables: ['queryText', 'searchResults'],
+      source: 'src/shop-assistant/shop-assistant.service.ts',
+    },
   },
   {
     name: 'Shop Price Comparator',
@@ -260,7 +311,12 @@ const DEFAULT_AGENTS: Array<Partial<AiAgent>> = [
     systemPrompt: 'You are a shopping comparison assistant.',
     userPromptTemplate: 'You are a shopping assistant comparing products for a user.\n\nUser query: {{queryText}}\nPriorities (price, quality, location, etc.): {{priorityOrder}}\n\nSearch results:\n{{searchResults}}\n\nWrite a short comparison focusing on the user priorities. Recommend several best options and explain briefly. Keep it concise.',
     tags: ['shop-assistant', 'comparison'],
-    metadata: { variables: ['queryText', 'priorityOrder', 'searchResults'], source: 'src/shop-assistant/shop-assistant.service.ts' },
+    metadata: {
+      applications: ['shop-assistant'],
+      usedBy: ['shop-assistant'],
+      variables: ['queryText', 'priorityOrder', 'searchResults'],
+      source: 'src/shop-assistant/shop-assistant.service.ts',
+    },
   },
   {
     name: 'Shop Location Extractor',
@@ -275,7 +331,12 @@ const DEFAULT_AGENTS: Array<Partial<AiAgent>> = [
     systemPrompt: 'Extract delivery region from user shopping request. Return short phrase or empty string.',
     userPromptTemplate: 'User is shopping online.\n\nUser input: {{userInput}}\nCurrent query: {{queryText}}\nPriorities (price, quality, location, etc.): {{priorityOrder}}\n\nExtract a short phrase describing the delivery region or shipping location that matters for this request, for example "delivery Czech Republic" or "ships to EU". If region is not specified, respond with an empty string.\nAnswer with this short phrase only, no other text.',
     tags: ['shop-assistant', 'location'],
-    metadata: { variables: ['userInput', 'queryText', 'priorityOrder'], source: 'src/shop-assistant/shop-assistant.service.ts' },
+    metadata: {
+      applications: ['shop-assistant'],
+      usedBy: ['shop-assistant'],
+      variables: ['userInput', 'queryText', 'priorityOrder'],
+      source: 'src/shop-assistant/shop-assistant.service.ts',
+    },
   },
   {
     name: 'Email Triage Classifier',
@@ -291,7 +352,11 @@ const DEFAULT_AGENTS: Array<Partial<AiAgent>> = [
     userPromptTemplate: '{{email_text}}',
     outputSchema: { intent: 'string', confidence: 'number', raw_scores: 'object' },
     tags: ['email-triage', 'classifier'],
-    metadata: { source: 'src/email-triage/email-triage.controller.ts' },
+    metadata: {
+      applications: ['agentic-email-processing-system'],
+      usedBy: ['agentic-email-processing-system'],
+      source: 'src/email-triage/email-triage.controller.ts',
+    },
   },
   {
     name: 'Email Triage Decider',
@@ -307,7 +372,11 @@ const DEFAULT_AGENTS: Array<Partial<AiAgent>> = [
     userPromptTemplate: '{{email_text}}',
     outputSchema: { action: 'string', escalation_reason: 'string|null', queue: 'string|null' },
     tags: ['email-triage', 'decision'],
-    metadata: { source: 'src/email-triage/email-triage.controller.ts' },
+    metadata: {
+      applications: ['agentic-email-processing-system'],
+      usedBy: ['agentic-email-processing-system'],
+      source: 'src/email-triage/email-triage.controller.ts',
+    },
   },
   {
     name: 'Task Draft Agent',
@@ -322,7 +391,11 @@ const DEFAULT_AGENTS: Array<Partial<AiAgent>> = [
     systemPrompt: 'Draft a structured implementation task from user intent.',
     userPromptTemplate: '{{task_input}}',
     tags: ['task', 'drafting'],
-    metadata: { source: 'src/task/task.service.ts' },
+    metadata: {
+      applications: ['school-committee'],
+      usedBy: ['task'],
+      source: 'src/task/task.service.ts',
+    },
   },
   {
     name: 'Claude Code Executor',
@@ -338,7 +411,11 @@ const DEFAULT_AGENTS: Array<Partial<AiAgent>> = [
     systemPrompt: 'Execute the requested repository task and report validation output.',
     userPromptTemplate: '{{instructions}}',
     tags: ['claude-code', 'automation', 'runlayer'],
-    metadata: { source: 'src/claude-code/claude-code.controller.ts' },
+    metadata: {
+      applications: ['runlayer'],
+      usedBy: ['runlayer'],
+      source: 'src/claude-code/claude-code.controller.ts',
+    },
   },
   {
     name: 'Voice Transcriber',
@@ -354,6 +431,10 @@ const DEFAULT_AGENTS: Array<Partial<AiAgent>> = [
     systemPrompt: 'Transcribe audio input faithfully.',
     userPromptTemplate: '{{voice_file_url}}',
     tags: ['voice', 'asr'],
-    metadata: { source: 'src/voice/voice.service.ts' },
+    metadata: {
+      applications: ['shop-assistant', 'voice'],
+      usedBy: ['shop-assistant', 'voice'],
+      source: 'src/voice/voice.service.ts',
+    },
   },
 ];

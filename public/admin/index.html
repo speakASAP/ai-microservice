@@ -53,26 +53,8 @@
           </div>
         </header>
 
-        <section class="auth-panel" id="auth-panel">
-          <div>
-            <h2>Authenticated admin session</h2>
-            <p>Access is validated by the auth microservice. Only admin users can view or modify this registry.</p>
-          </div>
-        </section>
-
         <section class="status-strip view-panel" data-view-panel="agents" aria-live="polite">
-          <div class="metric">
-            <span>Total</span>
-            <strong id="metric-total">0</strong>
-          </div>
-          <div class="metric">
-            <span>Active</span>
-            <strong id="metric-active">0</strong>
-          </div>
-          <div class="metric">
-            <span>Model tiers</span>
-            <strong id="metric-tiers">0</strong>
-          </div>
+          <div class="quick-filters" id="quick-filters"></div>
           <div class="message" id="message">Not connected.</div>
         </section>
 
@@ -106,6 +88,7 @@
                   <tr>
                     <th>Name</th>
                     <th>Scope</th>
+                    <th>Used by</th>
                     <th>Tier</th>
                     <th>Status</th>
                     <th>Updated</th>
@@ -172,7 +155,8 @@
               </fieldset>
               <label>
                 Provider model
-                <input name="providerModel" placeholder="gemini/gemini-2.0-flash" />
+                <select name="providerModel" id="provider-model-select"></select>
+                <span class="field-note" id="provider-model-note"></span>
               </label>
               <label>
                 Temperature
@@ -229,7 +213,10 @@
               <p>Registered agents grouped by model tier and provider override.</p>
             </div>
           </div>
-          <div class="detail-list" id="model-list"></div>
+          <div class="model-layout">
+            <div class="detail-list" id="model-list"></div>
+            <div class="detail-list" id="model-catalog"></div>
+          </div>
         </section>
 
         <section class="panel view-panel detail-panel" data-view-panel="logs" hidden>
@@ -239,9 +226,39 @@
               <p>Most recently updated agent definitions in this admin registry.</p>
             </div>
           </div>
+          <div class="log-filters">
+            <select id="log-range-filter" aria-label="Log time range">
+              <option value="1h">Last hour</option>
+              <option value="6h">Last 6 hours</option>
+              <option value="24h" selected>Last 24 hours</option>
+              <option value="7d">Last 7 days</option>
+            </select>
+            <select id="log-level-filter" aria-label="Log level">
+              <option value="">All levels</option>
+              <option value="error">Error</option>
+              <option value="warn">Warn</option>
+              <option value="info">Info</option>
+              <option value="debug">Debug</option>
+            </select>
+            <input id="log-service-filter" type="search" placeholder="Service filter" />
+            <input id="log-search-input" type="search" placeholder="Search log payload" />
+            <button class="ghost" id="log-refresh-button" type="button">Refresh</button>
+          </div>
           <div class="detail-list" id="log-list"></div>
         </section>
       </main>
+    </div>
+    <div class="modal-backdrop" id="agent-modal" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="agent-modal-title">
+        <div class="modal-head">
+          <div>
+            <h2 id="agent-modal-title">Agent details</h2>
+            <p id="agent-modal-subtitle"></p>
+          </div>
+          <button class="ghost icon-button" id="agent-modal-close" type="button" aria-label="Close details">×</button>
+        </div>
+        <div class="modal-body" id="agent-modal-body"></div>
+      </section>
     </div>
     <script src="/admin/assets/app.js" defer></script>
   </body>

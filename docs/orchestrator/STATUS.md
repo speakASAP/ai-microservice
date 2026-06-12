@@ -12,3 +12,10 @@
 - Authenticated agent list returned 10 seeded agents.
 - CRUD smoke passed: temporary agent created, updated, and deleted.
 - Desktop and mobile visual screenshots showed no horizontal overflow.
+- Added Goalkeeper-style orchestrator operating model for this repository:
+  - master prompt: `docs/IMPLEMENTATION_ORCHESTRATOR.md`;
+  - state checkpoint: `docs/IMPLEMENTATION_STATE.md`;
+  - goal queue: `implementation-goals/`;
+  - process and governance docs under `docs/process/` and `docs/governance/`;
+  - helper gates under `scripts/`.
+- Next action: create the execution plan for `implementation-goals/GOAL-03-cost-tracking.md`.

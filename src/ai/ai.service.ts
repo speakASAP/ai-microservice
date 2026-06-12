@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 import { spawn } from 'child_process';
 import { writeFileSync, unlinkSync, existsSync, openSync, closeSync } from 'fs';
 import { tmpdir } from 'os';
@@ -6,6 +7,8 @@ import { join } from 'path';
 import { randomUUID } from 'crypto';
 import type { AiCompleteRequestInput } from '../contracts';
 import { LoggingClient } from '../claude-code/logging.client';
+import { AiAgent } from '../database/entities/ai-agent.entity';
+import { Repository } from 'typeorm';
 
 const LITELLM_TIMEOUT_MS = Number(process.env.LITELLM_TIMEOUT_MS || 120_000);
 
@@ -109,6 +112,19 @@ export type AiCompleteResult = Record<string, unknown> & {
   error_message?: string;
 };
 
+interface AgentRouteAudit {
+  agent_id: string;
+  agent_slug: string;
+  agent_name: string;
+  agent_service_scope: string;
+}
+
+interface ResolvedAgentRoute {
+  dto: AiCompleteRequestInput;
+  audit?: AgentRouteAudit;
+  error?: AiCompleteResult;
+}
+
 function cliFailureResult(model: string, detail: string, errorCode = 'CLI_FAILED'): AiCompleteResult {
   return {
     text: '',
@@ -136,6 +152,10 @@ function litellmErrorResult(model: string, status: number, detail: string): AiCo
   };
 }
 
+function resolveBusinessId(dto: AiCompleteRequestInput): string | undefined {
+  return dto.business_id ?? dto.businessId;
+}
+
 function spreadParsedJson(rawText: string, outputSchema?: unknown): { parsedData: Record<string, unknown>; text: string } {
   let parsedData: Record<string, unknown> = {};
   const trimmed = rawText.trim();
@@ -160,11 +180,25 @@ export class AiService {
   private readonly logger = new Logger(AiService.name);
   private activeProcesses = 0;
 
-  constructor(private readonly loggingClient: LoggingClient) {}
+  constructor(
+    private readonly loggingClient: LoggingClient,
+    @Optional()
+    @InjectRepository(AiAgent)
+    private readonly agents?: Repository<AiAgent>,
+  ) {}
 
   async complete(dto: AiCompleteRequestInput): Promise<AiCompleteResult> {
-    if (dto.model_tier === 'premium') {
-      return litellmErrorResult('premium', 403, 'Premium tier requires explicit human approval per call');
+    const resolved = await this.resolveAgentRoute(dto);
+    if (resolved.error) {
+      return resolved.error;
+    }
+    const effectiveDto = resolved.dto;
+
+    if (effectiveDto.model_tier === 'premium') {
+      return this.withAgentAudit(
+        litellmErrorResult('premium', 403, 'Premium tier requires explicit human approval per call'),
+        resolved.audit,
+      );
     }
 
     const router = resolveRouterMode();
@@ -172,43 +206,46 @@ export class AiService {
 
     if (router === 'litellm') {
       if (!litellmReady) {
-        return litellmErrorResult(dto.model_tier ?? 'free', 503, 'LiteLLM not configured (LITELLM_BASE_URL + LITELLM_MASTER_KEY required)');
+        return this.withAgentAudit(
+          litellmErrorResult(effectiveDto.model_tier ?? 'free', 503, 'LiteLLM not configured (LITELLM_BASE_URL + LITELLM_MASTER_KEY required)'),
+          resolved.audit,
+        );
       }
-      return this.completeViaLiteLLM(dto);
+      return this.withAgentAudit(await this.completeViaLiteLLM(effectiveDto, resolved.audit), resolved.audit);
     }
 
     if (router === 'claude_cli') {
-      return this.completeViaCcCli(dto);
+      return this.withAgentAudit(await this.completeViaCcCli(effectiveDto, resolved.audit), resolved.audit);
     }
 
     if (router === 'claude_cli_with_litellm_fallback') {
-      const ccResult = await this.completeViaCcCli(dto);
+      const ccResult = await this.completeViaCcCli(effectiveDto, resolved.audit);
       if (!ccResult.error_code) {
-        return ccResult;
+        return this.withAgentAudit(ccResult, resolved.audit);
       }
       if (litellmReady && shouldFallbackFromCc(ccResult.error_code)) {
         this.logger.warn(
-          `CC CLI ${ccResult.error_code} — falling back to LiteLLM tier=${dto.model_tier ?? 'free'}`,
+          `CC CLI ${ccResult.error_code} — falling back to LiteLLM tier=${effectiveDto.model_tier ?? 'free'}`,
         );
-        return this.completeViaLiteLLM(dto);
+        return this.withAgentAudit(await this.completeViaLiteLLM(effectiveDto, resolved.audit), resolved.audit);
       }
-      return ccResult;
+      return this.withAgentAudit(ccResult, resolved.audit);
     }
 
     // auto: LiteLLM when configured (K8s default); CC only when LiteLLM unset; CC→LiteLLM on CLI failure
     if (litellmReady) {
-      return this.completeViaLiteLLM(dto);
+      return this.withAgentAudit(await this.completeViaLiteLLM(effectiveDto, resolved.audit), resolved.audit);
     }
 
-    const ccResult = await this.completeViaCcCli(dto);
+    const ccResult = await this.completeViaCcCli(effectiveDto, resolved.audit);
     if (!ccResult.error_code) {
-      return ccResult;
+      return this.withAgentAudit(ccResult, resolved.audit);
     }
     this.logger.warn('LITELLM_BASE_URL unset — CC CLI is the only backend');
-    return ccResult;
+    return this.withAgentAudit(ccResult, resolved.audit);
   }
 
-  private async completeViaLiteLLM(dto: AiCompleteRequestInput): Promise<AiCompleteResult> {
+  private async completeViaLiteLLM(dto: AiCompleteRequestInput, audit?: AgentRouteAudit): Promise<AiCompleteResult> {
     const model = dto.model_tier ?? 'free';
     const messages: Array<{ role: string; content: string }> = [];
     let userContent = dto.user_prompt;
@@ -248,14 +285,14 @@ export class AiService {
       if (detail.includes('timeout') || detail.includes('aborted')) {
         throw new Error(`AI_HTTP_TIMEOUT: LiteLLM did not respond within ${LITELLM_TIMEOUT_MS}ms`);
       }
-      this.emitTelemetry(dto.correlation_id, model, 0, 0);
+      this.emitTelemetry(dto.correlation_id, resolveBusinessId(dto), model, 0, 0, audit);
       return litellmErrorResult(model, 0, `LiteLLM unreachable: ${detail}`);
     }
 
     if (!res.ok) {
       const errText = await res.text();
       this.logger.error(`LiteLLM error ${res.status}: ${errText.slice(0, 300)}`);
-      this.emitTelemetry(dto.correlation_id, model, 0, 0);
+      this.emitTelemetry(dto.correlation_id, resolveBusinessId(dto), model, 0, 0, audit);
       return litellmErrorResult(model, res.status, errText || `HTTP ${res.status}`);
     }
 
@@ -265,7 +302,7 @@ export class AiService {
     const outputTokens = body.usage?.completion_tokens ?? 0;
     const { parsedData } = spreadParsedJson(rawText, dto.output_schema);
 
-    this.emitTelemetry(dto.correlation_id, body.model ?? model, inputTokens, outputTokens);
+    this.emitTelemetry(dto.correlation_id, resolveBusinessId(dto), body.model ?? model, inputTokens, outputTokens, audit);
     return {
       ...parsedData,
       text: rawText,
@@ -276,7 +313,7 @@ export class AiService {
     };
   }
 
-  private async completeViaCcCli(dto: AiCompleteRequestInput): Promise<AiCompleteResult> {
+  private async completeViaCcCli(dto: AiCompleteRequestInput, audit?: AgentRouteAudit): Promise<AiCompleteResult> {
     const model = DEFAULT_CC_MODEL;
 
     let fullPrompt = '';
@@ -290,7 +327,7 @@ export class AiService {
 
     if (this.activeProcesses >= CC_MAX_CONCURRENT) {
       this.logger.warn(`claude CLI concurrency limit reached (${CC_MAX_CONCURRENT} active); rejecting request`);
-      this.emitTelemetry(dto.correlation_id, `claude-${model}`, 0, 0);
+      this.emitTelemetry(dto.correlation_id, resolveBusinessId(dto), `claude-${model}`, 0, 0, audit);
       return cliFailureResult(model, `claude CLI concurrency limit reached (${CC_MAX_CONCURRENT} active)`);
     }
 
@@ -314,7 +351,7 @@ export class AiService {
         throw new Error(detail);
       }
       this.logger.error(`claude CLI failed: ${detail.slice(0, 300)}`);
-      this.emitTelemetry(dto.correlation_id, `claude-${model}`, 0, 0);
+      this.emitTelemetry(dto.correlation_id, resolveBusinessId(dto), `claude-${model}`, 0, 0, audit);
       return cliFailureResult(model, `claude CLI failed: ${detail}`);
     } finally {
       this.activeProcesses--;
@@ -331,7 +368,7 @@ export class AiService {
         throw new Error('not json');
       }
       if (ccResult.is_error || ccResult.api_error_status) {
-        this.emitTelemetry(dto.correlation_id, `claude-${model}`, 0, 0);
+        this.emitTelemetry(dto.correlation_id, resolveBusinessId(dto), `claude-${model}`, 0, 0, audit);
         return ccApiErrorResult(model, ccResult);
       }
       rawText = isCcEnvelope(ccResult) ? (ccResult.result ?? '') : stdout.trim();
@@ -350,7 +387,7 @@ export class AiService {
     }
 
     const { parsedData } = spreadParsedJson(rawText, dto.output_schema);
-    this.emitTelemetry(dto.correlation_id, `claude-${model}`, inputTokens, outputTokens);
+    this.emitTelemetry(dto.correlation_id, resolveBusinessId(dto), `claude-${model}`, inputTokens, outputTokens, audit);
     return {
       ...parsedData,
       text: rawText,
@@ -411,19 +448,128 @@ export class AiService {
 
   private emitTelemetry(
     correlationId: string | undefined,
+    businessId: string | undefined,
     modelUsed: string,
     inputTokens: number,
     outputTokens: number,
+    audit?: AgentRouteAudit,
   ): void {
     this.loggingClient
       .log('info', 'ai_complete', {
         correlation_id: correlationId,
+        business_id: businessId,
         model_used: modelUsed,
         inputTokens,
         outputTokens,
         token_usage_estimate: inputTokens + outputTokens,
+        agent_id: audit?.agent_id,
+        agent_slug: audit?.agent_slug,
+        agent_service_scope: audit?.agent_service_scope,
         compression: { rtk: true, caveman: 'lite' },
       })
       .catch(() => { /* logging must never crash the service */ });
   }
+
+  private async resolveAgentRoute(dto: AiCompleteRequestInput): Promise<ResolvedAgentRoute> {
+    const slug = cleanOptionalString(dto.agent_slug);
+    if (!slug) {
+      return { dto };
+    }
+    if (!this.agents) {
+      return {
+        dto,
+        error: agentRoutingError(slug, 'AGENT_ROUTING_UNAVAILABLE', 'Agent registry routing is not configured'),
+      };
+    }
+
+    const agent = await this.agents.findOne({ where: { slug } });
+    if (!agent || agent.status !== 'active') {
+      return {
+        dto,
+        error: agentRoutingError(slug, 'AGENT_NOT_AVAILABLE', 'Active agent definition not found'),
+      };
+    }
+
+    const requestedScope = cleanOptionalString(dto.agent_service_scope);
+    if (requestedScope && agent.serviceScope !== requestedScope) {
+      return {
+        dto,
+        error: agentRoutingError(slug, 'AGENT_SCOPE_MISMATCH', 'Agent is not registered for the requested service scope', {
+          agent_id: agent.id,
+          agent_slug: agent.slug,
+          agent_name: agent.name,
+          agent_service_scope: agent.serviceScope,
+        }),
+      };
+    }
+
+    if (agent.routePath && agent.routePath !== '/ai/complete') {
+      return {
+        dto,
+        error: agentRoutingError(slug, 'AGENT_ROUTE_MISMATCH', 'Agent is not registered for /ai/complete', {
+          agent_id: agent.id,
+          agent_slug: agent.slug,
+          agent_name: agent.name,
+          agent_service_scope: agent.serviceScope,
+        }),
+      };
+    }
+
+    const audit: AgentRouteAudit = {
+      agent_id: agent.id,
+      agent_slug: agent.slug,
+      agent_name: agent.name,
+      agent_service_scope: agent.serviceScope,
+    };
+
+    return {
+      audit,
+      dto: {
+        ...dto,
+        model_tier: agent.modelTier,
+        system_prompt: agent.systemPrompt || dto.system_prompt,
+        user_prompt: renderAgentPrompt(agent.userPromptTemplate, dto.user_prompt),
+        output_schema: agent.outputSchema || dto.output_schema,
+        max_tokens: agent.maxTokens || dto.max_tokens,
+      },
+    };
+  }
+
+  private withAgentAudit(result: AiCompleteResult, audit?: AgentRouteAudit): AiCompleteResult {
+    if (!audit) return result;
+    return { ...result, ...audit };
+  }
+}
+
+function cleanOptionalString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const cleaned = value.trim();
+  return cleaned || undefined;
+}
+
+function renderAgentPrompt(template: string | undefined, userPrompt: string): string {
+  const cleaned = (template ?? '').trim();
+  if (!cleaned) return userPrompt;
+  return cleaned
+    .split('{{user_prompt}}').join(userPrompt)
+    .split('{{input}}').join(userPrompt)
+    .split('{{prompt}}').join(userPrompt);
+}
+
+function agentRoutingError(
+  slug: string,
+  error_code: string,
+  error_message: string,
+  audit?: AgentRouteAudit,
+): AiCompleteResult {
+  return {
+    ...(audit || { agent_slug: slug }),
+    text: '',
+    model_used: 'agent-registry',
+    inputTokens: 0,
+    outputTokens: 0,
+    token_usage_estimate: 0,
+    error_code,
+    error_message,
+  };
 }

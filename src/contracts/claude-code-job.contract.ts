@@ -27,6 +27,9 @@ export const JobEnqueueResponseSchema = z.object({
   createdAt: z.union([z.string(), z.date()]),
   implementationProvider: ImplementationProviderSchema.optional(),
   intentChecksum: z.string().optional(),
+  lifecycleStage: z.string().optional(),
+  statusDetail: z.string().optional(),
+  auditSummary: z.string().optional(),
 });
 
 export const JobStatusResponseSchema = z.object({
@@ -45,6 +48,23 @@ export const JobStatusResponseSchema = z.object({
   gitDiff: z.string().optional(),
   validationPassed: z.boolean().optional(),
   validationOutput: z.string().optional(),
+  lifecycleStage: z.string().optional(),
+  statusDetail: z.string().optional(),
+  outputSummary: z.string().optional(),
+  failureSummary: z.string().optional(),
+  validationSummary: z.string().optional(),
+  auditSummary: z.string().optional(),
+  executionDurationMs: z.number().int().optional(),
+  lastObservedAt: z.union([z.string(), z.date()]).optional(),
+  retryCount: z.number().int().optional(),
+  maxRetries: z.number().int().optional(),
+  nextRetryAt: z.union([z.string(), z.date()]).optional(),
+  lastErrorAt: z.union([z.string(), z.date()]).optional(),
+  errorHistory: z.array(z.object({
+    attempt: z.number().int(),
+    error: z.string(),
+    timestamp: z.string(),
+  })).optional(),
 });
 
 export type ClaudeCodeJobStatus = z.infer<typeof ClaudeCodeJobStatusSchema>;
