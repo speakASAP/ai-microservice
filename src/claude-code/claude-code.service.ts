@@ -103,14 +103,14 @@ export class ClaudeCodeService {
       jobId: job.jobId,
       taskId: job.taskId,
       status: job.status as JobStatus,
-      startedAt: job.startedAt,
-      completedAt: job.completedAt,
-      exitCode: job.exitCode,
-      stdout: job.stdout,
-      stderr: job.stderr,
-      gitDiff: job.gitDiff,
-      validationPassed: job.validationPassed,
-      validationOutput: job.validationOutput,
+      startedAt: job.startedAt ?? undefined,
+      completedAt: job.completedAt ?? undefined,
+      exitCode: job.exitCode ?? undefined,
+      stdout: job.stdout ?? undefined,
+      stderr: job.stderr ?? undefined,
+      gitDiff: job.gitDiff ?? undefined,
+      validationPassed: job.validationPassed ?? undefined,
+      validationOutput: job.validationOutput ?? undefined,
     };
   }
 
@@ -225,6 +225,18 @@ export class ClaudeCodeService {
       .createQueryBuilder('job')
       .where('job.status = :status', { status: JobStatus.RETRYING })
       .andWhere('job.nextRetryAt <= :now', { now: new Date() })
+      .getMany();
+  }
+
+  /**
+   * Get queued jobs for brokerless direct execution.
+   */
+  async getQueuedJobs(limit = 1): Promise<ClaudeCodeJob[]> {
+    return this.jobRepository
+      .createQueryBuilder('job')
+      .where('job.status = :status', { status: JobStatus.QUEUED })
+      .orderBy('job.createdAt', 'ASC')
+      .limit(limit)
       .getMany();
   }
 }

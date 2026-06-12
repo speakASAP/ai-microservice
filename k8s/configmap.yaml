@@ -58,3 +58,5 @@ data:
   CC_CLI_PATH: "/home/ssf/.local/bin/claude"
   CLAUDE_CONFIG_DIR: "/home/ssf/.claude"
   CC_CLI_TIMEOUT_MS: "120000"
+  CLAUDE_CODE_DIRECT_EXECUTION: "true"
+  CLAUDE_CODE_DIRECT_POLL_MS: "5000"

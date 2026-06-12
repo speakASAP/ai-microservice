@@ -45,6 +45,8 @@ function isRetryableError(error: unknown): boolean {
 @Injectable()
 export class ClaudeCodeConsumer implements OnApplicationBootstrap {
   private readonly logger = new Logger(ClaudeCodeConsumer.name);
+  private directQueueTimer?: NodeJS.Timeout;
+  private directQueueActive = false;
 
   constructor(
     private readonly service: ClaudeCodeService,
@@ -87,6 +89,10 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
       }
     } catch (error) {
       this.logger.error('Failed to recover retrying jobs', error);
+    }
+
+    if (this.isDirectExecutionEnabled()) {
+      this.startDirectQueuePolling();
     }
   }
 
@@ -397,22 +403,72 @@ export class ClaudeCodeConsumer implements OnApplicationBootstrap {
     delayMs: number,
     maxRetries: number,
   ): void {
+    const message = {
+      jobId,
+      repoPath,
+      branch,
+      instructions,
+      timeoutSeconds,
+      validationScript,
+      executionMode,
+      model,
+    };
+
     setTimeout(async () => {
+      if (this.isDirectExecutionEnabled()) {
+        await this.handleJobExecution(message, null);
+        return;
+      }
+
       try {
-        await this.amqpConnection.publish('claude-code-exchange', 'claude-code.execute', {
-          jobId,
-          repoPath,
-          branch,
-          instructions,
-          timeoutSeconds,
-          validationScript,
-          executionMode,
-          model,
-        });
+        await this.amqpConnection.publish('claude-code-exchange', 'claude-code.execute', message);
         this.logger.log(`Retry published for job ${jobId} after ${delayMs}ms delay`);
       } catch (error) {
         this.logger.error(`Failed to re-publish retry for job ${jobId}: ${error}`);
       }
     }, delayMs);
+  }
+
+  private isDirectExecutionEnabled(): boolean {
+    return process.env.CLAUDE_CODE_DIRECT_EXECUTION === 'true';
+  }
+
+  private startDirectQueuePolling(): void {
+    if (this.directQueueTimer) {
+      return;
+    }
+
+    this.logger.warn('Claude Code direct execution enabled; polling queued jobs without RabbitMQ');
+    this.directQueueTimer = setInterval(() => {
+      void this.processDirectQueueOnce();
+    }, Number(process.env.CLAUDE_CODE_DIRECT_POLL_MS ?? 5000));
+    void this.processDirectQueueOnce();
+  }
+
+  private async processDirectQueueOnce(): Promise<void> {
+    if (this.directQueueActive) {
+      return;
+    }
+    this.directQueueActive = true;
+
+    try {
+      const jobs = await this.service.getQueuedJobs(1);
+      for (const job of jobs) {
+        await this.handleJobExecution({
+          jobId: job.jobId,
+          repoPath: job.repoPath,
+          branch: job.branch,
+          instructions: job.instructions,
+          timeoutSeconds: job.timeoutSeconds,
+          validationScript: job.validationScript,
+          executionMode: job.executionMode ?? 'code',
+          model: job.model,
+        }, null);
+      }
+    } catch (error) {
+      this.logger.error('Claude Code direct queue polling failed', error);
+    } finally {
+      this.directQueueActive = false;
+    }
   }
 }

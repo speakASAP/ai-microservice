@@ -78,6 +78,8 @@ spec:
             - name: claude-config
               mountPath: /home/ssf/.claude
               readOnly: true
+            - name: github-root
+              mountPath: /home/ssf/Documents/Github
       volumes:
         - name: local-bin
           hostPath:
@@ -86,4 +88,8 @@ spec:
         - name: claude-config
           hostPath:
             path: /home/ssf/.claude
+            type: Directory
+        - name: github-root
+          hostPath:
+            path: /home/ssf/Documents/Github
             type: Directory
