@@ -18,4 +18,5 @@
   - goal queue: `implementation-goals/`;
   - process and governance docs under `docs/process/` and `docs/governance/`;
   - helper gates under `scripts/`.
-- Next action: create the execution plan for `implementation-goals/GOAL-03-cost-tracking.md`.
+- GOAL-03 through GOAL-06 are complete per `docs/IMPLEMENTATION_STATE.md`.
+- Next action: no active implementation goal is queued.

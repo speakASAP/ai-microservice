@@ -2,7 +2,7 @@
 
 ```yaml
 id: EP-AI-03
-status: draft
+status: complete
 source_goal: implementation-goals/GOAL-03-cost-tracking.md
 owner: orchestrator
 created: 2026-06-12
@@ -14,7 +14,7 @@ completeness_level: complete
 
 Branch: current working tree on `main`.
 
-Lifecycle state: ready for pre-coding gate after context package and coding prompt are present.
+Lifecycle state: complete; implementation and validation evidence are recorded in the validation report and `docs/IMPLEMENTATION_STATE.md`.
 
 Selected goal: `implementation-goals/GOAL-03-cost-tracking.md`.
 
@@ -22,9 +22,9 @@ Selected goal: `implementation-goals/GOAL-03-cost-tracking.md`.
 
 User intent: add cost tracking per `business_id` to inference logs so AI usage can be audited by business/customer without breaking existing inference contracts.
 
-Project state: `docs/IMPLEMENTATION_STATE.md` identifies `GOAL-03-cost-tracking` as the next ready goal after `GOAL-02`.
+Project state: `docs/IMPLEMENTATION_STATE.md` marks `GOAL-03-cost-tracking` complete.
 
-Backlog source: `TASKS.md` lists "Add cost tracking per business_id to inference logs" as the next feature work after the unified gateway.
+Backlog source: `TASKS.md` now marks cost tracking complete in GOAL-03.
 
 Governance source: `docs/INTENT_PRESERVATION.md`, `docs/governance/PROJECT_INVARIANTS.md`, and `docs/process/OPERATIONAL_GATES.md`.
 
@@ -179,8 +179,8 @@ Implement `GOAL-03-cost-tracking` for AI Microservice. Preserve the intent: add 
 
 ## Completion Checklist
 
-- [ ] Implementation complete
-- [ ] Tests complete
-- [ ] Validation evidence collected
-- [ ] Documentation updated
-- [ ] Deviations documented
+- [x] Implementation complete
+- [x] Tests complete
+- [x] Validation evidence collected
+- [x] Documentation updated
+- [x] Deviations documented

@@ -21,12 +21,12 @@ Runtime checksum is not available in this manual implementation session. Intent 
 
 ## Current State
 
-GOAL-03 and GOAL-04 are complete and deployed. GOAL-05 is implemented and validated but not deployed. GOAL-06 owns deployment hardening and may modify deployment scripts, smoke checks, and readiness gates.
+GOAL-03 through GOAL-06 are complete in `docs/IMPLEMENTATION_STATE.md`. GOAL-06 hardened deployment readiness, smoke checks, rollback evidence, and operator handoff, and the production deployment has been verified.
 
 ## Relevant Contracts
 
 - `GET /health` returns the service health contract.
-- `POST /ai/complete` must keep model-tier behavior, business metadata handling, agent registry routing, and the premium approval block. Agent-routing smoke remains opt-in until GOAL-05 is deployed to production.
+- `POST /ai/complete` must keep model-tier behavior, business metadata handling, agent registry routing, and the premium approval block. Agent-routing smoke remains opt-in unless an operator explicitly wants to exercise the registry route against production.
 - `POST /ai/claude-code-execute` must preserve intent fields and provider compatibility.
 - Kubernetes deployment should continue using rolling updates with readiness/liveness/startup probes.
 

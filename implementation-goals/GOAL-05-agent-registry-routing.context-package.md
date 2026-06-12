@@ -21,9 +21,9 @@ Connect persisted admin agent definitions to controlled routing where appropriat
 
 ## Current State
 
-`docs/IMPLEMENTATION_STATE.md` marks GOAL-05 as queued after GOAL-01 and GOAL-02. GOAL-01 added the persisted `ai_agents` registry and GOAL-03/GOAL-04 are already completed. The remote working tree contains dirty files from prior goal work; preserve them and modify only GOAL-05-owned files.
+`docs/IMPLEMENTATION_STATE.md` marks GOAL-05 complete. GOAL-05 added explicit active-agent routing for `/ai/complete` while preserving normal model-tier routing. Production deployment status is tracked in the validation report and implementation state.
 
-RAG lookup was required but unavailable in this session because no `JWT_TOKEN` was available on `alfares`; repository docs and existing source files are the fallback context.
+Historical RAG lookup was unavailable during the GOAL-05 implementation because no `JWT_TOKEN` was available on `alfares` at that time; repository docs and existing source files were used as fallback context.
 
 ## Relevant Contracts
 

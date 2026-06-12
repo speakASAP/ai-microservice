@@ -2,7 +2,7 @@
 
 ```yaml
 id: EP-AI-06
-status: approved
+status: complete
 source_goal: implementation-goals/GOAL-06-deployment-hardening.md
 owner: orchestrator
 created: 2026-06-12
@@ -13,7 +13,7 @@ completeness_level: complete
 ## Metadata
 
 Branch: `codex/ai-goal-06-deployment-hardening`.
-Lifecycle state: implementation.
+Lifecycle state: complete; deployment hardening has been implemented, validated, and deployed.
 
 ## Upstream Traceability
 
@@ -151,7 +151,7 @@ Implement GOAL-06 by hardening deployment readiness, smoke checks, rollback evid
 ## Completion Checklist
 
 - [x] Implementation complete
-- [ ] Tests complete
-- [ ] Validation evidence collected
-- [ ] Documentation updated
-- [ ] Deviations documented
+- [x] Tests complete
+- [x] Validation evidence collected
+- [x] Documentation updated
+- [x] Deviations documented

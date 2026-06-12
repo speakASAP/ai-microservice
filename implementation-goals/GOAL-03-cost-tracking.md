@@ -2,7 +2,7 @@
 
 ```yaml
 id: GOAL-03
-status: implemented
+status: done
 owner: orchestrator
 dependencies:
   - GOAL-02
@@ -14,7 +14,7 @@ Add cost tracking per `business_id` to inference logs so AI usage can be audited
 
 ## Problem
 
-`TASKS.md` lists cost tracking per `business_id` as the next feature work after the unified gateway. The implementation must find the current inference logging path and add accounting without disrupting `/ai/complete` callers.
+`TASKS.md` tracked cost tracking per `business_id` as follow-up feature work after the unified gateway. GOAL-03 implemented the current inference logging path and added accounting without disrupting `/ai/complete` callers.
 
 ## Scope
 

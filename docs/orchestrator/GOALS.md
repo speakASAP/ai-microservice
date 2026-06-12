@@ -33,7 +33,25 @@ This file is the compact operator view. The canonical implementation checkpoint 
 - Require execution plans, context packages, coding prompts, validation reports, and gates before coding.
 
 ## G6 - Add cost tracking per business
-- Status: ready
+- Status: complete
 - Source: `TASKS.md` backlog.
 - Goal file: `implementation-goals/GOAL-03-cost-tracking.md`.
-- Next required artifact: `implementation-goals/GOAL-03-cost-tracking.execution-plan.md`.
+- Outcome: optional business-level accounting metadata added to `/ai/complete` inference logs; migration applied and production verified.
+
+## G7 - Implementation job observability
+- Status: complete
+- Goal file: `implementation-goals/GOAL-04-implementation-job-observability.md`.
+- Outcome: added lifecycle, audit, redacted summary, and validation metadata for implementation jobs.
+
+## G8 - Agent registry routing
+- Status: complete
+- Goal file: `implementation-goals/GOAL-05-agent-registry-routing.md`.
+- Outcome: added explicit active-agent routing for `/ai/complete`; validated but not separately deployed.
+
+## G9 - Deployment hardening
+- Status: complete
+- Goal file: `implementation-goals/GOAL-06-deployment-hardening.md`.
+- Outcome: hardened readiness gates, smoke checks, rollback evidence, and deploy handoff.
+
+## Next
+- No active implementation goal is queued in `docs/IMPLEMENTATION_STATE.md`.

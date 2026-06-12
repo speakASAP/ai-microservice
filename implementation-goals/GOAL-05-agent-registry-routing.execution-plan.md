@@ -2,7 +2,7 @@
 
 ```yaml
 id: EP-AI-05
-status: approved-for-coding
+status: complete
 source_goal: implementation-goals/GOAL-05-agent-registry-routing.md
 owner: orchestrator
 created: 2026-06-12
@@ -142,8 +142,8 @@ Implement GOAL-05 exactly as scoped here. Preserve ordinary `/ai/complete` model
 
 ## Completion Checklist
 
-- [ ] Implementation complete
-- [ ] Tests complete
-- [ ] Validation evidence collected
-- [ ] Documentation updated
-- [ ] Deviations documented
+- [x] Implementation complete
+- [x] Tests complete
+- [x] Validation evidence collected
+- [x] Documentation updated
+- [x] Deviations documented

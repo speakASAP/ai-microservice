@@ -100,7 +100,7 @@ Wave 3: registry-driven routing and hardening.
 - `GOAL-05-agent-registry-routing`: deployment was not performed because the selected goal did not include deployment and the user did not request it.
 - `GOAL-06-deployment-hardening`: RAG lookup could not run because no `JWT_TOKEN` was available on `alfares`; fallback to repository docs was used.
 - `GOAL-06-deployment-hardening`: deployment readiness hardening adds project-specific checks for Kubernetes manifests, deploy script phases, smoke coverage, rollback evidence, package scripts, and GOAL-06 orchestration artifacts.
-- `GOAL-06-deployment-hardening`: smoke checks cover `/health`, `/ai/complete` premium approval blocking, and `/ai/claude-code-execute` invalid payload validation. `/ai/complete` missing agent routing is opt-in with `AI_SMOKE_CHECK_AGENT_ROUTING=true` until GOAL-05 is deployed. Live model inference is opt-in with `AI_SMOKE_RUN_LIVE_AI=true`.
+- `GOAL-06-deployment-hardening`: smoke checks cover `/health`, `/ai/complete` premium approval blocking, and `/ai/claude-code-execute` invalid payload validation. `/ai/complete` missing agent routing is opt-in with `AI_SMOKE_CHECK_AGENT_ROUTING=true` for explicit production registry-route checks. Live model inference is opt-in with `AI_SMOKE_RUN_LIVE_AI=true`.
 - `GOAL-06-deployment-hardening`: rollback path is documented in the execution plan and printed by `scripts/deploy.sh` using captured previous image and rollout revision.
 - `GOAL-06-deployment-hardening`: secret exposure review: scripts print synthetic payloads, image/revision metadata, and `LITELLM_BASE_URL`; they do not print provider keys, database passwords, JWTs, or raw implementation-job output.
 - `GOAL-06-deployment-hardening`: `python3 scripts/pre_coding_gate.py --root . --goal implementation-goals/GOAL-06-deployment-hardening.md` passed on `alfares`.
@@ -115,66 +115,49 @@ Wave 3: registry-driven routing and hardening.
 - `GOAL-06-deployment-hardening`: rollout completed for `deployment/ai-microservice` in namespace `statex-apps`; final pod `ai-microservice-9bbc4d546-l6s4v` was `1/1 Running` with 0 restarts.
 - `GOAL-06-deployment-hardening`: external `https://ai.alfares.cz/health` returned `{"status":"ok","service":"ai-microservice"}` after deployment.
 - `GOAL-06-deployment-hardening`: deploy script rollback evidence was patched after deployment to prefer captured pod image digest when Kubernetes revision history only contains mutable `latest`; `bash -n scripts/deploy.sh scripts/smoke-unified-llm.sh` and `python3 scripts/deployment_readiness_gate.py --root .` passed after the patch.
+- Post-GOAL housekeeping: RAG lookup could not run because no `JWT_TOKEN` was available on `alfares`; fallback to repository docs was used.
+- Post-GOAL housekeeping: reconciled stale compact operator docs and backlog markers so they match the canonical no-active-goal state.
+- Post-GOAL housekeeping: `./scripts/next_goal.sh` reports no active implementation goal is queued.
+- Post-GOAL housekeeping: `python3 scripts/pre_coding_gate.py --root . --goal implementation-goals/GOAL-06-deployment-hardening.md` passed on `alfares`.
+- Post-GOAL housekeeping: `python3 scripts/deployment_readiness_gate.py --root .` passed on `alfares`.
+- Token pickup restart: `kubectl -n statex-apps rollout restart deployment/ai-microservice` completed successfully; replacement pod reported `JWT_TOKEN_ENV_PRESENT`.
+- Token pickup restart: RAG retrieval from inside `deployment/ai-microservice` returned `HTTP 200` using the pod `JWT_TOKEN` without printing the token value.
+- Token pickup restart: external `https://ai.alfares.cz/health` returned `{"status":"ok","service":"ai-microservice"}` after rollout.
+- Roadmap cleanup: removed stale missing `docs/superpowers/...` references from active task docs and marked completed execution-plan checklists complete.
 
 ## Risks And Follow-Ups
 
 - The local working tree currently contains many untracked files. Treat them as existing project state unless a selected goal explicitly owns them.
-- RAG lookup may fail locally without cluster DNS or `JWT_TOKEN`; record fallback when it happens.
+- RAG lookup works from the running Kubernetes deployment after the `JWT_TOKEN` secret pickup restart; local SSH shells may still lack cluster DNS or exported `JWT_TOKEN`.
 - Local `npm run build` requires dependencies to be installed before TypeScript validation can run.
 - `estimated_cost_usd` is nullable; current gateway responses primarily provide token usage for audit accounting unless future providers return cost metadata.
 - Deployment must use the project runbook and should not be performed without an explicit deployment goal or user approval.
 - `GOAL-04-implementation-job-observability` is deployed. Raw compatibility fields may still contain sensitive output for authorized callers; new summary fields are redacted/truncated operator surfaces.
-- `GOAL-05-agent-registry-routing` is validated but not deployed. Agent prompt templates support simple `{{user_prompt}}`, `{{input}}`, and `{{prompt}}` substitution only.
+- `GOAL-05-agent-registry-routing` is validated. Agent prompt templates support simple `{{user_prompt}}`, `{{input}}`, and `{{prompt}}` substitution only; production registry-route smoke remains opt-in to avoid accidental live inference.
 
 ## Changed Files In Last Orchestrator Update
 
-- `docs/INTENT_PRESERVATION.md`
-- `docs/process/DOCUMENTATION_COMPLETENESS_STANDARD.md`
-- `docs/process/OPERATIONAL_GATES.md`
-- `docs/process/AGENT_GAP_FILLING_RULES.md`
-- `docs/IMPLEMENTATION_ORCHESTRATOR.md`
+- `.env.example`
+- `AGENTS.md`
+- `BUSINESS.md`
+- `TASKS.md`
 - `docs/IMPLEMENTATION_STATE.md`
-- `implementation-goals/README.md`
-- `implementation-goals/GOAL-03-cost-tracking.execution-plan.md`
-- `implementation-goals/GOAL-03-cost-tracking.context-package.md`
-- `implementation-goals/GOAL-03-cost-tracking.coding-prompt.md`
-- `implementation-goals/templates/EXECUTION_PLAN.md`
-- `implementation-goals/templates/CONTEXT_PACKAGE.md`
-- `implementation-goals/templates/CODING_PROMPT.md`
-- `implementation-goals/templates/VALIDATION_REPORT.md`
-- `scripts/pre_coding_gate.py`
+- `docs/orchestrator/STATUS.md`
+- `docs/orchestrator/GOALS.md`
+- `docs/orchestrator/PLAN.md`
 - `implementation-goals/GOAL-03-cost-tracking.md`
-- `implementation-goals/GOAL-03-cost-tracking.validation-report.md`
-- `src/contracts/ai-complete.contract.ts`
-- `src/ai/ai.service.ts`
-- `src/ai/ai.service.spec.ts`
-- `src/database/entities/inference-log.entity.ts`
-- `src/database/migrations/005-inference-log-business-cost.sql`
-- `src/service-identity/inference-log.interceptor.ts`
-- `implementation-goals/GOAL-04-implementation-job-observability.md`
-- `implementation-goals/GOAL-04-implementation-job-observability.execution-plan.md`
+- `implementation-goals/GOAL-03-cost-tracking.context-package.md`
+- `implementation-goals/GOAL-03-cost-tracking.execution-plan.md`
 - `implementation-goals/GOAL-04-implementation-job-observability.context-package.md`
-- `implementation-goals/GOAL-04-implementation-job-observability.coding-prompt.md`
-- `implementation-goals/GOAL-04-implementation-job-observability.validation-report.md`
+- `implementation-goals/GOAL-04-implementation-job-observability.execution-plan.md`
 - `implementation-goals/GOAL-05-agent-registry-routing.md`
-- `implementation-goals/GOAL-05-agent-registry-routing.execution-plan.md`
 - `implementation-goals/GOAL-05-agent-registry-routing.context-package.md`
-- `implementation-goals/GOAL-05-agent-registry-routing.coding-prompt.md`
-- `implementation-goals/GOAL-05-agent-registry-routing.validation-report.md`
-- `src/ai/ai.module.ts`
-- `src/ai/ai.service.ts`
-- `src/ai/ai.service.spec.ts`
-- `src/contracts/ai-complete.contract.ts`
-- `src/claude-code/claude-code.service.ts`
-- `src/claude-code/claude-code.consumer.ts`
-- `src/claude-code/dto/job-enqueue-response.dto.ts`
-- `src/claude-code/dto/job-status-response.dto.ts`
-- `src/contracts/claude-code-job.contract.ts`
-- `src/database/entities/claude-code-job.entity.ts`
-- `src/database/migrations/006-claude-code-job-observability.sql`
-- `test/claude-code/claude-code.controller.spec.ts`
-- `test/claude-code/claude-code.e2e.spec.ts`
-- `test/claude-code/claude-code.service.spec.ts`
+- `implementation-goals/GOAL-05-agent-registry-routing.execution-plan.md`
+- `implementation-goals/GOAL-06-deployment-hardening.coding-prompt.md`
+- `implementation-goals/GOAL-06-deployment-hardening.context-package.md`
+- `implementation-goals/GOAL-06-deployment-hardening.execution-plan.md`
+- `implementation-goals/GOAL-06-deployment-hardening.validation-report.md`
+- `k8s/external-secret.yaml`
 
 ## Next Action
 

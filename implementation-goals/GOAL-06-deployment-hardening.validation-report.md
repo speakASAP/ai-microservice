@@ -82,7 +82,7 @@ No DTO, database, or endpoint schema changes. Smoke validates existing `/health`
 
 ## Replay/Determinism Evidence
 
-Live model inference remains opt-in with `AI_SMOKE_RUN_LIVE_AI=true`. Agent-routing smoke remains opt-in with `AI_SMOKE_CHECK_AGENT_ROUTING=true` until GOAL-05 is deployed to production.
+Live model inference remains opt-in with `AI_SMOKE_RUN_LIVE_AI=true`. Agent-routing smoke remains opt-in with `AI_SMOKE_CHECK_AGENT_ROUTING=true` for explicit production registry-route checks.
 
 ## Passed Criteria
 
@@ -102,11 +102,11 @@ Production deployment completed with one ready pod, zero restarts, and running i
 
 ## Skipped Checks
 
-Default smoke skipped live `/ai/complete` inference because `AI_SMOKE_RUN_LIVE_AI=true` was not set. Agent-routing smoke was skipped because GOAL-05 is validated but not deployed to production yet.
+Default smoke skipped live `/ai/complete` inference because `AI_SMOKE_RUN_LIVE_AI=true` was not set. Agent-routing smoke was skipped during the original GOAL-06 deployment because it was intentionally opt-in for production registry-route checks.
 
 ## Deviations
 
-Agent-routing smoke was made opt-in after current production showed GOAL-05 is not deployed and would otherwise invoke live inference on older images.
+Agent-routing smoke remains opt-in to avoid accidental live inference during routine deployment validation.
 
 ## Risks
 

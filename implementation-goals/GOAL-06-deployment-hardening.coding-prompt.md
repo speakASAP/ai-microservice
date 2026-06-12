@@ -24,7 +24,7 @@ Read `implementation-goals/GOAL-06-deployment-hardening.context-package.md` and 
 
 ## Scope
 
-Harden deployment scripts and documentation only. Smoke checks may exercise existing contracts but must not change endpoint behavior. Agent-routing smoke remains opt-in until GOAL-05 is deployed to production.
+Harden deployment scripts and documentation only. Smoke checks may exercise existing contracts but must not change endpoint behavior. Agent-routing smoke remains opt-in for explicit production registry-route checks.
 
 ## Allowed Changes
 

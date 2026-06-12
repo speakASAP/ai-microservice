@@ -19,4 +19,4 @@ Implementation constraints:
 - Do not deploy unless the selected goal or user explicitly asks for deployment.
 
 Next planned implementation:
-- `GOAL-03-cost-tracking`: add cost tracking per `business_id` to inference logs.
+- No active implementation goal is queued in `docs/IMPLEMENTATION_STATE.md`. Create a new `implementation-goals/GOAL-07-*.md` only when new product or operational scope is approved.

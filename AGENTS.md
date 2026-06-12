@@ -68,7 +68,7 @@ Caller → LiteLLM (e.g. ai-microservice-litellm-green:4000)
 
 If **`LITELLM_BASE_URL`** is unset on the orchestrator, **`/ai/complete`** keeps the legacy OpenRouter multi-model chain in `main.py`. **free-ai** without both `LITELLM_BASE_URL` and `LITELLM_MASTER_KEY` keeps direct OpenRouter/Ollama paths.
 
-See `docs/superpowers/cursor-tasks/task-02-litellm-fallback-gateway.md` for task history and verify commands.
+See `TASKS.md`, `docs/IMPLEMENTATION_STATE.md`, and `implementation-goals/` for task history and verify commands.
 
 ## Active Agents
 <!-- Coordinator-maintained -->

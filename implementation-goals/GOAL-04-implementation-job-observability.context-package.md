@@ -21,9 +21,9 @@ Improve status, logs, and audit summaries for implementation jobs using `claude-
 
 ## Current State
 
-`docs/IMPLEMENTATION_STATE.md` marks GOAL-04 as queued after GOAL-03 completion. The working tree contains unrelated in-progress files from previous goals; preserve them and modify only the GOAL-04 files listed in the execution plan.
+`docs/IMPLEMENTATION_STATE.md` marks GOAL-04 complete. The implementation added optional observability metadata, redacted summaries, lifecycle/audit status fields, validation evidence, migration `006`, and production deployment evidence.
 
-RAG lookup was required but unavailable in this session because no `JWT_TOKEN` was present in the remote environment.
+Historical RAG lookup was unavailable during the GOAL-04 implementation because no `JWT_TOKEN` was present in the remote environment at that time.
 
 ## Relevant Contracts
 
