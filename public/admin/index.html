@@ -48,20 +48,16 @@
           </div>
           <div class="top-actions">
             <button class="ghost icon-button" id="refresh-button" type="button" title="Refresh agents" aria-label="Refresh agents">↻</button>
+            <a class="ghost logout-link" href="/admin/logout">Sign out</a>
             <button class="primary" id="new-agent-button" type="button"><span>＋</span> New Agent</button>
           </div>
         </header>
 
         <section class="auth-panel" id="auth-panel">
           <div>
-            <h2>Service token required</h2>
-            <p>The admin API uses the existing service JWT guard. Enter a bearer token to list and modify agents.</p>
+            <h2>Authenticated admin session</h2>
+            <p>Access is validated by the auth microservice. Only admin users can view or modify this registry.</p>
           </div>
-          <form id="token-form" class="token-form">
-            <input id="token-input" name="token" type="password" placeholder="Bearer token" autocomplete="off" />
-            <button type="submit">Connect</button>
-            <button id="clear-token-button" class="ghost" type="button">Clear</button>
-          </form>
         </section>
 
         <section class="status-strip" aria-live="polite">

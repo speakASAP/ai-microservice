@@ -169,7 +169,10 @@ function shouldFallbackToLiteLlm(provider: ImplementationProvider, exitCode: num
 
 function extractPatch(text: string): string {
   const fenced = text.match(/```(?:diff|patch)?\s*([\s\S]*?)```/i);
-  const candidate = (fenced?.[1] ?? text).trim();
+  let candidate = (fenced?.[1] ?? text).trim();
+  if (candidate.startsWith('--git ')) return `diff ${candidate}`.trim();
+  candidate = candidate.replace(/^```(?:diff|patch)?\s*/i, '').trim();
+  if (candidate.startsWith('--git ')) return `diff ${candidate}`.trim();
   const diffIndex = candidate.indexOf('diff --git ');
   if (diffIndex >= 0) return candidate.slice(diffIndex).trim();
   try {
@@ -180,6 +183,97 @@ function extractPatch(text: string): string {
     // Not JSON; handled below.
   }
   return '';
+}
+
+function normalizeRepoPath(file: string): string {
+  return file.replace(/^\.\//, '').replace(/^[ab]\//, '').trim();
+}
+
+function extractStrictOnlyEditFiles(instructions: string): string[] {
+  const allowed = new Set<string>();
+  const filePattern = '[A-Za-z0-9_./-]+\\.(?:json|ts|tsx|js|jsx|md|yml|yaml)';
+  const patterns = [
+    new RegExp(`only\\s+(?:edit|modify|change)\\s+(${filePattern})`, 'gi'),
+    new RegExp(`(?:edit|modify|change)\\s+only\\s+(${filePattern})`, 'gi'),
+  ];
+  for (const pattern of patterns) {
+    for (const match of instructions.matchAll(pattern)) {
+      allowed.add(normalizeRepoPath(match[1]));
+    }
+  }
+  return Array.from(allowed);
+}
+
+function validatePatchScope(patch: string, allowedFiles: string[]): void {
+  if (allowedFiles.length === 0) return;
+  const allowed = new Set(allowedFiles.map(normalizeRepoPath));
+  const touched = Array.from(patch.matchAll(/^diff --git a\/(.+?) b\/(.+)$/gm))
+    .flatMap((match) => [normalizeRepoPath(match[1]), normalizeRepoPath(match[2])]);
+  const uniqueTouched = Array.from(new Set(touched));
+  if (uniqueTouched.length === 0) {
+    throw new Error(`patch does not contain diff headers for required file(s): ${allowedFiles.join(', ')}`);
+  }
+  const unexpected = uniqueTouched.filter((file) => !allowed.has(file));
+  if (unexpected.length > 0) {
+    throw new Error(`patch touches unexpected file(s): ${unexpected.join(', ')}; allowed file(s): ${allowedFiles.join(', ')}`);
+  }
+  const missing = allowedFiles.filter((file) => !uniqueTouched.includes(normalizeRepoPath(file)));
+  if (missing.length > 0) {
+    throw new Error(`patch does not touch required file(s): ${missing.join(', ')}`);
+  }
+}
+
+function extractValidatorFeedback(instructions: string): string {
+  const payloadMatch = instructions.match(/Task payload:\s*(\{[\s\S]*?\})\s*Acceptance criteria:/);
+  if (!payloadMatch) return '';
+  try {
+    const payload = JSON.parse(payloadMatch[1]);
+    return typeof payload.user_rejection_feedback === 'string'
+      ? payload.user_rejection_feedback.trim()
+      : '';
+  } catch {
+    return '';
+  }
+}
+
+function applyStructuredValidatorFallback(
+  worktreePath: string,
+  instructions: string,
+  strictOnlyEditFiles: string[],
+): string | null {
+  const feedback = extractValidatorFeedback(instructions);
+  const normalizedFeedback = feedback.toLowerCase();
+  if (
+    strictOnlyEditFiles.length !== 1
+    || !normalizedFeedback.includes('compileroptions.types')
+    || !normalizedFeedback.includes('jest')
+  ) {
+    return null;
+  }
+
+  const targetFile = normalizeRepoPath(strictOnlyEditFiles[0]);
+  if (!targetFile.endsWith('.json')) return null;
+  const fullPath = path.resolve(worktreePath, targetFile);
+  if (!fullPath.startsWith(path.resolve(worktreePath) + path.sep)) {
+    throw new Error(`structured fallback target escapes worktree: ${targetFile}`);
+  }
+
+  const current = fs.readFileSync(fullPath, 'utf8');
+  const compactTypes = /("types"\s*:\s*\[\s*"node"\s*)\]/;
+  if (compactTypes.test(current)) {
+    fs.writeFileSync(fullPath, current.replace(compactTypes, '$1, "jest"]'), 'utf8');
+    return targetFile;
+  }
+
+  const parsed = JSON.parse(current);
+  parsed.compilerOptions = parsed.compilerOptions ?? {};
+  const types = Array.isArray(parsed.compilerOptions.types)
+    ? parsed.compilerOptions.types
+    : [];
+  if (!types.includes('jest')) types.push('jest');
+  parsed.compilerOptions.types = types;
+  fs.writeFileSync(fullPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+  return targetFile;
 }
 
 async function readRepoContext(worktreePath: string, instructions: string): Promise<string> {
@@ -258,12 +352,26 @@ async function applyLiteLlmFallbackPatch(
   claudeLimitOutput: string,
 ): Promise<{ provider: ImplementationProvider; stdout: string; stderr: string; exitCode: number }> {
   const context = await readRepoContext(worktreePath, instructions);
+  const validatorFeedback = extractValidatorFeedback(instructions);
+  const strictOnlyEditFiles = extractStrictOnlyEditFiles(instructions);
+  const strictDiffHeaders = strictOnlyEditFiles.map((file) => `diff --git a/${file} b/${file}`).join(', ');
+  const strictScopeRule = strictOnlyEditFiles.length > 0
+    ? `Required patch file scope: modify only ${strictOnlyEditFiles.join(', ')}. The only valid diff header(s): ${strictDiffHeaders}.`
+    : '';
+  const taskScope = validatorFeedback
+    ? [
+        'Validator retry feedback is authoritative and overrides the broader original task.',
+        'Implement only this validator retry feedback.',
+        validatorFeedback,
+      ].join('\n')
+    : `Original task instructions:\n${instructions}`;
   const prompt = [
     'Claude Code is rate-limited. Implement the requested coding task by returning a patch only.',
     'The patch will be applied with git apply in the repository root.',
     'Do not change unrelated files. If validator feedback names exact files, edit only those files.',
+    strictScopeRule,
     '',
-    `Original task instructions:\n${instructions}`,
+    `Task scope:\n${taskScope}`,
     '',
     `Claude rate-limit output:\n${claudeLimitOutput}`,
     '',
@@ -279,10 +387,11 @@ async function applyLiteLlmFallbackPatch(
         errors.push(`${model}: model did not return a unified diff; output=${raw.slice(0, 500)}`);
         continue;
       }
+      validatePatchScope(patch, strictOnlyEditFiles);
       const patchPath = path.join('/tmp', `litellm-fallback-${Date.now()}-${Math.random().toString(16).slice(2)}.diff`);
       fs.writeFileSync(patchPath, patch, 'utf8');
       try {
-        await execAsync(`git apply --whitespace=nowarn ${shellQuote(patchPath)}`, { cwd: worktreePath, timeout: 30_000, maxBuffer: 2 * 1024 * 1024 });
+        await execAsync(`git apply --recount --whitespace=nowarn ${shellQuote(patchPath)}`, { cwd: worktreePath, timeout: 30_000, maxBuffer: 2 * 1024 * 1024 });
       } finally {
         try { fs.unlinkSync(patchPath); } catch { /* ignore */ }
       }
@@ -295,6 +404,20 @@ async function applyLiteLlmFallbackPatch(
     } catch (error) {
       errors.push(`${model}: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  try {
+    const structuredFile = applyStructuredValidatorFallback(worktreePath, instructions, extractStrictOnlyEditFiles(instructions));
+    if (structuredFile) {
+      return {
+        provider: 'litellm',
+        stdout: `[RunLayer] Claude Code rate-limited; Ollama/OpenRouter patches were unusable, so structured validator fallback updated ${structuredFile}.`,
+        stderr: errors.join('\n'),
+        exitCode: 0,
+      };
+    }
+  } catch (error) {
+    errors.push(`structured-validator-fallback: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   return {

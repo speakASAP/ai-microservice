@@ -1,7 +1,11 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { AdminAgentsService, AiAgentPayload } from './admin-agents.service';
 import { AiAgentModelTier, AiAgentStatus } from '../database/entities/ai-agent.entity';
+import { Public } from '../service-identity/public.decorator';
+import { AdminAuthGuard } from './admin-auth.guard';
 
+@Public()
+@UseGuards(AdminAuthGuard)
 @Controller('admin/api/agents')
 export class AdminAgentsController {
   constructor(private readonly adminAgents: AdminAgentsService) {}

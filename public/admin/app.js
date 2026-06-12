@@ -1,15 +1,10 @@
-const tokenKey = "ai-admin-service-token";
 const state = {
-  token: localStorage.getItem(tokenKey) || "",
   agents: [],
   selectedId: null,
 };
 
 const els = {
   authPanel: document.getElementById("auth-panel"),
-  tokenForm: document.getElementById("token-form"),
-  tokenInput: document.getElementById("token-input"),
-  clearTokenButton: document.getElementById("clear-token-button"),
   refreshButton: document.getElementById("refresh-button"),
   newAgentButton: document.getElementById("new-agent-button"),
   searchInput: document.getElementById("search-input"),
@@ -37,20 +32,21 @@ function setMessage(text, type = "") {
 function authHeaders() {
   return {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${state.token}`,
   };
 }
 
 async function api(path, options = {}) {
-  if (!state.token) {
-    throw new Error("Enter a service token before calling the admin API.");
-  }
-
   const response = await fetch(path, {
     method: options.method || "GET",
     headers: authHeaders(),
     body: options.body ? JSON.stringify(options.body) : undefined,
+    credentials: "same-origin",
   });
+
+  if (response.status === 401) {
+    window.location.assign("/admin/logout");
+    throw new Error("Admin authentication required.");
+  }
 
   if (!response.ok) {
     let details = `Request failed (${response.status})`;
@@ -224,30 +220,6 @@ function slugFromName(name) {
     .slice(0, 160);
 }
 
-els.tokenForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  state.token = els.tokenInput.value.trim().replace(/^Bearer\s+/i, "");
-  localStorage.setItem(tokenKey, state.token);
-  try {
-    await loadAgents();
-    setMessage("Connected. Agent registry loaded.", "ok");
-  } catch (error) {
-    setMessage(error.message, "error");
-  }
-});
-
-els.clearTokenButton.addEventListener("click", () => {
-  state.token = "";
-  localStorage.removeItem(tokenKey);
-  els.tokenInput.value = "";
-  state.agents = [];
-  state.selectedId = null;
-  summarize();
-  renderAgents();
-  resetForm();
-  setMessage("Token cleared.", "");
-});
-
 els.refreshButton.addEventListener("click", async () => {
   try {
     await loadAgents();
@@ -330,11 +302,7 @@ function debounce(fn, delay) {
   };
 }
 
-if (state.token) {
-  els.tokenInput.value = state.token;
-  loadAgents()
-    .then(() => setMessage("Connected. Agent registry loaded.", "ok"))
-    .catch((error) => setMessage(error.message, "error"));
-} else {
-  resetForm();
-}
+resetForm();
+loadAgents()
+  .then(() => setMessage("Connected. Agent registry loaded.", "ok"))
+  .catch((error) => setMessage(error.message, "error"));

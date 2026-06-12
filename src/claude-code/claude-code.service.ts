@@ -96,7 +96,7 @@ export class ClaudeCodeService {
       status: saved.status as JobStatus,
       createdAt: saved.createdAt,
       implementationProvider: saved.implementationProvider,
-      intentChecksum: saved.intentChecksum,
+      intentChecksum: saved.intentChecksum ?? undefined,
     };
   }
 
