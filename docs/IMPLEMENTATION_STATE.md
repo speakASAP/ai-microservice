@@ -18,7 +18,7 @@ Runtime constraints:
 
 ## Active Goal
 
-None.
+`GOAL-06-deployment-hardening` - in progress.
 
 ## Completed Goals
 
@@ -35,7 +35,7 @@ None.
 | `GOAL-03-cost-tracking` | done | 01, 02 | Add cost tracking per `business_id` to inference logs. |
 | `GOAL-04-implementation-job-observability` | done | 02 | Improve execution status, logs, and audit summaries for `claude-code` and `codex` jobs. |
 | `GOAL-05-agent-registry-routing` | done | 01, 02 | Use persisted admin agent definitions for controlled routing where appropriate. |
-| `GOAL-06-deployment-hardening` | queued | 03, 04 | Strengthen deployment, smoke checks, and rollback evidence. |
+| `GOAL-06-deployment-hardening` | in_progress | 03, 04 | Strengthen deployment, smoke checks, and rollback evidence. |
 
 ## Execution Waves
 
@@ -97,6 +97,11 @@ Wave 3: registry-driven routing and hardening.
 - `GOAL-05-agent-registry-routing`: `npm test` passed on `alfares` with 14 suites and 128 tests.
 - `GOAL-05-agent-registry-routing`: final `python3 scripts/pre_coding_gate.py --root . --goal implementation-goals/GOAL-05-agent-registry-routing.md` and `python3 scripts/deployment_readiness_gate.py --root .` passed on `alfares`.
 - `GOAL-05-agent-registry-routing`: deployment was not performed because the selected goal did not include deployment and the user did not request it.
+- `GOAL-06-deployment-hardening`: RAG lookup could not run because no `JWT_TOKEN` was available on `alfares`; fallback to repository docs was used.
+- `GOAL-06-deployment-hardening`: deployment readiness hardening adds project-specific checks for Kubernetes manifests, deploy script phases, smoke coverage, rollback evidence, package scripts, and GOAL-06 orchestration artifacts.
+- `GOAL-06-deployment-hardening`: smoke checks cover `/health`, `/ai/complete` premium approval blocking, `/ai/complete` missing agent routing, and `/ai/claude-code-execute` invalid payload validation. Live model inference is opt-in with `AI_SMOKE_RUN_LIVE_AI=true`.
+- `GOAL-06-deployment-hardening`: rollback path is documented in the execution plan and printed by `scripts/deploy.sh` using captured previous image and rollout revision.
+- `GOAL-06-deployment-hardening`: secret exposure review: scripts print synthetic payloads, image/revision metadata, and `LITELLM_BASE_URL`; they do not print provider keys, database passwords, JWTs, or raw implementation-job output.
 
 ## Risks And Follow-Ups
 

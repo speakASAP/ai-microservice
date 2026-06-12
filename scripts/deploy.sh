@@ -26,9 +26,18 @@ IMAGE_TAG="${1:-$DEFAULT_TAG}"
 IMAGE="${REGISTRY}/${SERVICE_NAME}:${IMAGE_TAG}"
 IMAGE_LATEST="${REGISTRY}/${SERVICE_NAME}:latest"
 PORT="3380"
+PUBLIC_BASE_URL="${AI_SERVICE_PUBLIC_URL:-https://ai.alfares.cz}"
+ROLLBACK_PREVIOUS_IMAGE=""
+ROLLBACK_PREVIOUS_REVISION=""
 
 log_ts() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+deployment_readiness_gate() {
+  echo -e "${YELLOW}Preflight: running deployment readiness gate...${NC}"
+  python3 "$PROJECT_ROOT/scripts/deployment_readiness_gate.py" --root "$PROJECT_ROOT"
+  echo -e "${GREEN}Deployment readiness gate passed${NC}"
 }
 
 preflight_service_health() {
@@ -61,6 +70,46 @@ preflight_service_health() {
   echo -e "${GREEN}Preflight passed${NC}"
 }
 
+capture_rollback_context() {
+  echo -e "${YELLOW}Capturing rollback context...${NC}"
+  ROLLBACK_PREVIOUS_IMAGE="$(kubectl get deployment/"${SERVICE_NAME}" -n "${NAMESPACE}" \
+    -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
+  ROLLBACK_PREVIOUS_REVISION="$(kubectl rollout history deployment/"${SERVICE_NAME}" -n "${NAMESPACE}" 2>/dev/null \
+    | awk 'NF && $1 ~ /^[0-9]+$/ {revision=$1} END {print revision}')"
+
+  if [ -n "$ROLLBACK_PREVIOUS_IMAGE" ]; then
+    log_ts "Previous image: ${ROLLBACK_PREVIOUS_IMAGE}"
+  else
+    log_ts "Previous image: unavailable"
+  fi
+
+  if [ -n "$ROLLBACK_PREVIOUS_REVISION" ]; then
+    log_ts "Previous rollout revision: ${ROLLBACK_PREVIOUS_REVISION}"
+  else
+    log_ts "Previous rollout revision: unavailable"
+  fi
+}
+
+run_smoke_checks() {
+  echo -e "${YELLOW}Running production smoke checks against ${PUBLIC_BASE_URL}...${NC}"
+  AI_SERVICE_BASE_URL="$PUBLIC_BASE_URL" "$PROJECT_ROOT/scripts/smoke-unified-llm.sh"
+  echo -e "${GREEN}✅ Smoke checks passed${NC}"
+}
+
+print_rollback_evidence() {
+  echo -e "${BLUE}Rollback evidence:${NC}"
+  echo "Current image:  ${IMAGE}"
+  echo "Previous image: ${ROLLBACK_PREVIOUS_IMAGE:-unknown}"
+  echo "Rollout history:"
+  kubectl rollout history deployment/"${SERVICE_NAME}" -n "${NAMESPACE}" || true
+
+  if [ -n "$ROLLBACK_PREVIOUS_REVISION" ]; then
+    echo "Rollback command: kubectl rollout undo deployment/${SERVICE_NAME} -n ${NAMESPACE} --to-revision=${ROLLBACK_PREVIOUS_REVISION}"
+  else
+    echo "Rollback command: kubectl rollout undo deployment/${SERVICE_NAME} -n ${NAMESPACE}"
+  fi
+}
+
 # ═══════════════════════════════════════════════════════════
 #  ai-microservice - Kubernetes Deployment
 # ═══════════════════════════════════════════════════════════
@@ -72,7 +121,9 @@ echo "╚═══════════════════════�
 echo -e "${NC}"
 
 deploy_timing_init "$SERVICE_NAME"
+deploy_timing_run_phase "Readiness gate" deployment_readiness_gate
 deploy_timing_run_phase "Preflight" preflight_service_health
+deploy_timing_run_phase "Rollback context" capture_rollback_context
 
 deploy_timing_phase_start "Build image"
 echo -e "${YELLOW}Building image: ${IMAGE}...${NC}"
@@ -136,9 +187,13 @@ else
   echo -e "${RED}⚠️  Pod not ready yet: ${READY_STATE}${NC}"
   log_ts "Recent pod logs (last 60 lines) for debugging:"
   kubectl logs -n "${NAMESPACE}" "$POD" --tail=60 || true
+  exit 1
 fi
 echo -e ""
 deploy_timing_phase_end "Health check"
+
+deploy_timing_run_phase "Smoke checks" run_smoke_checks
+print_rollback_evidence
 
 deploy_timing_finish_success "AI Microservice"
 echo "Image:    ${IMAGE}"
