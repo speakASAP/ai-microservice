@@ -47,6 +47,9 @@ data:
   # Host IP (host.k3s.internal does not resolve in all k3s pods)
   LITELLM_BASE_URL: "http://192.168.88.53:4000"
 
+  # Search provider. DuckDuckGo HTML does not require a third-party API key; Serper still works when SEARCH_API_KEY is provided.
+  SEARCH_API_URL: "https://html.duckduckgo.com/html/"
+
   # External Services
   NOTIFICATION_SERVICE_URL: "https://notifications.alfares.cz"
 

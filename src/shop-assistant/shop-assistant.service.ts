@@ -106,21 +106,96 @@ export class ShopAssistantService {
     return { query_text: queryText, refined_params: previousParams ?? {} };
   }
 
+  private decodeHtml(value: string): string {
+    return value
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&#(\d+);/g, (_match, code: string) => String.fromCharCode(Number(code)));
+  }
+
+  private stripHtml(value: string): string {
+    return this.decodeHtml(value.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
+  }
+
+  private normalizeDuckDuckGoUrl(rawUrl: string): string | null {
+    const decoded = this.decodeHtml(rawUrl);
+    try {
+      const parsed = new URL(decoded, 'https://duckduckgo.com');
+      const redirected = parsed.searchParams.get('uddg');
+      const candidate = redirected ? new URL(redirected) : parsed;
+      if (candidate.protocol !== 'http:' && candidate.protocol !== 'https:') return null;
+      return candidate.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  private async searchDuckDuckGo(queryText: string, limit: number, searchUrl?: string): Promise<{ items: SearchItem[] }> {
+    const baseUrl = searchUrl?.trim() || 'https://html.duckduckgo.com/html/';
+    const normalizedQuery = queryText
+      .replace(/[“”]/g, '"')
+      .replace(/[‘’]/g, "'")
+      .replace(/^["']+|["']+$/g, '')
+      .trim();
+    const url = new URL(baseUrl);
+    url.searchParams.set('q', normalizedQuery || queryText);
+
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; AlfaresShopAssistant/1.0)',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) throw new Error('DuckDuckGo search error ' + res.status);
+
+    const html = await res.text();
+    const matches = Array.from(html.matchAll(/<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g));
+    const items: SearchItem[] = [];
+    const seen = new Set<string>();
+
+    for (const match of matches) {
+      const url = this.normalizeDuckDuckGoUrl(match[1] ?? '');
+      const title = this.stripHtml(match[2] ?? '');
+      if (!url || !title || seen.has(url)) continue;
+      seen.add(url);
+      items.push({
+        title,
+        url,
+        source: new URL(url).hostname.replace(/^www\./, ''),
+        position: items.length + 1,
+      });
+      if (items.length >= limit) break;
+    }
+
+    return { items };
+  }
+
   async search(queryText: string, limit = 20): Promise<{ items: SearchItem[] }> {
     const { url: searchUrl, key: apiKey } = this.getSearchConfig();
-    if (!searchUrl || !apiKey) {
-      throw new Error('SEARCH_API_URL or SEARCH_API_KEY not set; cannot run search');
+    const normalizedLimit = Math.min(limit, 30);
+
+    if (!searchUrl || searchUrl.includes('duckduckgo.com')) {
+      return this.searchDuckDuckGo(queryText, normalizedLimit, searchUrl);
     }
+
+    if (!apiKey) {
+      throw new Error('SEARCH_API_KEY not set; cannot run configured search provider');
+    }
+
     const serperUrl = searchUrl.includes('serper') ? searchUrl : 'https://google.serper.dev/search';
     const res = await fetch(serperUrl, {
       method: 'POST',
       headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: queryText, num: Math.min(limit, 30) }),
+      body: JSON.stringify({ q: queryText, num: normalizedLimit }),
       signal: AbortSignal.timeout(15_000),
     });
-    if (!res.ok) throw new Error(`Search API error ${res.status}`);
+    if (!res.ok) throw new Error('Search API error ' + res.status);
     const data = (await res.json()) as Record<string, unknown>;
-    const organic = ((data.organic ?? data.results ?? []) as Record<string, unknown>[]).slice(0, limit);
+    const organic = ((data.organic ?? data.results ?? []) as Record<string, unknown>[]).slice(0, normalizedLimit);
     const items: SearchItem[] = organic.map((row, i) => ({
       title: String(row.title ?? ''),
       url: String(row.link ?? row.url ?? ''),
