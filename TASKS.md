@@ -21,3 +21,7 @@
 - [x] 2026-04-11 `POST /ai/complete` on ai-orchestrator (task-bo-01) — already present; task doc marked finished
 - [x] 2026-04-05 Documentation standard applied
 - [x] 2026-04-12 Unified LLM gateway (staged) — LiteLLM + Docker Ollama + free-ai → LiteLLM; validation now tracked in `docs/IMPLEMENTATION_STATE.md` and `implementation-goals/`; smoke coverage in `scripts/smoke-unified-llm.sh`
+
+## Project Completion Marker
+
+- 2026-06-21: Project marked completed/frozen after remote inventory. There are no active goals, active plans, open tasks, blockers, or pending human/AI actions. Do not ask for a new goal during routine status checks unless the owner explicitly creates one.
