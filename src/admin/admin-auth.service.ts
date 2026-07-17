@@ -26,6 +26,8 @@ export class AdminAuthService {
     const returnUrl = process.env.AI_ADMIN_AUTH_RETURN_URL || 'https://ai.alfares.cz/admin/session';
     const url = new URL('/login', publicAuthUrl);
     url.searchParams.set('return_url', returnUrl);
+    url.searchParams.set('client_id', process.env.AUTH_CLIENT_ID || 'ai-microservice');
+    url.searchParams.set('lang', 'en');
     return url.toString();
   }
 
