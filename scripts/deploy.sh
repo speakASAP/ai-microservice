@@ -199,9 +199,15 @@ kubectl patch deployment/"${SERVICE_NAME}" -n "${NAMESPACE}" --type=json \
 echo -e "${GREEN}✅ Manifests applied${NC}"
 deploy_timing_phase_end "Apply K8s manifests"
 
+deploy_timing_phase_start "Set deployment image"
+echo -e "${YELLOW}Rolling out image: ${IMAGE}${NC}"
+kubectl set image "deployment/${SERVICE_NAME}" app="$IMAGE" -n "${NAMESPACE}"
+if [ "$ROLLBACK_PREVIOUS_IMAGE" = "$IMAGE" ]; then
+  kubectl rollout restart deployment/${SERVICE_NAME} -n "${NAMESPACE}"
+fi
+deploy_timing_phase_end "Set deployment image"
+
 deploy_timing_phase_start "Wait for rollout"
-echo -e "${YELLOW}Restarting deployment and waiting for rollout...${NC}"
-kubectl rollout restart deployment/${SERVICE_NAME} -n "${NAMESPACE}"
 deploy_timing_k8s_rollout_wait kubectl "$SERVICE_NAME" "$NAMESPACE"
 echo -e "${GREEN}✅ Rollout complete${NC}"
 deploy_timing_phase_end "Wait for rollout"
