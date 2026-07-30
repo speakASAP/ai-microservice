@@ -28,7 +28,7 @@ export interface ParsedTemplate {
   plainText: string;
 }
 
-export const DRILL_BLANK_PATTERN = /\[([^\]]*)\]\{([^}]*)\}/g;
+export const DRILL_BLANK_PATTERN = /\[([^\[\]]*)\]\{([^{}]*)\}/g;
 
 export type DrillItemSource = 'BANK_GRAMMAR' | 'BANK_SEVEN' | 'AI' | 'TEACHER';
 export type DrillItemStatus = 'ACTIVE' | 'RETIRED';
