@@ -113,8 +113,14 @@ export interface VocabularyRatioResult {
   unknownWords: string[];
   /** Per-item unknown counts, keyed by item index in the input array. */
   perItemUnknownCount: number[];
-  /** True when knownRatio >= 0.8 AND every perItemUnknownCount <= 2. */
+  /** True when knownRatio >= 0.8 AND every perItemUnknownCount <= 2. Forced true when
+   *  `assessed` is false — there is no baseline to fail sentences against. */
   passes: boolean;
+  /** False when the baseline's `hasBaseline` was false (no vocabulary ever built for this
+   *  course). knownRatio/unknownWords/perItemUnknownCount are still the real computed
+   *  numbers in that case, but `passes` is meaningless as a verdict — callers that need to
+   *  tell "failed the ratio" apart from "could not be assessed" must check this field. */
+  assessed: boolean;
 }
 
 export const VOCABULARY_MIN_KNOWN_RATIO = 0.8;
