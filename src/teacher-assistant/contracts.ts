@@ -101,6 +101,9 @@ export interface VocabularyBaseline {
   words: VocabularyWord[];
   /** Lowercased, NFC-normalized surface forms + lemmas, for O(1) membership tests. */
   index: string[];
+  /** False when no vocabulary has ever been built for this course — distinct from a
+   *  baseline that is legitimately empty at a low lesson order. */
+  hasBaseline: boolean;
 }
 
 export interface VocabularyRatioResult {
