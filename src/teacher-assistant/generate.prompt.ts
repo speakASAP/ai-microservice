@@ -1,8 +1,4 @@
-import {
-  GenerateDrillRequest,
-  VOCABULARY_MAX_NEW_WORDS_PER_SENTENCE,
-  VOCABULARY_MIN_KNOWN_RATIO,
-} from './contracts';
+import { GenerateDrillRequest, VOCABULARY_MIN_KNOWN_RATIO } from './contracts';
 
 /** The 80/20 rule as a percentage, so the prompt and the validator that
  *  enforces it can never disagree: both read the same exported constant. */
@@ -23,8 +19,7 @@ HARD RULES
    not a verb ending.
 2. At least ${MIN_KNOWN_PERCENT}% of the content words across all sentences must come from the
    supplied known-vocabulary list.
-3. No sentence may contain more than the stated maximum of new words, and never
-   more than ${VOCABULARY_MAX_NEW_WORDS_PER_SENTENCE}.
+3. No sentence may contain more than the stated maximum of new words.
 4. Every new word must appear in that sentence's "hint" with its translation,
    in the style "(warten auf – ждать; der Bus – автобус)".
 5. Sentences must be grammatically correct and natural in the target language.

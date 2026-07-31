@@ -40,7 +40,15 @@ Return JSON only.`;
  * grading a fulfilment rather than reviewing found material.
  *
  * Matched case-insensitively against hyphen/underscore-separated word parts, so
- * "AI-generate" and "auto_generated" are both caught.
+ * "AI-generate" and "auto_generated" are both caught, and with surrounding
+ * punctuation stripped, so sentence-final "generated." and "by AI." are caught
+ * too — that is the most natural position for exactly these words.
+ *
+ * Deliberately NOT on this list: "bank". An item bank is provenance, but a bank
+ * is also an ordinary language-drill topic ("Vocabulary about the bank and the
+ * post office"), and this list eats whole tokens. Suppressing real topic
+ * vocabulary on every request to catch one rare phrasing is the worse trade:
+ * the reviewer never sees the word "bank" from anywhere else in the prompt.
  */
 const PROVENANCE_TERMS = new Set([
   'ai', 'a.i', 'llm', 'llms', 'gpt', 'chatgpt', 'claude', 'gemini', 'openai',
@@ -52,7 +60,7 @@ const PROVENANCE_TERMS = new Set([
   'compose', 'composes', 'composed', 'composing',
   'make', 'makes', 'made', 'making',
   'invent', 'invents', 'invented',
-  'prompt', 'prompts', 'assistant', 'bank',
+  'prompt', 'prompts', 'assistant',
 ]);
 
 /** "10 sentences", "a few items", "several examples" — a count is an instruction
@@ -61,13 +69,22 @@ const QUANTITY_PHRASE =
   /\b(?:\d+|a\s+few|a\s+couple\s+of|several|some|lots\s+of)\s+(?:more\s+)?(?:sentences?|items?|examples?|questions?|drills?|exercises?|phrases?|tasks?)\b/gi;
 
 function isProvenanceToken(token: string): boolean {
-  const cleaned = token.toLowerCase().replace(/[^a-z0-9._-]/g, '');
+  const cleaned = token
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, '')
+    // Leading/trailing separators are punctuation, not part of the word.
+    // Without this, "generated." and "AI." miss the set lookup entirely, and
+    // sentence-final is where these words most often appear. Interior dots are
+    // kept so "a.i" still matches.
+    .replace(/^[._-]+/, '')
+    .replace(/[._-]+$/, '');
+
   if (cleaned === '') return false;
   if (PROVENANCE_TERMS.has(cleaned)) return true;
+
   // Split compounds ("AI-generate", "auto_generated") and reject if any part is
   // a provenance term.
-  const parts = cleaned.split(/[-_.]+/).filter(Boolean);
-  return parts.length > 1 && parts.some((p) => PROVENANCE_TERMS.has(p));
+  return cleaned.split(/[-_.]+/).filter(Boolean).some((p) => PROVENANCE_TERMS.has(p));
 }
 
 /**

@@ -1,4 +1,5 @@
 import { ValidateService } from './validate.service';
+import { sanitizeInstructionsForReview } from './validate.prompt';
 import { ValidateDrillRequest } from './contracts';
 
 const req: ValidateDrillRequest = {
@@ -212,5 +213,51 @@ describe('ValidateService.validate', () => {
     const res = await svc.validate(req);
     expect(res.results.every((r) => r.state === 'PENDING')).toBe(true);
     expect(res.results).toHaveLength(2);
+  });
+});
+
+describe('sanitizeInstructionsForReview', () => {
+  // Sentence-final is the most natural position for these words, and the
+  // mid-sentence "AI-generate" fixture above cannot see it: with punctuation
+  // left attached, "generated." missed the set lookup entirely and survived
+  // into the reviewer's context.
+  it('strips a provenance term that ends a sentence', () => {
+    const out = sanitizeInstructionsForReview(
+      'Please check what the assistant generated. B1 level.',
+    );
+    expect(out).not.toMatch(/generated/i);
+    expect(out).not.toMatch(/assistant/i);
+    expect(out).toContain('B1 level');
+  });
+
+  it('strips a provenance term followed by a full stop mid-text', () => {
+    const out = sanitizeInstructionsForReview(
+      'These items were produced by AI. Check them carefully.',
+    );
+    expect(out).not.toMatch(/produced/i);
+    expect(out).not.toMatch(/\bAI\b/i);
+    expect(out).toContain('Check them carefully');
+  });
+
+  it.each([
+    ['generated.', /generated/i],
+    ['generated,', /generated/i],
+    ['AI!', /\bai\b/i],
+    ['(written)', /written/i],
+    ['"created";', /created/i],
+    ['AI-generate.', /generate/i],
+    ['auto_generated.', /generated/i],
+  ])('removes %s regardless of surrounding punctuation', (token, pattern) => {
+    expect(sanitizeInstructionsForReview(`Topic is ${token}`)).not.toMatch(pattern);
+  });
+
+  it('keeps "bank" — it is ordinary drill vocabulary, not provenance', () => {
+    const out = sanitizeInstructionsForReview('Vocabulary about the bank and the post office.');
+    expect(out).toBe('Vocabulary about the bank and the post office.');
+  });
+
+  it('leaves ordinary editorial requirements untouched', () => {
+    const out = sanitizeInstructionsForReview('Every blank must be a preposition, B1 level.');
+    expect(out).toBe('Every blank must be a preposition, B1 level.');
   });
 });

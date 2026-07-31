@@ -1,10 +1,6 @@
 import { GenerateService } from './generate.service';
 import { GENERATE_SYSTEM_PROMPT } from './generate.prompt';
-import {
-  GenerateDrillRequest,
-  VOCABULARY_MAX_NEW_WORDS_PER_SENTENCE,
-  VOCABULARY_MIN_KNOWN_RATIO,
-} from './contracts';
+import { GenerateDrillRequest, VOCABULARY_MIN_KNOWN_RATIO } from './contracts';
 
 const req: GenerateDrillRequest = {
   languageCode: 'de', materialLanguage: 'ru', level: 'A2',
@@ -93,10 +89,12 @@ describe('GENERATE_SYSTEM_PROMPT', () => {
     expect(GENERATE_SYSTEM_PROMPT).toContain(
       `At least ${Math.round(VOCABULARY_MIN_KNOWN_RATIO * 100)}% of the content words`,
     );
-    expect(GENERATE_SYSTEM_PROMPT).toContain(
-      `never\n   more than ${VOCABULARY_MAX_NEW_WORDS_PER_SENTENCE}.`,
-    );
-    // A hard-coded copy would still satisfy the two assertions above while the
+    // The per-sentence new-word cap is deliberately NOT stated here: it is
+    // request-driven (`Maximum new words per sentence: ${req.maxNewWordsPerSentence}`
+    // in the user prompt) and a constant in the system prompt would contradict
+    // any request asking for a different number.
+    expect(GENERATE_SYSTEM_PROMPT).not.toMatch(/never\s+more than \d+/);
+    // A hard-coded copy would still satisfy the assertion above while the
     // constants hold their current values, so assert there is no *other*
     // percentage in the prompt that could be a stale duplicate.
     const percentages = GENERATE_SYSTEM_PROMPT.match(/\d+%/g) ?? [];

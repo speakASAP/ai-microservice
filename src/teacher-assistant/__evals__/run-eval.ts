@@ -20,8 +20,17 @@
  *
  *   rtk npx ts-node src/teacher-assistant/__evals__/run-eval.ts
  *
- * Requires AI_ORCHESTRATOR_URL (and optionally DRILL_GENERATION_MODEL_TIER)
- * to point at a reachable orchestrator — see LlmClient. ts-node is not a
+ * Environment required by LlmClient:
+ *   - JWT_SECRET            MANDATORY. /ai/complete is behind ServiceAuthGuard;
+ *                           the client mints its own service token and fails
+ *                           closed ("auth is not configured") without this.
+ *                           Must match the orchestrator's own JWT_SECRET.
+ *   - AI_ORCHESTRATOR_URL   Base URL of a reachable orchestrator.
+ *   - DRILL_GENERATION_MODEL_TIER  Optional; free|cheap|smart|premium,
+ *                           defaults to `smart`. Any other value 400s.
+ *   - DRILL_LLM_TIMEOUT_MS  Optional; defaults to 300000.
+ *
+ * ts-node is not a
  * declared devDependency of this package; `npx` will fetch it on demand, or
  * install it locally first (`npm install -D ts-node`) if npx has no network
  * access to the registry.
@@ -69,11 +78,14 @@ const LANGUAGE_PAIRS: LanguagePair[] = [
       'street', 'day', 'wait', 'go', 'drive', 'come', 'be', 'live', 'speak',
       'see', 'week', 'morning',
     ],
-    // The placeholder must be in the MATERIAL language (Russian), as
-    // GENERATE_SYSTEM_PROMPT requires and as the de/ru and fr/ru fixtures do.
-    // A dash here taught the model the wrong behaviour for one of the three
-    // pairs being measured, which quietly biased the baseline.
-    exampleItems: ["I'm waiting [на]{for} the bus."],
+    // The placeholder must be the MATERIAL-language (Russian) rendering of the
+    // answer, as GENERATE_SYSTEM_PROMPT requires and as the de/ru and fr/ru
+    // fixtures do. The original "[-]{for}" used a dash, which is not a Russian
+    // word at all; but "[на]{for}" would be worse — Russian takes a bare
+    // accusative after ждать, so there is no preposition to gloss and the
+    // one-shot would teach a wrong ru->en mapping. Use a verb where Russian
+    // genuinely has one. `go` and `school` are already in the list below.
+    exampleItems: ["I'm going [в]{to} school."],
   },
   {
     label: 'fr/ru',
