@@ -1,11 +1,25 @@
 # LiteLLM proxy — routed model names: free, cheap, smart (see AGENTS.md).
 # Secrets: use os.environ/VAR only (never commit keys).
 #
-# Ollama: compose provides service `ollama` on nginx-network; OLLAMA_API_BASE defaults to
-# http://ai-microservice-ollama:11434 (non-BG) or *-blue / *-green per color file. Override in .env if needed.
-# Pull models into the volume, e.g.: docker exec -it ai-microservice-ollama ollama pull qwen2.5-coder:0.5b
+# Ollama: compose provides service `ollama` on nginx-network. OLLAMA_API_BASE is
+# http://ai-microservice-ollama-green:11435 — the container sets OLLAMA_HOST=0.0.0.0:11435,
+# so it listens on 11435, NOT the 11434 default. Verified 2026-07-31 from inside the
+# litellm container: /api/tags 200 in 0.01s, /api/generate 200 in ~18s.
+# Pull models into the volume, e.g.: docker exec -it ai-microservice-ollama-green ollama pull qwen2.5-coder:0.5b
+#
+# 2026-07-31 — every tier was down and every request 500'd after a 120s hang. Causes:
+#   * `smart` pointed at gemini/gemini-2.0-flash, but Gemini is not used here (no funded key).
+#   * `cheap` pointed at openrouter/google/gemma-3-27b-it:free, which OpenRouter has RETIRED
+#     (404: "use google/gemma-3-27b-it" — the paid slug). Its whole free catalogue rotates,
+#     so a pinned :free slug is a time bomb: re-verify with
+#       curl -H "Authorization: Bearer $OPENROUTER_API_KEY" https://openrouter.ai/api/v1/models
+#   * every fallback chained to Ollama, which answers fine but is a 0.5b CPU model — far too
+#     slow for long drill prompts, so 3 retries blew past request_timeout.
+# Now: OpenRouter free models across two vendors, no single-vendor dependency, Ollama kept
+# only as the local `free` tier. All slugs below verified returning real completions.
 
 model_list:
+  # Local, no API cost, slow (CPU inference). Fine for short prompts; falls back to `cheap`.
   - model_name: free
     litellm_params:
       model: ollama/qwen2.5-coder:0.5b
@@ -13,28 +27,37 @@ model_list:
 
   - model_name: cheap
     litellm_params:
-      model: openrouter/google/gemma-3-27b-it:free
+      model: openrouter/google/gemma-4-26b-a4b-it:free
       api_key: os.environ/OPENROUTER_API_KEY
       api_base: https://openrouter.ai/api/v1
     model_info:
       mode: completion
 
+  # Different vendor from `cheap` on purpose — one vendor retiring a slug must not take
+  # both the primary and its fallback down at once.
   - model_name: cheap-fallback
     litellm_params:
-      model: ollama/qwen2.5-coder:0.5b
-      api_base: os.environ/OLLAMA_API_BASE
+      model: openrouter/nvidia/nemotron-3-nano-30b-a3b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+    model_info:
+      mode: completion
 
   - model_name: smart
     litellm_params:
-      model: gemini/gemini-2.0-flash
-      api_key: os.environ/GEMINI_API_KEY
+      model: openrouter/google/gemma-4-31b-it:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
     model_info:
       mode: completion
 
   - model_name: smart-fallback
     litellm_params:
-      model: ollama/qwen2.5-coder:0.5b
-      api_base: os.environ/OLLAMA_API_BASE
+      model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+      api_key: os.environ/OPENROUTER_API_KEY
+      api_base: https://openrouter.ai/api/v1
+    model_info:
+      mode: completion
 
 router_settings:
   routing_strategy: least-busy
