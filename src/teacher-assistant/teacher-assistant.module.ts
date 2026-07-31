@@ -8,7 +8,8 @@ import { TeacherAssistantController } from './teacher-assistant.controller';
 @Module({
   imports: [ServiceIdentityModule],
   controllers: [TeacherAssistantController],
+  // No `exports`: nothing outside this module imports LlmClient. Re-add it the
+  // day something does, not speculatively.
   providers: [LlmClient, GenerateService, ValidateService],
-  exports: [LlmClient],
 })
 export class TeacherAssistantModule {}

@@ -1,5 +1,10 @@
 import { GenerateService } from './generate.service';
-import { GenerateDrillRequest } from './contracts';
+import { GENERATE_SYSTEM_PROMPT } from './generate.prompt';
+import {
+  GenerateDrillRequest,
+  VOCABULARY_MAX_NEW_WORDS_PER_SENTENCE,
+  VOCABULARY_MIN_KNOWN_RATIO,
+} from './contracts';
 
 const req: GenerateDrillRequest = {
   languageCode: 'de', materialLanguage: 'ru', level: 'A2',
@@ -60,5 +65,41 @@ describe('GenerateService.generate', () => {
     const svc = new GenerateService(llm);
     const res = await svc.generate(req);
     expect(res.items).toEqual([]);
+  });
+
+  // M1 — nothing validates the parsed JSON, so a model that returns an object
+  // where an array was asked for must not crash the endpoint.
+  it('survives a non-array items field instead of throwing "not iterable"', async () => {
+    const llm = {
+      completeJson: jest.fn().mockResolvedValue({
+        data: { items: { template: 'x' } },
+        meta: {} as any,
+      }),
+    } as any;
+    const svc = new GenerateService(llm);
+    await expect(svc.generate(req)).resolves.toMatchObject({ items: [] });
+  });
+
+  it('survives a response with no data object at all', async () => {
+    const llm = { completeJson: jest.fn().mockResolvedValue({ data: null, meta: {} as any }) } as any;
+    const svc = new GenerateService(llm);
+    await expect(svc.generate(req)).resolves.toMatchObject({ items: [] });
+  });
+});
+
+// M5 — the prompt must quote the exported constants, not a hard-coded copy.
+describe('GENERATE_SYSTEM_PROMPT', () => {
+  it('interpolates the vocabulary constants rather than restating them', () => {
+    expect(GENERATE_SYSTEM_PROMPT).toContain(
+      `At least ${Math.round(VOCABULARY_MIN_KNOWN_RATIO * 100)}% of the content words`,
+    );
+    expect(GENERATE_SYSTEM_PROMPT).toContain(
+      `never\n   more than ${VOCABULARY_MAX_NEW_WORDS_PER_SENTENCE}.`,
+    );
+    // A hard-coded copy would still satisfy the two assertions above while the
+    // constants hold their current values, so assert there is no *other*
+    // percentage in the prompt that could be a stale duplicate.
+    const percentages = GENERATE_SYSTEM_PROMPT.match(/\d+%/g) ?? [];
+    expect(percentages).toEqual([`${Math.round(VOCABULARY_MIN_KNOWN_RATIO * 100)}%`]);
   });
 });

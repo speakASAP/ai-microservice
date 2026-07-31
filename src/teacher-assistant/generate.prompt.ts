@@ -1,4 +1,12 @@
-import { GenerateDrillRequest } from './contracts';
+import {
+  GenerateDrillRequest,
+  VOCABULARY_MAX_NEW_WORDS_PER_SENTENCE,
+  VOCABULARY_MIN_KNOWN_RATIO,
+} from './contracts';
+
+/** The 80/20 rule as a percentage, so the prompt and the validator that
+ *  enforces it can never disagree: both read the same exported constant. */
+const MIN_KNOWN_PERCENT = Math.round(VOCABULARY_MIN_KNOWN_RATIO * 100);
 
 export const GENERATE_SYSTEM_PROMPT = `You write fill-in-the-blank drill sentences for language learners.
 
@@ -13,9 +21,10 @@ HARD RULES
 1. Every sentence must exercise the requested grammar point in the BLANK itself.
    If the topic is prepositions, the blank must be a preposition — not an article,
    not a verb ending.
-2. At least 80% of the content words across all sentences must come from the
+2. At least ${MIN_KNOWN_PERCENT}% of the content words across all sentences must come from the
    supplied known-vocabulary list.
-3. No sentence may contain more than the stated maximum of new words.
+3. No sentence may contain more than the stated maximum of new words, and never
+   more than ${VOCABULARY_MAX_NEW_WORDS_PER_SENTENCE}.
 4. Every new word must appear in that sentence's "hint" with its translation,
    in the style "(warten auf – ждать; der Bus – автобус)".
 5. Sentences must be grammatically correct and natural in the target language.

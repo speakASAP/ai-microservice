@@ -17,7 +17,11 @@ export class GenerateService {
     });
 
     const items: GeneratedDrillItem[] = [];
-    for (const raw of data.items ?? []) {
+    // A model that returns an object instead of an array would otherwise throw
+    // `TypeError: items is not iterable` — nothing validates the parsed JSON.
+    const rawItems = Array.isArray(data?.items) ? data.items : [];
+
+    for (const raw of rawItems) {
       const r = raw as Record<string, any>;
       if (typeof r.template !== 'string' || !Array.isArray(r.blanks)) continue;
       items.push({

@@ -69,7 +69,11 @@ const LANGUAGE_PAIRS: LanguagePair[] = [
       'street', 'day', 'wait', 'go', 'drive', 'come', 'be', 'live', 'speak',
       'see', 'week', 'morning',
     ],
-    exampleItems: ["I'm waiting [-]{for} the bus."],
+    // The placeholder must be in the MATERIAL language (Russian), as
+    // GENERATE_SYSTEM_PROMPT requires and as the de/ru and fr/ru fixtures do.
+    // A dash here taught the model the wrong behaviour for one of the three
+    // pairs being measured, which quietly biased the baseline.
+    exampleItems: ["I'm waiting [на]{for} the bus."],
   },
   {
     label: 'fr/ru',
@@ -91,6 +95,9 @@ interface PairSummary {
   warn: number;
   fail: number;
   pending: number;
+  /** Empty on success. Set when the pair failed, so a run that partially
+   *  succeeded still reports what it bought. */
+  error: string;
 }
 
 interface OffTopicIssue {
@@ -177,6 +184,7 @@ async function runPair(
       warn: counts.WARN,
       fail: counts.FAIL,
       pending: counts.PENDING,
+      error: '',
     },
     offTopicIssues,
   };
@@ -190,11 +198,30 @@ async function main(): Promise<void> {
   const summaries: PairSummary[] = [];
   const allOffTopicIssues: OffTopicIssue[] = [];
 
+  let failures = 0;
+
   for (const pair of LANGUAGE_PAIRS) {
     console.log(`Running ${pair.label} (${ITEMS_PER_PAIR} items, topic: ${TOPIC.slug})...`);
-    const { summary, offTopicIssues } = await runPair(pair, generateService, validateService);
-    summaries.push(summary);
-    allOffTopicIssues.push(...offTopicIssues);
+    try {
+      const { summary, offTopicIssues } = await runPair(pair, generateService, validateService);
+      summaries.push(summary);
+      allOffTopicIssues.push(...offTopicIssues);
+    } catch (err: unknown) {
+      // One bad pair must not discard the money already spent on the pairs that
+      // succeeded. Record it in the table and carry on.
+      failures += 1;
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`  ${pair.label} FAILED: ${message}`);
+      summaries.push({
+        pair: pair.label,
+        itemsGenerated: 0,
+        pass: 0,
+        warn: 0,
+        fail: 0,
+        pending: 0,
+        error: message,
+      });
+    }
   }
 
   console.log('\n=== Generation + validation summary ===');
@@ -209,6 +236,11 @@ async function main(): Promise<void> {
       console.log(`  template: ${issue.template}`);
       console.log(`  issue:    ${issue.message}`);
     }
+  }
+
+  if (failures > 0) {
+    console.error(`\n${failures} of ${LANGUAGE_PAIRS.length} pair(s) failed — see the error column above.`);
+    process.exitCode = 1;
   }
 }
 

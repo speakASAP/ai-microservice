@@ -4,29 +4,12 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
-  IsOptional,
   IsString,
   Min,
   ValidateNested,
 } from 'class-validator';
 import { CefrLevel, DrillTemplate, GenerateDrillRequest } from '../contracts';
-
-const CEFR_LEVELS: CefrLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
-
-/** Matches the inline `{ slug, title, focus? }` topic shape in GenerateDrillRequest. */
-class TopicDto {
-  @IsString()
-  @IsNotEmpty()
-  slug!: string;
-
-  @IsString()
-  @IsNotEmpty()
-  title!: string;
-
-  @IsOptional()
-  @IsString()
-  focus?: string;
-}
+import { CEFR_LEVELS, TopicDto } from './common.dto';
 
 /**
  * `implements GenerateDrillRequest` so any drift between this DTO and the
