@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { CefrLevel, DrillBlank, DrillTemplate, ValidateDrillRequest } from '../contracts';
@@ -58,7 +59,13 @@ class ValidateItemDto {
   @Type(() => DrillBlankDto)
   blanks!: DrillBlank[];
 
-  @IsOptional()
+  // hint is `string | null` in the contract: a REQUIRED key whose value may
+  // be null. @IsOptional() would be wrong here — it skips validation for a
+  // missing key too, silently accepting `undefined` where the contract
+  // guarantees `null`. @ValidateIf runs @IsString() for every value except
+  // exactly `null`, which correctly rejects a missing key while still
+  // accepting null.
+  @ValidateIf((o) => o.hint !== null)
   @IsString()
   hint!: string | null;
 }

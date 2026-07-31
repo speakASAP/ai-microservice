@@ -64,7 +64,23 @@ describe('TeacherAssistantController request validation (via the global Validati
     await expect(pipe.transform({ ...validGenerateBody }, generateMetadata)).resolves.toBeDefined();
   });
 
-  it.each(['languageCode', 'materialLanguage', 'instructions', 'count', 'topics', 'correlationId'])(
+  // Every key of GenerateDrillRequest (11 fields) — none of them are `?:` in
+  // the contract, so a missing key must always reject.
+  const generateRequiredFields: (keyof GenerateDrillRequest)[] = [
+    'languageCode',
+    'materialLanguage',
+    'level',
+    'topics',
+    'instructions',
+    'count',
+    'knownVocabulary',
+    'maxNewWordsPerSentence',
+    'exampleItems',
+    'avoidTexts',
+    'correlationId',
+  ];
+
+  it.each(generateRequiredFields)(
     'rejects a generate-drill body missing %s with 400',
     async (field) => {
       const body: Record<string, unknown> = { ...validGenerateBody };
@@ -77,7 +93,19 @@ describe('TeacherAssistantController request validation (via the global Validati
     await expect(pipe.transform({ ...validValidateBody }, validateMetadata)).resolves.toBeDefined();
   });
 
-  it.each(['languageCode', 'materialLanguage', 'instructions', 'items', 'correlationId'])(
+  // Every key of ValidateDrillRequest (7 fields) — none of them are `?:` in
+  // the contract, so a missing key must always reject.
+  const validateRequiredFields: (keyof ValidateDrillRequest)[] = [
+    'languageCode',
+    'materialLanguage',
+    'level',
+    'topics',
+    'instructions',
+    'items',
+    'correlationId',
+  ];
+
+  it.each(validateRequiredFields)(
     'rejects a validate-drill body missing %s with 400',
     async (field) => {
       const body: Record<string, unknown> = { ...validValidateBody };
@@ -85,6 +113,27 @@ describe('TeacherAssistantController request validation (via the global Validati
       await expect(pipe.transform(body, validateMetadata)).rejects.toBeInstanceOf(BadRequestException);
     },
   );
+
+  // Regression coverage for the nested `items[].hint` field, which is
+  // `string | null` in the contract — a required key, nullable value. This
+  // must reject a missing key while still accepting an explicit null.
+  it('rejects a validate-drill item whose hint key is missing entirely', async () => {
+    const body = JSON.parse(JSON.stringify(validValidateBody));
+    delete body.items[0].hint;
+    await expect(pipe.transform(body, validateMetadata)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('accepts a validate-drill item whose hint is explicitly null', async () => {
+    const body = JSON.parse(JSON.stringify(validValidateBody));
+    body.items[0].hint = null;
+    await expect(pipe.transform(body, validateMetadata)).resolves.toBeDefined();
+  });
+
+  it('accepts a validate-drill item whose hint is a non-null string', async () => {
+    const body = JSON.parse(JSON.stringify(validValidateBody));
+    body.items[0].hint = '(warten auf – ждать)';
+    await expect(pipe.transform(body, validateMetadata)).resolves.toBeDefined();
+  });
 });
 
 describe('TeacherAssistantController delegation', () => {

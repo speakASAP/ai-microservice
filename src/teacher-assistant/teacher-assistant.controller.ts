@@ -11,6 +11,10 @@ import { GenerateDrillResponse, ValidateDrillResponse } from './contracts';
  * orchestration (Track D) — not browser/admin traffic, hence
  * ServiceAuthGuard (service JWT) rather than AdminAuthGuard.
  */
+// Deliberately explicit even though ServiceAuthGuard also runs globally via
+// APP_GUARD (see ServiceIdentityModule) — do not remove this as "redundant".
+// It documents the guarantee at the call site and is what
+// teacher-assistant.controller.spec.ts's guard test actually asserts on.
 @UseGuards(ServiceAuthGuard)
 @Controller('api/teacher-assistant')
 export class TeacherAssistantController {
