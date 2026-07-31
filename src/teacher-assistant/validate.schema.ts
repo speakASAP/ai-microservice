@@ -34,15 +34,19 @@ export const VALIDATE_OUTPUT_SCHEMA = {
               },
             },
           },
+          // A fix without a usable `template` is not a fix — ValidateService
+          // treats one as absent and downgrades the item to WARN. Ask for the
+          // whole corrected item or for null; never a half-filled object.
           suggestedFix: {
             type: ['object', 'null'],
+            required: ['template', 'blanks', 'hint'],
             properties: {
-              template: { type: 'string' },
+              template: { type: 'string', minLength: 1 },
               blanks: {
                 type: 'array',
                 items: {
                   type: 'object',
-                  required: ['prompt', 'answer'],
+                  required: ['prompt', 'answer', 'alternatives'],
                   properties: {
                     prompt: { type: 'string' },
                     answer: { type: 'string' },

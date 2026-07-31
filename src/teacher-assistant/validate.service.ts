@@ -3,6 +3,7 @@ import { LlmClient } from './llm.client';
 import { VALIDATE_SYSTEM_PROMPT, buildValidateUserPrompt } from './validate.prompt';
 import { VALIDATE_OUTPUT_SCHEMA } from './validate.schema';
 import {
+  DrillBlank,
   ItemValidationResult,
   ValidateDrillRequest,
   ValidateDrillResponse,
@@ -22,7 +23,10 @@ interface RawResult {
   itemRef: number;
   verdicts: RawVerdicts;
   issues: ValidationIssue[];
-  suggestedFix: ItemValidationResult['suggestedFix'];
+  /** Deliberately `unknown`: this comes off the wire from a language model and
+   *  is normalized by `normalizeSuggestedFix` before it is allowed to be typed
+   *  as the contract shape. */
+  suggestedFix: unknown;
 }
 
 const TOPIC_LEVEL_NATURAL = ['PASS', 'WARN', 'FAIL'];
@@ -51,6 +55,46 @@ function hasValidVerdicts(v: unknown): v is RawVerdicts {
   );
 }
 
+/**
+ * Coerces a model-supplied fix into the `ItemValidationResult['suggestedFix']`
+ * contract, or rejects it as absent.
+ *
+ * Two problems this closes:
+ *  1. `validate.schema.ts` only ever asked the model for `prompt` and `answer`
+ *     inside `suggestedFix.blanks[]`, but `DrillBlank` requires `index` and
+ *     `alternatives` too. Passing the raw value through typed as `DrillBlank[]`
+ *     is a lie TypeScript cannot catch across an HTTP boundary, and Track D
+ *     applying such a fix would persist blanks with `index: undefined`.
+ *     Normalize exactly as `generate.service.ts` normalizes its own items.
+ *  2. A fix with no usable `template` (`{}`, `{ template: '' }`) is not a fix.
+ *     Treating it as present kept the item at FAIL with `template: undefined`
+ *     and suppressed the FAIL -> WARN downgrade, which exists precisely so a
+ *     teacher is never blocked by a complaint they cannot act on.
+ */
+function normalizeSuggestedFix(raw: unknown): ItemValidationResult['suggestedFix'] {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
+
+  const o = raw as Record<string, unknown>;
+  if (typeof o.template !== 'string' || o.template.trim() === '') return null;
+
+  const rawBlanks = Array.isArray(o.blanks) ? o.blanks : [];
+  const blanks: DrillBlank[] = rawBlanks.map((b: unknown, index: number) => {
+    const blank = (typeof b === 'object' && b !== null ? b : {}) as Record<string, unknown>;
+    return {
+      index,
+      prompt: String(blank.prompt ?? ''),
+      answer: String(blank.answer ?? ''),
+      alternatives: Array.isArray(blank.alternatives) ? blank.alternatives.map(String) : [],
+    };
+  });
+
+  return {
+    template: o.template,
+    blanks,
+    hint: typeof o.hint === 'string' ? o.hint : null,
+  };
+}
+
 @Injectable()
 export class ValidateService {
   constructor(private readonly llm: LlmClient) {}
@@ -68,7 +112,11 @@ export class ValidateService {
     const validRefs = new Set(req.items.map((item) => item.itemRef));
     const byRef = new Map<number, ItemValidationResult>();
 
-    for (const raw of data.results ?? []) {
+    // A model that returns an object instead of an array would otherwise throw
+    // `TypeError: results is not iterable` — nothing validates the parsed JSON.
+    const rawResults = Array.isArray(data?.results) ? data.results : [];
+
+    for (const raw of rawResults) {
       const r = raw as RawResult;
       if (typeof r?.itemRef !== 'number' || !validRefs.has(r.itemRef)) continue;
 
@@ -86,11 +134,12 @@ export class ValidateService {
       const issues: ValidationIssue[] = Array.isArray(r.issues) ? [...r.issues] : [];
       const hasFail = verdicts.includes('FAIL');
       const hasWarn = verdicts.includes('WARN');
+      const suggestedFix = normalizeSuggestedFix(r.suggestedFix);
 
       let state: ValidationState;
-      if (hasFail && r.suggestedFix) {
+      if (hasFail && suggestedFix) {
         state = 'FAIL';
-      } else if (hasFail && !r.suggestedFix) {
+      } else if (hasFail && !suggestedFix) {
         // Downgrade: a FAIL the teacher can't act on (no correction) must not
         // block approval, but the model's own explanation must survive the
         // downgrade. The model's issue(s) are already in `issues` verbatim;
@@ -121,7 +170,7 @@ export class ValidateService {
         itemRef: r.itemRef,
         state,
         issues,
-        suggestedFix: r.suggestedFix ?? null,
+        suggestedFix,
       });
     }
 
