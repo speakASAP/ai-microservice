@@ -49,7 +49,7 @@ export function buildValidateUserPrompt(req: ValidateDrillRequest): string {
     'TOPICS:',
     topics,
     '',
-    `TEACHER'S REQUEST (follow it literally): ${req.instructions}`,
+    `TEACHER'S INSTRUCTIONS (use these to judge topic alignment): ${req.instructions}`,
     '',
     'ITEMS TO REVIEW:',
     items,

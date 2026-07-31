@@ -7,6 +7,7 @@ import {
   ValidateDrillRequest,
   ValidateDrillResponse,
   ValidationIssue,
+  ValidationIssueCode,
   ValidationState,
 } from './contracts';
 
@@ -22,6 +23,32 @@ interface RawResult {
   verdicts: RawVerdicts;
   issues: ValidationIssue[];
   suggestedFix: ItemValidationResult['suggestedFix'];
+}
+
+const TOPIC_LEVEL_NATURAL = ['PASS', 'WARN', 'FAIL'];
+const GRAMMAR_ONLY = ['PASS', 'FAIL'];
+
+/** Which issue code best describes a FAIL in each verdict category, used only
+ *  to synthesize an explanation when the model gave none. */
+const CATEGORY_ISSUE_CODE: Record<keyof RawVerdicts, ValidationIssueCode> = {
+  topicAlignment: 'OFF_TOPIC',
+  grammar: 'UNGRAMMATICAL',
+  level: 'WRONG_LEVEL',
+  naturalness: 'UNNATURAL',
+};
+
+/** Guards against a missing or malformed `verdicts` object so it can never
+ *  silently fail-open to PASS (all four lookups would be `undefined`, which
+ *  matches neither 'FAIL' nor 'WARN'). */
+function hasValidVerdicts(v: unknown): v is RawVerdicts {
+  if (typeof v !== 'object' || v === null) return false;
+  const o = v as Record<string, unknown>;
+  return (
+    TOPIC_LEVEL_NATURAL.includes(o.topicAlignment as string) &&
+    GRAMMAR_ONLY.includes(o.grammar as string) &&
+    TOPIC_LEVEL_NATURAL.includes(o.level as string) &&
+    TOPIC_LEVEL_NATURAL.includes(o.naturalness as string)
+  );
 }
 
 @Injectable()
@@ -45,7 +72,17 @@ export class ValidateService {
       const r = raw as RawResult;
       if (typeof r?.itemRef !== 'number' || !validRefs.has(r.itemRef)) continue;
 
-      const verdicts = [r.verdicts?.topicAlignment, r.verdicts?.grammar, r.verdicts?.level, r.verdicts?.naturalness];
+      if (!hasValidVerdicts(r.verdicts)) {
+        // A missing/malformed verdicts object means the item was never
+        // actually judged. Reporting that as PASS would be silent
+        // information loss of the worst kind: a teacher approving an item
+        // believing it was checked. PENDING already means "not judged".
+        byRef.set(r.itemRef, { itemRef: r.itemRef, state: 'PENDING', issues: [], suggestedFix: null });
+        continue;
+      }
+
+      const categories = Object.keys(CATEGORY_ISSUE_CODE) as (keyof RawVerdicts)[];
+      const verdicts = categories.map((c) => r.verdicts[c]);
       const issues: ValidationIssue[] = Array.isArray(r.issues) ? [...r.issues] : [];
       const hasFail = verdicts.includes('FAIL');
       const hasWarn = verdicts.includes('WARN');
@@ -59,6 +96,19 @@ export class ValidateService {
         // downgrade. The model's issue(s) are already in `issues` verbatim;
         // preserve them rather than dropping or rewriting the message.
         state = 'WARN';
+        if (issues.length === 0) {
+          // The model gave no issue at all — a downgrade must never destroy
+          // the reason for it. Synthesize one per failing category so the
+          // teacher learns at least what kind of problem was found.
+          for (const category of categories) {
+            if (r.verdicts[category] === 'FAIL') {
+              issues.push({
+                code: CATEGORY_ISSUE_CODE[category],
+                message: `Model flagged ${category} as FAIL but supplied no explanation.`,
+              });
+            }
+          }
+        }
       } else if (hasWarn) {
         state = 'WARN';
       } else {

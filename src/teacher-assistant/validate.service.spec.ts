@@ -67,6 +67,29 @@ describe('ValidateService.validate', () => {
     expect(res.results[1]).toMatchObject({ itemRef: 1, state: 'PENDING' });
   });
 
+  it('downgrades a FAIL with no issues and no suggestedFix to WARN with a synthesized issue', async () => {
+    const llm = { completeJson: jest.fn().mockResolvedValue({
+      data: { results: [{ itemRef: 0,
+        verdicts: { topicAlignment: 'FAIL', grammar: 'PASS', level: 'PASS', naturalness: 'PASS' },
+        issues: [], suggestedFix: null }] },
+      meta: {} as any }) } as any;
+    const svc = new ValidateService(llm);
+    const res = await svc.validate(req);
+    expect(res.results[0].state).toBe('WARN');
+    expect(res.results[0].issues.length).toBeGreaterThan(0);
+  });
+
+  it('marks an item with malformed verdicts as PENDING rather than PASS', async () => {
+    const llm = { completeJson: jest.fn().mockResolvedValue({
+      data: { results: [{ itemRef: 0,
+        verdicts: {},
+        issues: [], suggestedFix: null }] },
+      meta: {} as any }) } as any;
+    const svc = new ValidateService(llm);
+    const res = await svc.validate(req);
+    expect(res.results[0].state).toBe('PENDING');
+  });
+
   it('never sends any hint about item provenance to the model', async () => {
     const llm = { completeJson: jest.fn().mockResolvedValue({ data: { results: [] }, meta: {} as any }) } as any;
     const svc = new ValidateService(llm);
