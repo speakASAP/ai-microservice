@@ -333,7 +333,16 @@ export interface CheckBlankRequest {
 
 export interface CheckBlankResponse {
   correct: boolean;
-  /** The normalized form accepted, echoed back for rendering. Present only when correct. */
+  /**
+   * The student's own typed text, trimmed, echoed back for rendering into the
+   * blank. Present only when correct, `null` otherwise — it must never carry the
+   * expected answer to a student who got it wrong.
+   *
+   * Deliberately NOT the normalized form: normalization lowercases for
+   * case-insensitive languages, so echoing it back would render "Schule" as
+   * "schule" for a student who typed it correctly. Servers must pass
+   * `gradeBlank`'s `acceptedText` through unchanged.
+   */
   acceptedText: string | null;
   attemptNo: number;
   blanksCorrect: number;
