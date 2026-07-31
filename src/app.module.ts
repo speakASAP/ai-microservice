@@ -11,6 +11,7 @@ import { AiModule } from './ai/ai.module';
 import { EmailTriageModule } from './email-triage/email-triage.module';
 import { ShopAssistantModule } from './shop-assistant/shop-assistant.module';
 import { AdminModule } from './admin/admin.module';
+import { TeacherAssistantModule } from './teacher-assistant/teacher-assistant.module';
 import { ServiceIdentityModule } from './service-identity/service-identity.module';
 import { InferenceLogInterceptor } from './service-identity/inference-log.interceptor';
 import { HealthController } from './health.controller';
@@ -38,6 +39,7 @@ import { HealthController } from './health.controller';
     EmailTriageModule,
     ShopAssistantModule,
     AdminModule,
+    TeacherAssistantModule,
   ],
   controllers: [HealthController],
   providers: [
