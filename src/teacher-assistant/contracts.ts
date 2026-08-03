@@ -403,3 +403,69 @@ export interface ResolveLegacyUserResponse {
   /** True when this call created the mapping rather than finding it. */
   provisioned: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// C10 — Teacher-facing assignment creation
+//
+// Added after Track F found that the wizard's two write calls had no server
+// behind them: education-service exposed the student runner and a teacher
+// summary, but no way to create an assignment at all.
+// ---------------------------------------------------------------------------
+
+/** GET /api/v1/drill-languages on content-service. */
+export interface DrillLanguageDTO {
+  /** content-service's numeric Language.id, required by CreateSetInput. */
+  id: number;
+  /** ISO 639-1, unique. */
+  code: string;
+  name: string;
+}
+
+/** A student a teacher may assign to. */
+export interface DrillTeacherStudentDTO {
+  /** The legacy Django integer DrillAssignment.studentId is keyed on. */
+  id: number;
+  name: string;
+  /** Groups the student belongs to, for the wizard's group picker. */
+  groupUuids: string[];
+}
+
+/** GET /api/v1/drill-assignments/teacher/students */
+export interface DrillTeacherRosterResponse {
+  students: DrillTeacherStudentDTO[];
+  groups: { uuid: string; name: string; studentIds: number[] }[];
+}
+
+/** POST /api/v1/drill-assignments/generate */
+export interface GenerateAssignmentsRequest {
+  studentIds: number[];
+  lessonUuid?: string | null;
+  languageCode: string;
+  materialLanguage: string;
+  level?: CefrLevel | null;
+  topicSlugs: string[];
+  /** The teacher's verbatim free-text request. May be empty when topics carry it. */
+  instructions: string;
+  count: number;
+  dueAt?: string | null;
+}
+
+export interface GenerateAssignmentsResponse {
+  /** One per student, in the order the ids were supplied. */
+  assignmentUuids: string[];
+  /** The set the pipeline will create. Known before generation starts. */
+  setUuid: string;
+  batchUuid: string;
+}
+
+/** POST /api/v1/drill-assignments/assign */
+export interface AssignFromSetRequest {
+  setUuid: string;
+  studentIds: number[];
+  lessonUuid?: string | null;
+  dueAt?: string | null;
+}
+
+export interface AssignFromSetResponse {
+  assignments: DrillAssignmentDTO[];
+}
