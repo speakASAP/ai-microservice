@@ -1,6 +1,11 @@
 /**
  * Drill contracts — SINGLE SOURCE OF TRUTH.
  *
+ * The source is speakasap/shared/contracts/drills.contracts.ts. This header is copied
+ * verbatim into every vendored file, so if you are reading it anywhere else — including
+ * frontend/lib/drills/contracts.ts — you are in a generated copy and your edit will be
+ * overwritten by the next sync.
+ *
  * Do not edit the vendored copies in services. Edit this file, then run
  *   speakasap/shared/scripts/sync-drill-contracts.sh
  * A contract change invalidates in-flight work in other tracks: announce it.
@@ -434,6 +439,24 @@ export interface DrillTeacherStudentDTO {
 export interface DrillTeacherRosterResponse {
   students: DrillTeacherStudentDTO[];
   groups: { uuid: string; name: string; studentIds: number[] }[];
+  /**
+   * Total students on the roster before `limit`/`offset`. A teacher with 656 students
+   * (production, teacher 10) needs to know the picker is showing a window, not the lot.
+   */
+  total: number;
+  /**
+   * True when more students match beyond this page. Additive with `total` so a caller
+   * that ignores both still gets a working — if truncated — list rather than an error.
+   */
+  hasMore: boolean;
+}
+
+/** Query for GET /api/v1/drill-assignments/teacher/students. All fields optional. */
+export interface DrillTeacherRosterQuery {
+  /** Case-insensitive match on the resolved student name. */
+  search?: string;
+  limit?: number;
+  offset?: number;
 }
 
 /** POST /api/v1/drill-assignments/generate */
