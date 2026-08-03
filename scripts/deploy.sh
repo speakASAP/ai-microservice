@@ -3,6 +3,12 @@
 # Usage: ./scripts/deploy.sh [image-tag]
 set -e
 
+# Refuse a dry run rather than performing a real deploy. See the guard for why
+# this script cannot honour DRY_RUN properly and what to use instead.
+source /home/ssf/Documents/Github/shared/scripts/deploy-lib/dry-run-guard.sh
+deploy_dry_run_guard "$@"
+
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -42,6 +48,11 @@ compute_default_tag() {
 }
 
 DEFAULT_TAG="$(compute_default_tag)"
+# Read the tag from the argument list with --dry-run already stripped by the
+# guard above. Using "$1" directly made `--dry-run` the image tag, which failed
+# with `invalid tag "localhost:5000/ai-microservice:--dry-run"` only AFTER the
+# build and push had run.
+eval set -- "${DEPLOY_ARGS_WITHOUT_DRY_RUN:-}"
 IMAGE_TAG="${1:-$DEFAULT_TAG}"
 IMAGE="${REGISTRY}/${SERVICE_NAME}:${IMAGE_TAG}"
 IMAGE_LATEST="${REGISTRY}/${SERVICE_NAME}:latest"
