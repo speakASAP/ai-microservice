@@ -13,6 +13,15 @@ Each sentence uses inline markup: [prompt]{answer}
   - An empty prompt is allowed for suffix drills: "Ich heiß[]{e} Peter."
   - A sentence may contain more than one blank.
 
+  NEVER write the prompt in English unless English IS the material language. A German
+  course for Russian speakers must read "Wir [приходить]{sind gekommen}." — never
+  "Wir [have come]{sind gekommen}." The prompt is the learner's own language; the
+  answer is the language being learned.
+
+  Worked example — target German, material Russian:
+    Ich [делать]{habe gemacht} die Aufgabe.
+    Wir [приходить]{sind gekommen} nach Hause.
+
 HARD RULES
 1. Every sentence must exercise the requested grammar point in the BLANK itself.
    If the topic is prepositions, the blank must be a preposition — not an article,
@@ -30,14 +39,40 @@ HARD RULES
 
 Return JSON only, matching the supplied schema. No commentary.`;
 
+/**
+ * ISO code to the name a model actually recognises.
+ *
+ * "MATERIAL language: ru" was too weak a signal against a page of English examples;
+ * "Russian" is not. Unknown codes pass through unchanged rather than being guessed at.
+ */
+const LANGUAGE_NAMES: Record<string, string> = {
+  de: 'German',
+  ru: 'Russian',
+  en: 'English',
+  es: 'Spanish',
+  fr: 'French',
+  it: 'Italian',
+  cs: 'Czech',
+  pt: 'Portuguese',
+};
+
+function languageName(code: string): string {
+  const key = (code || '').toLowerCase();
+  return LANGUAGE_NAMES[key] ? `${LANGUAGE_NAMES[key]} (${key})` : code;
+}
+
 export function buildGenerateUserPrompt(req: GenerateDrillRequest): string {
   const topics = req.topics
     .map((t) => `- ${t.title} (${t.slug})${t.focus ? ` — focus on: ${t.focus}` : ''}`)
     .join('\n');
 
   return [
-    `TARGET language: ${req.languageCode}`,
-    `MATERIAL language (prompts and hints): ${req.materialLanguage}`,
+    `TARGET language (what the learner types): ${languageName(req.languageCode)}`,
+    `MATERIAL language (what every prompt and hint is written in): ${languageName(req.materialLanguage)}`,
+    // Repeated next to the markup rule because the rule and the language declaration
+    // were paragraphs apart, and the model followed the nearer signal — the bank
+    // examples, which were English.
+    `Every [prompt] must be written in ${languageName(req.materialLanguage)}.`,
     `Level: ${req.level ?? 'unspecified'}`,
     `Number of sentences to produce: ${req.count}`,
     `Maximum new words per sentence: ${req.maxNewWordsPerSentence}`,
