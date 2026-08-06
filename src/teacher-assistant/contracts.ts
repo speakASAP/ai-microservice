@@ -462,7 +462,13 @@ export interface DrillTeacherRosterQuery {
 /** POST /api/v1/drill-assignments/generate */
 export interface GenerateAssignmentsRequest {
   studentIds: number[];
-  lessonUuid?: string | null;
+  /**
+   * Required. Teacher-origin work is created within a lesson: the student roster is
+   * lesson-scoped, and without a lesson the server cannot read the Teacher profile pk
+   * from anywhere authoritative. The server refuses a missing or blank value with 400
+   * LESSON_REQUIRED. Self-drilling is the exception and keeps its own optional lesson.
+   */
+  lessonUuid: string;
   languageCode: string;
   materialLanguage: string;
   level?: CefrLevel | null;
@@ -485,7 +491,13 @@ export interface GenerateAssignmentsResponse {
 export interface AssignFromSetRequest {
   setUuid: string;
   studentIds: number[];
-  lessonUuid?: string | null;
+  /**
+   * Required. Teacher-origin work is created within a lesson: the student roster is
+   * lesson-scoped, and without a lesson the server cannot read the Teacher profile pk
+   * from anywhere authoritative. The server refuses a missing or blank value with 400
+   * LESSON_REQUIRED. Self-drilling is the exception and keeps its own optional lesson.
+   */
+  lessonUuid: string;
   dueAt?: string | null;
 }
 
