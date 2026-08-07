@@ -142,9 +142,17 @@ export class LlmClient {
     return `${userPrompt}\n\nReturn JSON matching exactly this schema:\n${JSON.stringify(outputSchema)}`;
   }
 
-  /** Mints a self-issued service token. The secret is read here and never
-   *  logged, stored on the instance, or included in any thrown message. */
+  /** Mints a self-issued service token. Keys are read here and never logged,
+   *  stored on the instance, or included in any thrown message.
+   *
+   *  Prefers RS256 — the HS256 branch exists only for the migration window and
+   *  stops working once ALLOW_HS256_FALLBACK is closed. */
   private mintServiceToken(): string {
+    const privateKey = process.env.JWT_PRIVATE_KEY;
+    if (privateKey) {
+      return JwtUtil.signRS256(SELF_SERVICE_ID, privateKey, SERVICE_TOKEN_TTL_SECONDS);
+    }
+
     const secret = process.env.JWT_SECRET;
     if (!secret) {
       throw new ServiceUnavailableException('ai/complete auth is not configured');

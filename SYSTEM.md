@@ -10,6 +10,27 @@ NestJS. Modules: Orchestrator, NLP, ASR, Document AI, Prototype Generator, Free 
 - LiteLLM handles automatic failover when `LITELLM_BASE_URL` is set (e.g. OpenRouter issues → Ollama in compose via `OLLAMA_API_BASE`)
 - Endpoint: `POST /ai/complete` — body: `{ model_tier, system_prompt, user_prompt, output_schema?, max_tokens?, correlation_id? }` (see `docs/model-tier-endpoints.md`)
 
+## Service authentication (RS256)
+
+Callers present `Authorization: Bearer <AI_SERVICE_TOKEN>`. Tokens are **RS256**: this service holds the private key (`JWT_PRIVATE_KEY`) and signs; verification uses `JWT_PUBLIC_KEY`. A leaked public key cannot mint tokens, so compromising one caller does not affect any other.
+
+This replaced a **shared** HS256 `JWT_SECRET` that 11 services held in common — symmetric, so any of them could impersonate the others. Rotating it on 2026-08-01 without re-minting the dependent tokens broke 9 services with `401 Invalid signature` while their `exp` still read 2027.
+
+| Variable | Meaning |
+|---|---|
+| `JWT_PRIVATE_KEY` | RSA-2048 PEM. **Only this service holds it.** Signs service tokens. |
+| `JWT_PUBLIC_KEY` | RSA public PEM. Verifies incoming tokens. Not secret. |
+| `ALLOW_HS256_FALLBACK` | `false` closes the legacy shared-secret path. Defaults to `true` so an unconfigured deploy cannot lock every caller out. |
+
+Never rotate a signing key without re-minting the tokens signed by it:
+
+```bash
+./scripts/mint-service-token.sh --all      # re-mint, write Vault, resync ESO, restart
+./scripts/verify-service-tokens.sh         # audit; exits 1 if any token is stale
+```
+
+Both verify paths pin `alg` from the token header before verifying — without that, a token can be relabelled `HS256` and signed with the public key (algorithm-confusion attack).
+
 ## Integrations
 
 | Dependency | URL |

@@ -31,7 +31,31 @@ export class ServiceAuthGuard implements CanActivate {
     }
 
     const token = authHeader.slice(7);
+    const publicKey = process.env.JWT_PUBLIC_KEY;
     const secret = process.env.JWT_SECRET;
+
+    // RS256 is the target scheme: only ai-microservice holds the private key,
+    // so a compromise of any caller cannot be used to mint tokens.
+    if (publicKey) {
+      try {
+        const payload = JwtUtil.verifyRS256(token, publicKey);
+        request.serviceId = payload.serviceId;
+        return true;
+      } catch (err: unknown) {
+        // Fall through to HS256 only while the migration window is open.
+        if (!this.hs256FallbackEnabled() || !secret) {
+          const message = err instanceof Error ? err.message : 'Invalid token';
+          throw new UnauthorizedException(message);
+        }
+      }
+    }
+
+    // Legacy HS256 path. Retained so callers still holding shared-secret tokens
+    // keep working until every one of them has been re-minted as RS256; remove
+    // by setting ALLOW_HS256_FALLBACK=false once that is done.
+    if (!this.hs256FallbackEnabled()) {
+      throw new UnauthorizedException('HS256 service tokens are no longer accepted');
+    }
     if (!secret) throw new UnauthorizedException('JWT_SECRET not configured');
 
     try {
@@ -42,5 +66,10 @@ export class ServiceAuthGuard implements CanActivate {
       const message = err instanceof Error ? err.message : 'Invalid token';
       throw new UnauthorizedException(message);
     }
+  }
+
+  /** Defaults to true so an unconfigured deploy cannot lock every caller out. */
+  private hs256FallbackEnabled(): boolean {
+    return process.env.ALLOW_HS256_FALLBACK !== 'false';
   }
 }
