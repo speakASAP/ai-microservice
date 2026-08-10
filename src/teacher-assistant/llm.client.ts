@@ -52,11 +52,89 @@ const ENVELOPE_KEYS = new Set([
   'agent_service_scope',
 ]);
 
+/**
+ * Upstream statuses worth a second attempt.
+ *
+ * 503 is what a LiteLLM timeout becomes by the time it reaches here; 500 and 502 are the
+ * same class of "the far side broke, it may not next time". 429 is included because the
+ * rate limit that caused it is usually another caller's burst, not this request being
+ * inherently too large.
+ *
+ * 4xx is deliberately absent apart from 429: a malformed request or a rejected token
+ * fails identically on the second attempt, so retrying only doubles the teacher's wait
+ * and pays for a model call that teaches nothing.
+ */
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+/**
+ * `error_code` values that mean "try again", as opposed to "this will never work".
+ * AI_AUTH_ERROR and a schema the model cannot satisfy are permanent; a rate limit or a
+ * CLI that fell over are not.
+ */
+const RETRYABLE_ERROR_CODES = new Set(['RATE_LIMIT', 'CLI_FAILED', 'AI_HTTP_TIMEOUT', 'TIMEOUT']);
+
+/** Thrown for an upstream failure, carrying whether a second attempt is worth making. */
+class UpstreamFailure extends ServiceUnavailableException {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * A client-side abort (`AbortSignal.timeout`) surfaces as a TimeoutError/AbortError from
+ * fetch rather than as a response, so it never reaches the status check above. It is the
+ * most literal form of "the upstream was too slow", so it retries.
+ */
+function isTransientUpstreamFailure(err: unknown): boolean {
+  if (err instanceof UpstreamFailure) {
+    return err.retryable;
+  }
+  const name = (err as { name?: string } | null)?.name ?? '';
+  const message = (err as Error | null)?.message ?? '';
+  return (
+    name === 'TimeoutError' ||
+    name === 'AbortError' ||
+    /aborted|timeout|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up/i.test(message)
+  );
+}
+
 @Injectable()
 export class LlmClient {
   private readonly logger = new Logger(LlmClient.name);
 
+  /**
+   * ONE retry for transient upstream failures, then give up.
+   *
+   * A LiteLLM timeout reached the teacher as a red banner mid-generation, after they had
+   * already waited: `AI_HTTP_TIMEOUT` -> `ai/complete returned 500` -> 503 (2026-08-09,
+   * once in 24h, and a manual retry succeeded). Absorbing that beats surfacing it.
+   *
+   * Deliberately ONE, and deliberately only for transient causes. Each retry costs a
+   * full model call and doubles the wait, so a deterministic failure — 400, 401, a
+   * schema the model cannot satisfy — must fail on the first attempt rather than
+   * charging twice to learn the same thing.
+   */
   async completeJson<T>(args: CompleteJsonArgs): Promise<{ data: T; meta: LlmMeta }> {
+    try {
+      return await this.attemptCompleteJson<T>(args);
+    } catch (err) {
+      if (!isTransientUpstreamFailure(err)) {
+        throw err;
+      }
+      this.logger.warn(
+        `ai/complete failed transiently (${(err as Error).message.slice(0, 120)}); retrying once ` +
+          `correlationId=${args.correlationId}`,
+      );
+      return this.attemptCompleteJson<T>(args);
+    }
+  }
+
+  private async attemptCompleteJson<T>(
+    args: CompleteJsonArgs,
+  ): Promise<{ data: T; meta: LlmMeta }> {
     const base = (process.env.AI_ORCHESTRATOR_URL || 'http://localhost:3380').replace(/\/$/, '');
     const tier = process.env.DRILL_GENERATION_MODEL_TIER || 'smart';
     const timeoutMs = this.resolveTimeoutMs();
@@ -89,7 +167,10 @@ export class LlmClient {
       // never hand it back to the caller.
       const body = await res.text().catch(() => '');
       this.logger.error(`ai/complete returned ${res.status}: ${body.slice(0, 500)}`);
-      throw new ServiceUnavailableException(`ai/complete failed with status ${res.status}`);
+      throw new UpstreamFailure(
+        `ai/complete failed with status ${res.status}`,
+        RETRYABLE_STATUSES.has(res.status),
+      );
     }
 
     const payload = (await res.json()) as AiCompleteResponse;
@@ -102,7 +183,10 @@ export class LlmClient {
       this.logger.error(
         `ai/complete reported ${payload.error_code}: ${(payload.error_message ?? '').slice(0, 500)}`,
       );
-      throw new ServiceUnavailableException(`ai/complete failed: ${payload.error_code}`);
+      throw new UpstreamFailure(
+        `ai/complete failed: ${payload.error_code}`,
+        RETRYABLE_ERROR_CODES.has(payload.error_code),
+      );
     }
 
     const meta: LlmMeta = {

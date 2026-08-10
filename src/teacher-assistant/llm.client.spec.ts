@@ -196,3 +196,111 @@ describe('LlmClient.completeJson', () => {
     await expect(call(new LlmClient())).rejects.not.toThrow(/leaky-detail/);
   });
 });
+
+/**
+ * A transient LiteLLM timeout used to reach the teacher as a red banner they had to
+ * click Retry on, mid-way through a drill generation they had already waited for.
+ *
+ * Reported 2026-08-09: `AI_HTTP_TIMEOUT: LiteLLM did not respond within 120000ms` →
+ * `ai/complete returned 500` → `ai-microservice responded 503`. It happened once in 24h,
+ * and a retry succeeded, so the failure was worth absorbing rather than surfacing.
+ *
+ * ONE retry, and only for transient upstream failures. A retry is not free — it costs
+ * another full model call and doubles the teacher's wait — so a deterministic failure
+ * (bad request, auth, a schema the model cannot satisfy) must fail immediately.
+ */
+describe('LlmClient.completeJson — transient failure retry', () => {
+  const fetchMock = jest.fn();
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    process.env.AI_ORCHESTRATOR_URL = 'http://ai-microservice:3380';
+    process.env.DRILL_GENERATION_MODEL_TIER = 'smart';
+    process.env.JWT_SECRET = 'test-jwt-secret-not-a-real-credential';
+  });
+
+  const call = (client: LlmClient) =>
+    client.completeJson<Record<string, unknown>>({
+      systemPrompt: 'sys',
+      userPrompt: 'user',
+      outputSchema: { type: 'object' },
+      correlationId: 'c-1',
+    });
+
+  const ok = () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ text: '{"items":[]}', model_used: 'smart', usage: {} }),
+  });
+
+  it('retries once after a 503 and returns the second response', async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'upstream timeout' })
+      .mockResolvedValueOnce(ok());
+
+    const result = await call(new LlmClient());
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.data).toEqual({ items: [] });
+  });
+
+  it('retries once after an aborted request (the client-side timeout)', async () => {
+    const abort = Object.assign(new Error('The operation was aborted'), { name: 'TimeoutError' });
+    fetchMock.mockRejectedValueOnce(abort).mockResolvedValueOnce(ok());
+
+    const result = await call(new LlmClient());
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.data).toEqual({ items: [] });
+  });
+
+  it('retries once when the upstream reports a transient error_code', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ text: '', error_code: 'RATE_LIMIT', error_message: 'slow down' }),
+      })
+      .mockResolvedValueOnce(ok());
+
+    const result = await call(new LlmClient());
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.data).toEqual({ items: [] });
+  });
+
+  it('gives up after the second failure rather than retrying forever', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 503, text: async () => 'still down' });
+
+    await expect(call(new LlmClient())).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does NOT retry a 400 — a bad request fails the same way twice', async () => {
+    // Retrying a deterministic failure just doubles the teacher's wait before the same
+    // error, and pays for a second model call to learn nothing.
+    fetchMock.mockResolvedValue({ ok: false, status: 400, text: async () => 'bad request' });
+
+    await expect(call(new LlmClient())).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT retry a 401', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 401, text: async () => 'unauthorized' });
+
+    await expect(call(new LlmClient())).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT retry a permanent error_code', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ text: '', error_code: 'AI_AUTH_ERROR', error_message: 'bad key' }),
+    });
+
+    await expect(call(new LlmClient())).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

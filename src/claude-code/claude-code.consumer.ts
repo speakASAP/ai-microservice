@@ -24,7 +24,13 @@ const CODEX_APPROVAL_POLICY = () => process.env.CODEX_APPROVAL_POLICY?.trim() ||
 const RATE_LIMIT_FALLBACK_PROVIDER = () => process.env.CLAUDE_CODE_RATE_LIMIT_FALLBACK_PROVIDER?.trim() || 'litellm';
 const LITELLM_BASE_URL = () => process.env.LITELLM_BASE_URL?.replace(/\/$/, '') || '';
 const LITELLM_MASTER_KEY = () => process.env.LITELLM_MASTER_KEY || '';
-const LITELLM_FALLBACK_MODELS = () => (process.env.CLAUDE_CODE_LITELLM_FALLBACK_MODELS || 'free,cheap')
+// Tried IN ORDER, so the first entry pays its latency on every fallback. `cheap` leads
+// because it is as fast as `smart` and 25x faster than `free`: measured 2026-08-09 on
+// the same 10-token reply, cheap 813ms vs free 19.8s. With `free` first, a fallback
+// spent 20s before reaching a model that answers in under a second, which is a large
+// part of how a 120s budget got exhausted. `free` is kept as the last resort — it still
+// costs nothing, which is the whole point of having it.
+const LITELLM_FALLBACK_MODELS = () => (process.env.CLAUDE_CODE_LITELLM_FALLBACK_MODELS || 'cheap,free')
   .split(',')
   .map((model) => model.trim())
   .filter(Boolean);
