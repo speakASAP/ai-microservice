@@ -74,3 +74,9 @@ data:
   # 2026-08-09). free stays last — still free, just slow.
   CLAUDE_CODE_LITELLM_FALLBACK_MODELS: "cheap,free"
   CLAUDE_CODE_LITELLM_TIMEOUT_MS: "120000"
+  # Per-attempt budget for the drilling generator, sized so TWO attempts (LlmClient
+  # retries once on a transient failure) fit inside education-service's 180s client
+  # timeout — 2x75s + overhead. At 120s a retry could not finish before the caller gave
+  # up, which is the case that produced a red banner for the teacher on 2026-08-09.
+  # Generous against measured latency: a 20-item generation takes ~21s on the smart tier.
+  LITELLM_TIMEOUT_MS: "75000"
