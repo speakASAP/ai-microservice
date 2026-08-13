@@ -5,7 +5,8 @@ import { TeacherAssistantController } from './teacher-assistant.controller';
 import { ServiceAuthGuard } from '../service-identity/service-auth.guard';
 import { GenerateDrillRequestDto } from './dto/generate-drill-request.dto';
 import { ValidateDrillRequestDto } from './dto/validate-drill-request.dto';
-import { GenerateDrillRequest, ValidateDrillRequest } from './contracts';
+import { AnalyzeErrorsRequestDto } from './dto/analyze-errors-request.dto';
+import { AnalyzeErrorsRequest, GenerateDrillRequest, ValidateDrillRequest } from './contracts';
 
 // Mirrors the global pipe installed in main.ts — see bootstrap()'s
 // `app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))`.
@@ -42,8 +43,27 @@ const validValidateBody: ValidateDrillRequest = {
   correlationId: 'c-1',
 };
 
+const validAnalyzeBody: AnalyzeErrorsRequest = {
+  languageCode: 'en',
+  materialLanguage: 'ru',
+  level: 'A2',
+  allowedTopicSlugs: ['en.prepositions-of-movement', 'en.other'],
+  failures: [
+    {
+      answer: 'through',
+      sentence: 'We will have to walk {{0}} this market.',
+      prompt: 'через',
+      wrongAttempts: ['across'],
+      revealed: false,
+      mistakeCount: 1,
+    },
+  ],
+  correlationId: 'cid-1',
+};
+
 const generateMetadata: ArgumentMetadata = { type: 'body', metatype: GenerateDrillRequestDto, data: '' };
 const validateMetadata: ArgumentMetadata = { type: 'body', metatype: ValidateDrillRequestDto, data: '' };
+const analyzeMetadata: ArgumentMetadata = { type: 'body', metatype: AnalyzeErrorsRequestDto, data: '' };
 
 describe('TeacherAssistantController guarding', () => {
   it('applies ServiceAuthGuard to the controller', () => {
@@ -134,13 +154,48 @@ describe('TeacherAssistantController request validation (via the global Validati
     body.items[0].hint = '(warten auf – ждать)';
     await expect(pipe.transform(body, validateMetadata)).resolves.toBeDefined();
   });
+
+  it('accepts a well-formed analyze-drill-errors body', async () => {
+    await expect(pipe.transform({ ...validAnalyzeBody }, analyzeMetadata)).resolves.toBeDefined();
+  });
+
+  // Every key of AnalyzeErrorsRequest (6 fields) — none of them are `?:` in
+  // the contract, so a missing key must always reject.
+  const analyzeRequiredFields: (keyof AnalyzeErrorsRequest)[] = [
+    'languageCode',
+    'materialLanguage',
+    'level',
+    'allowedTopicSlugs',
+    'failures',
+    'correlationId',
+  ];
+
+  it.each(analyzeRequiredFields)(
+    'rejects an analyze-drill-errors body missing %s with 400',
+    async (field) => {
+      const body: Record<string, unknown> = { ...validAnalyzeBody };
+      delete body[field];
+      await expect(pipe.transform(body, analyzeMetadata)).rejects.toBeInstanceOf(BadRequestException);
+    },
+  );
+
+  it('rejects an analyze-drill-errors body with an empty allowedTopicSlugs', async () => {
+    const body = { ...validAnalyzeBody, allowedTopicSlugs: [] };
+    await expect(pipe.transform(body, analyzeMetadata)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects an analyze-drill-errors body with an empty failures list', async () => {
+    const body = { ...validAnalyzeBody, failures: [] };
+    await expect(pipe.transform(body, analyzeMetadata)).rejects.toBeInstanceOf(BadRequestException);
+  });
 });
 
 describe('TeacherAssistantController delegation', () => {
   it('delegates generate-drill to GenerateService.generate exactly once', async () => {
     const generateService = { generate: jest.fn().mockResolvedValue({ items: [], meta: {} }) } as any;
     const validateService = { validate: jest.fn() } as any;
-    const controller = new TeacherAssistantController(generateService, validateService);
+    const analyzeService = { analyze: jest.fn() } as any;
+    const controller = new TeacherAssistantController(generateService, validateService, analyzeService);
 
     const dto = Object.assign(new GenerateDrillRequestDto(), validGenerateBody);
     const result = await controller.generateDrill(dto);
@@ -148,13 +203,15 @@ describe('TeacherAssistantController delegation', () => {
     expect(generateService.generate).toHaveBeenCalledTimes(1);
     expect(generateService.generate).toHaveBeenCalledWith(dto);
     expect(validateService.validate).not.toHaveBeenCalled();
+    expect(analyzeService.analyze).not.toHaveBeenCalled();
     expect(result).toEqual({ items: [], meta: {} });
   });
 
   it('delegates validate-drill to ValidateService.validate exactly once', async () => {
     const generateService = { generate: jest.fn() } as any;
     const validateService = { validate: jest.fn().mockResolvedValue({ results: [], meta: {} }) } as any;
-    const controller = new TeacherAssistantController(generateService, validateService);
+    const analyzeService = { analyze: jest.fn() } as any;
+    const controller = new TeacherAssistantController(generateService, validateService, analyzeService);
 
     const dto = Object.assign(new ValidateDrillRequestDto(), validValidateBody);
     const result = await controller.validateDrill(dto);
@@ -162,6 +219,23 @@ describe('TeacherAssistantController delegation', () => {
     expect(validateService.validate).toHaveBeenCalledTimes(1);
     expect(validateService.validate).toHaveBeenCalledWith(dto);
     expect(generateService.generate).not.toHaveBeenCalled();
+    expect(analyzeService.analyze).not.toHaveBeenCalled();
     expect(result).toEqual({ results: [], meta: {} });
+  });
+
+  it('routes analyze-drill-errors to the analyze service', async () => {
+    const generateService = { generate: jest.fn() } as any;
+    const validateService = { validate: jest.fn() } as any;
+    const analyzeService = { analyze: jest.fn().mockResolvedValue({ clusters: [], meta: {} }) } as any;
+    const controller = new TeacherAssistantController(generateService, validateService, analyzeService);
+
+    const dto = Object.assign(new AnalyzeErrorsRequestDto(), validAnalyzeBody);
+    const result = await controller.analyzeDrillErrors(dto);
+
+    expect(analyzeService.analyze).toHaveBeenCalledTimes(1);
+    expect(analyzeService.analyze).toHaveBeenCalledWith(dto);
+    expect(generateService.generate).not.toHaveBeenCalled();
+    expect(validateService.validate).not.toHaveBeenCalled();
+    expect(result).toEqual({ clusters: [], meta: {} });
   });
 });

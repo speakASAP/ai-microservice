@@ -13,6 +13,8 @@
  * Spec: docs/superpowers/specs/2026-07-29-drilling-assignments-design.md
  */
 
+import type { LlmMeta } from './llm.client';
+
 /** Inline drill markup: "Ich gehe [in]{in} die Schule." — [prompt]{answer}. */
 export type DrillTemplate = string;
 
@@ -521,4 +523,60 @@ export interface AssignFromSetRequest {
 
 export interface AssignFromSetResponse {
   assignments: DrillAssignmentDTO[];
+}
+
+// ---------------------------------------------------------------------------
+// Task 6 — error-analysis clustering (ai-microservice /teacher-assistant)
+//
+// Local addition, not (yet) part of the synced speakasap/shared contract
+// header above. Reuses LlmMeta from ./llm.client rather than adding a third
+// copy of the generate/validate inline meta shape.
+// ---------------------------------------------------------------------------
+
+/** One blank the student got wrong, as education-service reports it. */
+export interface AnalyzeFailure {
+  /** The correct answer. */
+  answer: string;
+  /** The sentence, blank placeholder included. */
+  sentence: string;
+  /** The blank's prompt, e.g. "через". Null when the item carries none. */
+  prompt: string | null;
+  /** What the student typed, in the order they tried it. */
+  wrongAttempts: string[];
+  /** Whether the student revealed the answer instead of solving it. */
+  revealed: boolean;
+  mistakeCount: number;
+}
+
+export interface AnalyzeErrorsRequest {
+  /** The language being learned, e.g. "en". */
+  languageCode: string;
+  /** The language the explanation must be written in: "ru" or "en". */
+  materialLanguage: string;
+  level: string | null;
+  /** The only topic slugs the response may use. */
+  allowedTopicSlugs: string[];
+  failures: AnalyzeFailure[];
+  correlationId: string;
+}
+
+/** One grammar gap, with the theory that closes it. */
+export interface AnalyzedGapCluster {
+  /** Must be one of the request's `allowedTopicSlugs`. */
+  topicSlug: string;
+  /** In `materialLanguage`. */
+  title: string;
+  /** In `materialLanguage`. Addresses what the student actually typed. */
+  explanation: string;
+  /** Short, memorable, in `materialLanguage`. */
+  rules: string[];
+  /** `text` in the target language, `gloss` in `materialLanguage`. */
+  examples: Array<{ text: string; gloss: string }>;
+  /** Which of the request's failure answers this cluster covers. */
+  answers: string[];
+}
+
+export interface AnalyzeErrorsResponse {
+  clusters: AnalyzedGapCluster[];
+  meta: LlmMeta;
 }

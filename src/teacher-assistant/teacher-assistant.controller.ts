@@ -2,9 +2,11 @@ import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { ServiceAuthGuard } from '../service-identity/service-auth.guard';
 import { GenerateService } from './generate.service';
 import { ValidateService } from './validate.service';
+import { AnalyzeService } from './analyze.service';
 import { GenerateDrillRequestDto } from './dto/generate-drill-request.dto';
 import { ValidateDrillRequestDto } from './dto/validate-drill-request.dto';
-import { GenerateDrillResponse, ValidateDrillResponse } from './contracts';
+import { AnalyzeErrorsRequestDto } from './dto/analyze-errors-request.dto';
+import { AnalyzeErrorsResponse, GenerateDrillResponse, ValidateDrillResponse } from './contracts';
 
 /**
  * Service-to-service endpoints called by education-service's drill
@@ -21,6 +23,7 @@ export class TeacherAssistantController {
   constructor(
     private readonly generateService: GenerateService,
     private readonly validateService: ValidateService,
+    private readonly analyzeService: AnalyzeService,
   ) {}
 
   @Post('generate-drill')
@@ -33,5 +36,11 @@ export class TeacherAssistantController {
   @HttpCode(200)
   validateDrill(@Body() dto: ValidateDrillRequestDto): Promise<ValidateDrillResponse> {
     return this.validateService.validate(dto);
+  }
+
+  @Post('analyze-drill-errors')
+  @HttpCode(200)
+  analyzeDrillErrors(@Body() dto: AnalyzeErrorsRequestDto): Promise<AnalyzeErrorsResponse> {
+    return this.analyzeService.analyze(dto);
   }
 }
