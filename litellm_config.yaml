@@ -65,12 +65,31 @@ router_settings:
     - {"free": ["cheap"]}
     - {"cheap": ["cheap-fallback"]}
     - {"smart": ["smart-fallback"]}
-  num_retries: 3
+  # 2026-08-14 — a drill generation hung and the teacher got a red banner after ~150s.
+  # The budgets were nested inside-out: the caller (ai-microservice, LITELLM_TIMEOUT_MS
+  # 75s) aborted while THIS proxy was still working through `request_timeout: 120` on
+  # attempt 1 of 4. The fallback below therefore never ran once in production — the
+  # client always gave up first, and the retry it then did upstream repeated the whole
+  # dead chain. Uvicorn only access-logs completed requests, so the aborted attempts
+  # left no trace here, which is why the proxy looked healthy throughout.
+  #
+  # Budgets must nest: one attempt + one fallback + backoff must finish INSIDE the
+  # caller's timeout, or the fallback is decorative. The caller's 75s is itself pinned
+  # from above — education-service allows 180s and LlmClient retries once, so 2x75s is
+  # the ceiling and LITELLM_TIMEOUT_MS cannot simply be raised to make room here.
+  # 30 + 30 + 5 = 65s worst case, under 75s with headroom for connect + JSON parse.
+  # Retries dropped 3 -> 1: with a fallback model configured, retrying a stalled vendor
+  # three times only burns the budget the fallback needs to reach a different vendor.
+  num_retries: 1
   retry_after: 5
 
 litellm_settings:
   drop_params: true
-  request_timeout: 120
+  # Per-attempt, NOT per-request: the router multiplies this by attempts + fallbacks.
+  # Real drill generations complete in 8-19s (measured 2026-08-14 against `smart`,
+  # `smart-fallback` and `cheap`), so 30s is well clear of normal latency; anything
+  # slower is a stalled vendor, and switching vendors beats waiting it out.
+  request_timeout: 30
   success_callback: ["langfuse"]
   failure_callback: ["langfuse"]
 

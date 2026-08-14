@@ -47,6 +47,25 @@ describe('AiService - LiteLLM routing', () => {
     );
   });
 
+  /**
+   * A LiteLLM stall used to escape as a bare `throw`, which NestJS turned into a 500.
+   * Callers classify by `error_code`, and a 500 carries none, so the teacher got a
+   * generic "responded 503" banner for a condition their caller is willing to retry
+   * (2026-08-14). The timeout must come back like every other failure on this path:
+   * a resolved result carrying AI_HTTP_TIMEOUT.
+   */
+  it('returns AI_HTTP_TIMEOUT as a result rather than throwing when LiteLLM stalls', async () => {
+    global.fetch = jest.fn().mockRejectedValue(
+      Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' }),
+    );
+
+    const result = await service.complete({ model_tier: 'smart', user_prompt: 'generate a drill' });
+
+    expect(result.error_code).toBe('AI_HTTP_TIMEOUT');
+    expect(result.text).toBe('');
+    expect(result.model_used).toBe('smart');
+  });
+
   it('keeps business_id optional in the request contract', () => {
     expect(() => AiCompleteRequestSchema.parse({ model_tier: 'free', user_prompt: 'say ok' })).not.toThrow();
   });

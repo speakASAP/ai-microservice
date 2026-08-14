@@ -141,6 +141,9 @@ function litellmErrorResult(model: string, status: number, detail: string): AiCo
   let error_code = 'AI_SERVICE_ERROR';
   if (status === 429) error_code = 'RATE_LIMIT';
   else if (status === 401 || status === 403) error_code = 'AI_AUTH_ERROR';
+  // Callers retry AI_HTTP_TIMEOUT but not the generic AI_SERVICE_ERROR, so a stall must
+  // keep its own code rather than collapsing into "something went wrong".
+  else if (status === 504) error_code = 'AI_HTTP_TIMEOUT';
   return {
     text: '',
     model_used: model,
@@ -282,10 +285,28 @@ export class AiService {
       });
     } catch (err: unknown) {
       const detail = err instanceof Error ? err.message : String(err);
-      if (detail.includes('timeout') || detail.includes('aborted')) {
-        throw new Error(`AI_HTTP_TIMEOUT: LiteLLM did not respond within ${LITELLM_TIMEOUT_MS}ms`);
-      }
       this.emitTelemetry(dto.correlation_id, resolveBusinessId(dto), model, 0, 0, audit);
+      if (detail.includes('timeout') || detail.includes('aborted')) {
+        // Returned, not thrown. A bare throw here became a NestJS 500, and 500 is the
+        // one status callers cannot classify: `LlmClient` lists AI_HTTP_TIMEOUT as
+        // retryable, but it never saw the code, so it fell back to matching the error
+        // *text* and surfaced the generic "responded 503" banner to the teacher
+        // (2026-08-14). Every other failure on this path already returns a structured
+        // result; the timeout was the lone exception.
+        this.logger.error(
+          `AI_HTTP_TIMEOUT tier=${model} after ${LITELLM_TIMEOUT_MS}ms ` +
+            `correlationId=${dto.correlation_id ?? 'none'} url=${litellmChatCompletionsUrl()}`,
+        );
+        return litellmErrorResult(
+          model,
+          504,
+          `LiteLLM did not respond within ${LITELLM_TIMEOUT_MS}ms`,
+        );
+      }
+      this.logger.error(
+        `LiteLLM unreachable tier=${model} correlationId=${dto.correlation_id ?? 'none'} ` +
+          `url=${litellmChatCompletionsUrl()}: ${detail.slice(0, 300)}`,
+      );
       return litellmErrorResult(model, 0, `LiteLLM unreachable: ${detail}`);
     }
 
