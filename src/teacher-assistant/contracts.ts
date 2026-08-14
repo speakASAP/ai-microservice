@@ -269,7 +269,14 @@ export interface ValidateDrillResponse {
 
 export type DrillAssignmentStatus =
   | 'GENERATING' | 'PENDING_REVIEW' | 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-export type DrillAssignmentOrigin = 'TEACHER' | 'SELF';
+/**
+ * Where an assignment came from.
+ *
+ * `REMEDIAL` is a teacher-created drill built from one gap in a student's completed work —
+ * it has a teacher, like `TEACHER`, but its items are chosen by the student's mistakes
+ * rather than by the teacher's topic pick.
+ */
+export type DrillAssignmentOrigin = 'TEACHER' | 'SELF' | 'REMEDIAL';
 export type GenerationPhase =
   | 'RESOLVING' | 'BANK' | 'GENERATING' | 'VALIDATING' | 'READY' | 'FAILED';
 
@@ -297,13 +304,28 @@ export interface DrillAssignmentDTO {
   dueAt: string | null;
   resourceLinks: { topic: string; url: string }[];
   itemCount: number;
-  /** Blanks the student has answered correctly, out of the total. */
+  /**
+   * Blanks the student ANSWERED CORRECTLY, out of the total. Never counts a reveal.
+   *
+   * This field used to carry the RESOLVED count (correct OR revealed), which rendered
+   * an assignment finished by revealing as a perfect score on the teacher panel. Read
+   * `blanksResolved` for progress and completion; read this one for the score.
+   */
   blanksCorrect: number;
+  /**
+   * Blanks the student is done with: correct OR revealed. An assignment completes when
+   * this reaches `blanksTotal` — never when `blanksCorrect` does.
+   */
+  blanksResolved: number;
+  /** Blanks resolved by revealing the answer rather than answering it. */
+  blanksRevealed: number;
   blanksTotal: number;
   generationProgress: GenerationProgress | null;
   createdAt: string;
   assignedAt: string | null;
   completedAt: string | null;
+  /** Set on REMEDIAL assignments: the gap whose theory belongs above the items. */
+  sourceAnalysisUuid: string | null;
 }
 
 /** ANSWER-FREE. This is the only item shape a student-authenticated call may return. */
@@ -398,9 +420,28 @@ export interface InternalTeacherAssignmentsResponse {
   reviewQueue: { setUuid: string; title: string; studentCount: number; createdAt: string }[];
 }
 
+/**
+ * Teacher-only statistics for one assignment.
+ *
+ * Kept OFF `DrillAssignmentDTO` deliberately. That DTO is what student-authenticated
+ * runner calls return, and `firstTryAccuracy` is a judgement about the student that
+ * the runner must never hand back to them mid-drill — `assignment.mapper.spec.ts` has
+ * a test asserting exactly that. These fields exist only on the internal by-lesson
+ * route, which is behind `InternalTokenGuard` and read by the portal's teacher panel.
+ */
+export interface DrillAssignmentTeacherStats {
+  /**
+   * Share of blanks solved on the FIRST attempt with no reveal, 0..1. Null until the
+   * assignment completes — a partial run has no meaningful accuracy yet.
+   */
+  firstTryAccuracy: number | null;
+  /** Every attempt row on the assignment, including wrong ones and reveals. */
+  attemptCount: number;
+}
+
 /** GET /api/v1/internal/drill-assignments/by-lesson/:lessonUuid */
 export interface InternalLessonAssignmentsResponse {
-  assignments: (DrillAssignmentDTO & { studentName: string })[];
+  assignments: (DrillAssignmentDTO & { studentName: string } & DrillAssignmentTeacherStats)[];
 }
 
 /** POST /internal/users/resolve-or-provision-legacy on auth-microservice. */
@@ -524,7 +565,6 @@ export interface AssignFromSetRequest {
 export interface AssignFromSetResponse {
   assignments: DrillAssignmentDTO[];
 }
-
 // ---------------------------------------------------------------------------
 // Task 6 — error-analysis clustering (ai-microservice /teacher-assistant)
 //
