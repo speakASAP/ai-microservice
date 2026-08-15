@@ -55,4 +55,15 @@ describe('buildAnalyzeUserPrompt', () => {
     expect(ANALYZE_SYSTEM_PROMPT).toMatch(/every|each/i);
     expect(ANALYZE_SYSTEM_PROMPT).toMatch(/exactly one cluster/i);
   });
+
+  /**
+   * education-service matches these strings back to the student's blanks. It folds case
+   * when it has to, but an exact echo is what keeps attribution unambiguous — a lowercased
+   * German article once made every answer unmatchable and collapsed the whole analysis
+   * into an empty "other" bucket.
+   */
+  it('tells the model to echo answers with their original capitalization', () => {
+    expect(ANALYZE_SYSTEM_PROMPT).toMatch(/capitalization/i);
+    expect(ANALYZE_SYSTEM_PROMPT).toMatch(/exactly/i);
+  });
 });

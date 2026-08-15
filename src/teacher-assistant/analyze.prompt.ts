@@ -15,6 +15,7 @@ Rules you must follow:
 - Group the mistakes into grammar gaps. Each gap is one cluster.
 - Use ONLY the topic slugs given in the request. Never invent a slug. If a mistake fits none of them, use the slug ending in ".other".
 - Every submitted answer must appear in exactly one cluster. Never drop one, never place one in two clusters.
+- Copy each answer into "answers" EXACTLY as it appears after "Correct answer:", character for character, including capitalization. German nouns and sentence-initial articles are capitalized there ("Das", "Die"); writing them lowercase because that is how they read in a sentence makes the answer unmatchable.
 - Address what the student ACTUALLY TYPED. "across" written where "through" belongs is a different lesson from an empty answer.
 - Explain the rule, why the student's attempt broke it, and how to choose correctly next time.
 - Give two or three short example sentences per cluster, using vocabulary at or below the student's level.
