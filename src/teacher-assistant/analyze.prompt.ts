@@ -20,6 +20,7 @@ Rules you must follow:
 - Explain the rule, why the student's attempt broke it, and how to choose correctly next time.
 - Give two or three short example sentences per cluster, using vocabulary at or below the student's level.
 - Keep the explanation to a few short paragraphs. A student reads this after finishing an exercise, not before a exam.
+- Write PLAIN TEXT only. No LaTeX, no Markdown, no HTML — the student's page renders these strings literally, so "$\\rightarrow$" appears on screen exactly like that. Write an arrow as "→" and never wrap anything in $...$, \\(...\\) or backticks.
 
 Return JSON only, matching the requested schema.`;
 
