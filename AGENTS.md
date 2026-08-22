@@ -47,11 +47,16 @@ See `docs/INTENT_PRESERVATION.md`.
 Canonical router definitions live in **`litellm_config.yaml`** (edit there first; keep this table in sync).
 
 ```yaml
-free:    ollama/qwen2.5-coder:0.5b          # Ollama via OLLAMA_API_BASE (compose service `ollama`, not host-only)
-cheap:   openrouter/google/gemma-3-27b-it:free   # OpenRouter; LiteLLM fallback → cheap-fallback (same Ollama model)
-smart:   gemini/gemini-2.0-flash             # Gemini API key; LiteLLM fallback → smart-fallback (same Ollama model)
-premium: anthropic/claude-sonnet-4-6          # BLOCKED — human approval required per call (not routed in LiteLLM)
+free:           ollama/qwen2.5-coder:0.5b                          # Ollama via OLLAMA_API_BASE (compose service `ollama`, not host-only)
+cheap:          openrouter/google/gemma-4-26b-a4b-it:free          # OpenRouter; LiteLLM fallback → cheap-fallback
+cheap-fallback: openrouter/nvidia/nemotron-3-nano-30b-a3b:free     # deliberately a different vendor from `cheap`
+smart:          openrouter/google/gemma-4-31b-it:free              # OpenRouter; LiteLLM fallback → smart-fallback
+smart-fallback: openrouter/nvidia/nemotron-3-super-120b-a12b:free  # deliberately a different vendor from `smart`
+premium:        anthropic/claude-sonnet-4-6                        # BLOCKED — human approval required per call (not routed in LiteLLM)
 ```
+
+> ⚠️ `free` is a 0.5B **code** model. It is unsuitable for natural-language prose
+> generation — treat it as a last-resort fallback, not a quality tier.
 
 ## Implementation Providers
 
@@ -72,10 +77,21 @@ Router fallbacks (see `router_settings.fallbacks` in `litellm_config.yaml`):
 
 ```
 Caller → LiteLLM (e.g. ai-microservice-litellm-green:4000)
-  free   → ollama/qwen2.5-coder:0.5b  ; on failure → route "cheap"
-  cheap  → openrouter/.../gemma-3-27b-it:free ; on failure → cheap-fallback → same Ollama model
-  smart  → gemini/gemini-2.0-flash    ; on failure → smart-fallback → same Ollama model
+  free   → ollama/qwen2.5-coder:0.5b            ; on failure → route "cheap"
+  cheap  → openrouter/google/gemma-4-26b-a4b-it:free ; on failure → cheap-fallback → openrouter/nvidia/nemotron-3-nano-30b-a3b:free
+  smart  → openrouter/google/gemma-4-31b-it:free     ; on failure → smart-fallback → openrouter/nvidia/nemotron-3-super-120b-a12b:free
 ```
+
+**Silent quality degradation is a real failure mode.** A fallback returns a *different
+model* than the tier requested, and the response still looks well-formed. Callers doing
+quality-critical generation must read `model_used` from the response (surfaced as `model`
+by `src/teacher-assistant/llm.client.ts:193`), compare it against the requested tier, and
+reject rather than accept a silent downgrade.
+
+**Timeout budgets must nest outward.** See the dated incident comment in
+`litellm_config.yaml` `router_settings`: a caller timeout shorter than this proxy's
+`request_timeout` means the fallback chain never runs at all, and the aborted attempts
+leave no trace in the proxy access log. Set caller timeouts *above* the proxy's.
 
 **Ollama** is the compose-built service (`services/ollama/Dockerfile`); **`OLLAMA_API_BASE`** points at `http://ai-microservice-ollama(-blue|-green):11434` by default. Pull weights into the volume after deploy (see `litellm_config.yaml` header comment).
 
