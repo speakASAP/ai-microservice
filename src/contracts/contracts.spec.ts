@@ -54,6 +54,7 @@ describe('AiCompleteResponseSchema', () => {
   it('accepts valid response', () => {
     const result = AiCompleteResponseSchema.safeParse({
       text: 'hi', model_used: 'sonnet', tier_used: 'smart', model_resolved: true,
+      served_by_fallback: false,
     });
     expect(result.success).toBe(true);
     expect(result.data!.schemaVersion).toBe('1.0');
@@ -61,7 +62,8 @@ describe('AiCompleteResponseSchema', () => {
 
   it('passes through extra fields', () => {
     const result = AiCompleteResponseSchema.safeParse({
-      text: 'hi', model_used: 'sonnet', tier_used: 'smart', model_resolved: true, extra_field: 'x',
+      text: 'hi', model_used: 'sonnet', tier_used: 'smart', model_resolved: true,
+      served_by_fallback: false, extra_field: 'x',
     });
     expect(result.success).toBe(true);
     expect((result.data as any).extra_field).toBe('x');
@@ -77,6 +79,7 @@ describe('AiCompleteResponseSchema', () => {
   it('carries tier_used separately from model_used', () => {
     const result = AiCompleteResponseSchema.safeParse({
       text: 'hi', model_used: 'smart', tier_used: 'smart', model_resolved: false,
+      served_by_fallback: false,
     });
     expect(result.success).toBe(true);
     expect(result.data!.model_resolved).toBe(false);

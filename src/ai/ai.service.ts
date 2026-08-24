@@ -6,6 +6,11 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 import type { AiCompleteRequestInput, ModelTier } from '../contracts';
+import {
+  LITELLM_ATTEMPTED_FALLBACKS_HEADER,
+  LITELLM_MODEL_ID_HEADER,
+  LitellmDeploymentRegistry,
+} from './litellm-deployment-registry';
 import { LoggingClient } from '../claude-code/logging.client';
 import { AiAgent } from '../database/entities/ai-agent.entity';
 import { Repository } from 'typeorm';
@@ -97,6 +102,7 @@ function ccApiErrorResult(model: string, cc: CcJsonResult): AiCompleteResult {
     tier_used: 'free',
     // The API rejected the call, so no model actually served it.
     model_resolved: false,
+    served_by_fallback: false,
     inputTokens: 0,
     outputTokens: 0,
     token_usage_estimate: 0,
@@ -111,8 +117,13 @@ export type AiCompleteResult = Record<string, unknown> & {
   model_used: string;
   /** The tier that was requested — a routing intent, never a served model. */
   tier_used: ModelTier;
-  /** False when upstream returned no model id and model_used falls back to the tier. */
+  /** False when the real upstream model could not be determined; model_used then holds
+   *  the tier name as a stand-in and must not be read as a served model. */
   model_resolved: boolean;
+  /** True when LiteLLM served the call from a fallback deployment rather than the one the
+   *  tier names. The response body alone cannot reveal this — it echoes the alias either
+   *  way — so it is read from the x-litellm-attempted-fallbacks header. */
+  served_by_fallback: boolean;
   inputTokens: number;
   outputTokens: number;
   token_usage_estimate: number;
@@ -140,6 +151,7 @@ function cliFailureResult(model: string, detail: string, errorCode = 'CLI_FAILED
     tier_used: 'free',
     // A CC CLI failure never reached a model, so nothing resolved it.
     model_resolved: false,
+    served_by_fallback: false,
     inputTokens: 0,
     outputTokens: 0,
     token_usage_estimate: 0,
@@ -161,6 +173,7 @@ function litellmErrorResult(tier: ModelTier, status: number, detail: string): Ai
     model_used: tier,
     tier_used: tier,
     model_resolved: false,
+    served_by_fallback: false,
     inputTokens: 0,
     outputTokens: 0,
     token_usage_estimate: 0,
@@ -197,12 +210,30 @@ export class AiService {
   private readonly logger = new Logger(AiService.name);
   private activeProcesses = 0;
 
+  /**
+   * Lazily built because LITELLM_BASE_URL / LITELLM_MASTER_KEY are read at call time
+   * elsewhere in this service; constructing eagerly would bake in whatever the env held
+   * at module init and hide a later correction.
+   */
+  private deploymentRegistryInstance?: LitellmDeploymentRegistry;
+
   constructor(
     private readonly loggingClient: LoggingClient,
     @Optional()
     @InjectRepository(AiAgent)
     private readonly agents?: Repository<AiAgent>,
   ) {}
+
+  private get deploymentRegistry(): LitellmDeploymentRegistry | undefined {
+    if (!isLitellmConfigured()) return undefined;
+    if (!this.deploymentRegistryInstance) {
+      this.deploymentRegistryInstance = new LitellmDeploymentRegistry(
+        litellmBaseUrl(),
+        process.env.LITELLM_MASTER_KEY ?? '',
+      );
+    }
+    return this.deploymentRegistryInstance;
+  }
 
   async complete(dto: AiCompleteRequestInput): Promise<AiCompleteResult> {
     const resolved = await this.resolveAgentRoute(dto);
@@ -337,26 +368,49 @@ export class AiService {
     const outputTokens = body.usage?.completion_tokens ?? 0;
     const { parsedData } = spreadParsedJson(rawText, dto.output_schema);
 
-    // LiteLLM omitting `model` is the defect that surfaced as model_used: "smart" to
-    // cv-tuning (a tier name where a model id belongs). Falling back to the tier is
-    // still the only value available, but it is now flagged rather than passed off as
-    // a real model id, and it is loud.
-    const modelResolved = typeof body.model === 'string' && body.model.length > 0;
+    // `body.model` is NOT the served model: LiteLLM echoes the model_list alias, so a
+    // request for `smart` comes back as "smart" whether smart or smart-fallback served
+    // it (verified against 1.82.6, 2026-08-24). The real id lives in the
+    // x-litellm-model-id header as a deployment hash, which /model/info maps to
+    // litellm_params.model. Resolving it here is what lets downstream grounding guards
+    // tell a served model from a routing label.
+    // Guarded: a proxy or middlebox that strips these headers must degrade to
+    // model_resolved=false, never crash a completion that already succeeded.
+    const headers = res.headers;
+    const deploymentId = headers?.get(LITELLM_MODEL_ID_HEADER) ?? '';
+    const attemptedFallbacks = Number(headers?.get(LITELLM_ATTEMPTED_FALLBACKS_HEADER) ?? '0');
+    const servedByFallback = Number.isFinite(attemptedFallbacks) && attemptedFallbacks > 0;
+
+    const realModel = await this.deploymentRegistry?.resolveModel(deploymentId);
+    const modelResolved = typeof realModel === 'string' && realModel.length > 0;
+
     if (!modelResolved) {
       this.logger.error(
-        `LiteLLM response carried no model id for tier=${model} ` +
-          `correlationId=${dto.correlation_id ?? 'none'}; reporting model_resolved=false`,
+        `could not resolve the model that served tier=${model} ` +
+          `(deploymentId=${deploymentId || 'absent'}, correlationId=${dto.correlation_id ?? 'none'}); ` +
+          'reporting model_resolved=false so callers do not read the tier name as a served model',
       );
     }
-    const resolvedModel = modelResolved ? (body.model as string) : model;
 
-    this.emitTelemetry(dto.correlation_id, resolveBusinessId(dto), resolvedModel, inputTokens, outputTokens, audit);
+    if (servedByFallback) {
+      // A fallback returns well-formed prose from a different model. For generation that
+      // is a silent quality change, so it is surfaced rather than logged as routine.
+      this.logger.error(
+        `tier=${model} was served by a FALLBACK deployment after ${attemptedFallbacks} attempt(s) ` +
+          `(model=${realModel ?? 'unresolved'}, correlationId=${dto.correlation_id ?? 'none'})`,
+      );
+    }
+
+    const reportedModel = modelResolved ? (realModel as string) : model;
+
+    this.emitTelemetry(dto.correlation_id, resolveBusinessId(dto), reportedModel, inputTokens, outputTokens, audit);
     return {
       ...parsedData,
       text: rawText,
-      model_used: resolvedModel,
+      model_used: reportedModel,
       tier_used: model,
       model_resolved: modelResolved,
+      served_by_fallback: servedByFallback,
       inputTokens,
       outputTokens,
       token_usage_estimate: inputTokens + outputTokens,
@@ -445,6 +499,7 @@ export class AiService {
       model_used: `claude-${model}`,
       tier_used: dto.model_tier ?? 'free',
       model_resolved: true,
+      served_by_fallback: false,
       inputTokens,
       outputTokens,
       token_usage_estimate: inputTokens + outputTokens,
@@ -622,6 +677,7 @@ function agentRoutingError(
     model_used: 'agent-registry',
     tier_used: 'free',
     model_resolved: false,
+    served_by_fallback: false,
     inputTokens: 0,
     outputTokens: 0,
     token_usage_estimate: 0,

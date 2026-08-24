@@ -2,6 +2,47 @@ import { AiService } from './ai.service';
 import { LoggingClient } from '../claude-code/logging.client';
 import { AiCompleteRequestSchema } from '../contracts';
 
+/** Deployment ids as LiteLLM 1.82.6 reports them in x-litellm-model-id. */
+const FREE_ID = 'free-deployment-hash';
+const SMART_ID = 'smart-deployment-hash';
+const SMART_FALLBACK_ID = 'smart-fallback-deployment-hash';
+
+/**
+ * Mocks the two LiteLLM calls the service makes: /chat/completions (whose body echoes the
+ * ALIAS, never the served model) and /model/info (which maps deployment ids to real models).
+ */
+function litellmFetchMock(opts: { deploymentId: string; attemptedFallbacks?: string }) {
+  return jest.fn().mockImplementation(async (url: string) => {
+    if (String(url).includes('/model/info')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: [
+            { model_name: 'free', litellm_params: { model: 'ollama/qwen2.5-coder:0.5b' }, model_info: { id: FREE_ID } },
+            { model_name: 'smart', litellm_params: { model: 'openrouter/google/gemma-4-31b-it:free' }, model_info: { id: SMART_ID } },
+            { model_name: 'smart-fallback', litellm_params: { model: 'openrouter/nvidia/nemotron-3-super-120b-a12b:free' }, model_info: { id: SMART_FALLBACK_ID } },
+          ],
+        }),
+      } as unknown as Response;
+    }
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers({
+        'x-litellm-model-id': opts.deploymentId,
+        'x-litellm-attempted-fallbacks': opts.attemptedFallbacks ?? '0',
+      }),
+      json: async () => ({
+        choices: [{ message: { content: '{"output_ref":{"summary":"ok"}}' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 5 },
+        model: 'smart',
+      }),
+    } as unknown as Response;
+  });
+}
+
+
 describe('AiService - LiteLLM routing', () => {
   let service: AiService;
   let loggingClient: jest.Mocked<LoggingClient>;
@@ -322,19 +363,56 @@ describe('AiService - Claude CLI fallback', () => {
     process.env.AI_COMPLETE_ROUTER = 'claude_cli_with_litellm_fallback';
 
     jest.spyOn(service as any, 'spawnCcCli').mockRejectedValue(new Error('claude: command not found'));
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        choices: [{ message: { content: '{"output_ref":{"summary":"ok"}}' } }],
-        usage: { prompt_tokens: 10, completion_tokens: 5 },
-        model: 'ollama/qwen2.5-coder:0.5b',
-      }),
-    } as Response);
+    // `model` in the body is the ALIAS LiteLLM echoes back, deliberately different from
+    // the real model here: the resolved id must come from the x-litellm-model-id header
+    // via /model/info, never from the body.
+    global.fetch = litellmFetchMock({ deploymentId: FREE_ID });
 
     const result = await service.complete({ model_tier: 'free', user_prompt: 'say ok' });
 
     expect(result.error_code).toBeUndefined();
     expect(result.model_used).toBe('ollama/qwen2.5-coder:0.5b');
+    expect(result.model_resolved).toBe(true);
     expect(global.fetch).toHaveBeenCalled();
+  });
+
+  describe('served model resolution', () => {
+    beforeEach(() => {
+      process.env.LITELLM_BASE_URL = 'http://litellm.test:4000';
+      process.env.LITELLM_MASTER_KEY = 'test-key';
+      process.env.AI_COMPLETE_ROUTER = 'litellm';
+    });
+
+    it('reports the real upstream model, not the alias LiteLLM echoes', async () => {
+      global.fetch = litellmFetchMock({ deploymentId: SMART_ID });
+
+      const result = await service.complete({ model_tier: 'smart', user_prompt: 'hi' });
+
+      // The whole point: a request for `smart` comes back as model: "smart" in the body.
+      expect(result.model_used).toBe('openrouter/google/gemma-4-31b-it:free');
+      expect(result.tier_used).toBe('smart');
+      expect(result.model_resolved).toBe(true);
+      expect(result.served_by_fallback).toBe(false);
+    });
+
+    it('flags a silent fallback that the echoed alias would hide', async () => {
+      global.fetch = litellmFetchMock({ deploymentId: SMART_FALLBACK_ID, attemptedFallbacks: '1' });
+
+      const result = await service.complete({ model_tier: 'smart', user_prompt: 'hi' });
+
+      // Body still says "smart"; only the headers reveal a different model served it.
+      expect(result.served_by_fallback).toBe(true);
+      expect(result.model_used).toBe('openrouter/nvidia/nemotron-3-super-120b-a12b:free');
+      expect(result.tier_used).toBe('smart');
+    });
+
+    it('reports model_resolved=false rather than passing the tier off as a model', async () => {
+      global.fetch = litellmFetchMock({ deploymentId: '' });
+
+      const result = await service.complete({ model_tier: 'smart', user_prompt: 'hi' });
+
+      expect(result.model_resolved).toBe(false);
+      expect(result.tier_used).toBe('smart');
+    });
   });
 });

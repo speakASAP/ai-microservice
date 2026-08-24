@@ -20,6 +20,7 @@ function aiCompleteResponse(overrides: Record<string, unknown> = {}): AiComplete
     model_used: 'test-model',
     tier_used: 'cheap',
     model_resolved: true,
+    served_by_fallback: false,
     ...overrides,
   });
 }

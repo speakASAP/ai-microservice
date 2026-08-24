@@ -24,11 +24,15 @@ export const AiCompleteResponseSchema = z.object({
   /** The tier that was requested. Never conflate with model_used: one is a routing
    *  intent, the other is what actually served the call. */
   tier_used: ModelTierSchema,
-  /** False when the upstream response carried no model id, so model_used is a tier
-   *  name standing in for one. Callers relying on the served model (cv-tuning's
+  /** False when the real upstream model could not be determined, so model_used holds the
+   *  tier name as a stand-in. Callers relying on the served model (cv-tuning's
    *  anti-fabrication guard, spec 8.1) MUST treat false as degraded rather than
    *  string-sniffing whether model_used looks like a real id. */
   model_resolved: z.boolean(),
+  /** True when a LiteLLM fallback deployment served the call instead of the tier's own
+   *  model. LiteLLM echoes the alias either way, so this is the ONLY signal that the
+   *  model silently changed — a quality change that still returns well-formed prose. */
+  served_by_fallback: z.boolean(),
   inputTokens: z.number().int().nonnegative().optional(),
   outputTokens: z.number().int().nonnegative().optional(),
   token_usage_estimate: z.number().int().nonnegative().optional(),
