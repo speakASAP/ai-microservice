@@ -43,19 +43,39 @@ model_list:
     model_info:
       mode: completion
 
+  # 2026-08-24 — `timeout` here overrides litellm_settings.request_timeout for THIS
+  # deployment only (litellm_params.timeout wins over the global; LiteLLM 1.82.6
+  # Router._get_non_stream_timeout). The global 30s was tuned for education-service
+  # drill prompts at 8-19s, but cv-tuning's tailoring and entailment prompts are far
+  # longer: a grounding eval run measured 13 calls at median 40.3s / max 70.3s, and 9
+  # of 13 blew past 30s. The proxy cut those responses mid-token, so the caller received
+  # a valid JSON prefix that could not parse ("Unterminated string in JSON") and 2 of 7
+  # eval fixtures failed. Not a token cap — max_tokens 8000 is requested and a direct
+  # probe returned finish_reason "stop".
+  #
+  # Budget still nests inside the caller's LITELLM_TIMEOUT_MS of 75s, per the rule in
+  # router_settings below: 58 (smart) + 10 (smart-fallback) + 5 (retry_after) = 73s,
+  # leaving ~2s for connect and JSON parse. `free` and `cheap` keep the global 30s, so
+  # education-service's drill path is unchanged.
   - model_name: smart
     litellm_params:
       model: openrouter/google/gemma-4-31b-it:free
       api_key: os.environ/OPENROUTER_API_KEY
       api_base: https://openrouter.ai/api/v1
+      timeout: 58
     model_info:
       mode: completion
 
+  # Deliberately short: it is the remainder of the 75s caller budget after `smart` takes
+  # 58s, not an independent budget. A vendor switch that cannot answer within 10s has
+  # already lost the request — the caller aborts at 75s regardless, and a fallback that
+  # overruns it is decorative (the 2026-08-14 incident in router_settings below).
   - model_name: smart-fallback
     litellm_params:
       model: openrouter/nvidia/nemotron-3-super-120b-a12b:free
       api_key: os.environ/OPENROUTER_API_KEY
       api_base: https://openrouter.ai/api/v1
+      timeout: 10
     model_info:
       mode: completion
 
@@ -89,6 +109,9 @@ litellm_settings:
   # Real drill generations complete in 8-19s (measured 2026-08-14 against `smart`,
   # `smart-fallback` and `cheap`), so 30s is well clear of normal latency; anything
   # slower is a stalled vendor, and switching vendors beats waiting it out.
+  # This is the DEFAULT only: `smart` and `smart-fallback` override it in model_list
+  # above, because cv-tuning's CV prompts run far longer than a drill (see the note
+  # there). Any tier without its own `timeout` uses this value.
   request_timeout: 30
   success_callback: ["langfuse"]
   failure_callback: ["langfuse"]
