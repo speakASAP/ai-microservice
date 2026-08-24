@@ -5,7 +5,7 @@ import { writeFileSync, unlinkSync, existsSync, openSync, closeSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
-import type { AiCompleteRequestInput } from '../contracts';
+import type { AiCompleteRequestInput, ModelTier } from '../contracts';
 import { LoggingClient } from '../claude-code/logging.client';
 import { AiAgent } from '../database/entities/ai-agent.entity';
 import { Repository } from 'typeorm';
@@ -94,6 +94,9 @@ function ccApiErrorResult(model: string, cc: CcJsonResult): AiCompleteResult {
   return {
     text: '',
     model_used: `claude-${model}`,
+    tier_used: 'free',
+    // The API rejected the call, so no model actually served it.
+    model_resolved: false,
     inputTokens: 0,
     outputTokens: 0,
     token_usage_estimate: 0,
@@ -104,7 +107,12 @@ function ccApiErrorResult(model: string, cc: CcJsonResult): AiCompleteResult {
 
 export type AiCompleteResult = Record<string, unknown> & {
   text: string;
+  /** The real upstream model id. Only trustworthy when model_resolved is true. */
   model_used: string;
+  /** The tier that was requested — a routing intent, never a served model. */
+  tier_used: ModelTier;
+  /** False when upstream returned no model id and model_used falls back to the tier. */
+  model_resolved: boolean;
   inputTokens: number;
   outputTokens: number;
   token_usage_estimate: number;
@@ -129,6 +137,9 @@ function cliFailureResult(model: string, detail: string, errorCode = 'CLI_FAILED
   return {
     text: '',
     model_used: `claude-${model}`,
+    tier_used: 'free',
+    // A CC CLI failure never reached a model, so nothing resolved it.
+    model_resolved: false,
     inputTokens: 0,
     outputTokens: 0,
     token_usage_estimate: 0,
@@ -137,7 +148,7 @@ function cliFailureResult(model: string, detail: string, errorCode = 'CLI_FAILED
   };
 }
 
-function litellmErrorResult(model: string, status: number, detail: string): AiCompleteResult {
+function litellmErrorResult(tier: ModelTier, status: number, detail: string): AiCompleteResult {
   let error_code = 'AI_SERVICE_ERROR';
   if (status === 429) error_code = 'RATE_LIMIT';
   else if (status === 401 || status === 403) error_code = 'AI_AUTH_ERROR';
@@ -146,7 +157,10 @@ function litellmErrorResult(model: string, status: number, detail: string): AiCo
   else if (status === 504) error_code = 'AI_HTTP_TIMEOUT';
   return {
     text: '',
-    model_used: model,
+    // An error path never learned a real model id; the tier stands in, flagged as such.
+    model_used: tier,
+    tier_used: tier,
+    model_resolved: false,
     inputTokens: 0,
     outputTokens: 0,
     token_usage_estimate: 0,
@@ -323,11 +337,26 @@ export class AiService {
     const outputTokens = body.usage?.completion_tokens ?? 0;
     const { parsedData } = spreadParsedJson(rawText, dto.output_schema);
 
-    this.emitTelemetry(dto.correlation_id, resolveBusinessId(dto), body.model ?? model, inputTokens, outputTokens, audit);
+    // LiteLLM omitting `model` is the defect that surfaced as model_used: "smart" to
+    // cv-tuning (a tier name where a model id belongs). Falling back to the tier is
+    // still the only value available, but it is now flagged rather than passed off as
+    // a real model id, and it is loud.
+    const modelResolved = typeof body.model === 'string' && body.model.length > 0;
+    if (!modelResolved) {
+      this.logger.error(
+        `LiteLLM response carried no model id for tier=${model} ` +
+          `correlationId=${dto.correlation_id ?? 'none'}; reporting model_resolved=false`,
+      );
+    }
+    const resolvedModel = modelResolved ? (body.model as string) : model;
+
+    this.emitTelemetry(dto.correlation_id, resolveBusinessId(dto), resolvedModel, inputTokens, outputTokens, audit);
     return {
       ...parsedData,
       text: rawText,
-      model_used: body.model ?? model,
+      model_used: resolvedModel,
+      tier_used: model,
+      model_resolved: modelResolved,
       inputTokens,
       outputTokens,
       token_usage_estimate: inputTokens + outputTokens,
@@ -412,7 +441,10 @@ export class AiService {
     return {
       ...parsedData,
       text: rawText,
+      // DEFAULT_CC_MODEL is a concrete model id, not a tier, so this one is resolved.
       model_used: `claude-${model}`,
+      tier_used: dto.model_tier ?? 'free',
+      model_resolved: true,
       inputTokens,
       outputTokens,
       token_usage_estimate: inputTokens + outputTokens,
@@ -586,7 +618,10 @@ function agentRoutingError(
   return {
     ...(audit || { agent_slug: slug }),
     text: '',
+    // Routing failed before any model was chosen; "agent-registry" is a stage, not a model.
     model_used: 'agent-registry',
+    tier_used: 'free',
+    model_resolved: false,
     inputTokens: 0,
     outputTokens: 0,
     token_usage_estimate: 0,

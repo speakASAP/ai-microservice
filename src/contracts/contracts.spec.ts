@@ -52,15 +52,35 @@ describe('AiCompleteRequestSchema', () => {
 
 describe('AiCompleteResponseSchema', () => {
   it('accepts valid response', () => {
-    const result = AiCompleteResponseSchema.safeParse({ text: 'hi', model_used: 'sonnet' });
+    const result = AiCompleteResponseSchema.safeParse({
+      text: 'hi', model_used: 'sonnet', tier_used: 'smart', model_resolved: true,
+    });
     expect(result.success).toBe(true);
     expect(result.data!.schemaVersion).toBe('1.0');
   });
 
   it('passes through extra fields', () => {
-    const result = AiCompleteResponseSchema.safeParse({ text: 'hi', model_used: 'sonnet', extra_field: 'x' });
+    const result = AiCompleteResponseSchema.safeParse({
+      text: 'hi', model_used: 'sonnet', tier_used: 'smart', model_resolved: true, extra_field: 'x',
+    });
     expect(result.success).toBe(true);
     expect((result.data as any).extra_field).toBe('x');
+  });
+
+  // The response that broke cv-tuning: a tier name in model_used with nothing marking
+  // it as unresolved. Consumers must be able to tell a served model from a stand-in.
+  it('requires model_resolved so a tier name cannot pose as a model id', () => {
+    const result = AiCompleteResponseSchema.safeParse({ text: 'hi', model_used: 'smart' });
+    expect(result.success).toBe(false);
+  });
+
+  it('carries tier_used separately from model_used', () => {
+    const result = AiCompleteResponseSchema.safeParse({
+      text: 'hi', model_used: 'smart', tier_used: 'smart', model_resolved: false,
+    });
+    expect(result.success).toBe(true);
+    expect(result.data!.model_resolved).toBe(false);
+    expect(result.data!.tier_used).toBe('smart');
   });
 });
 

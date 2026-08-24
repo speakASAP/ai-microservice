@@ -19,7 +19,16 @@ export const AiCompleteRequestSchema = z.object({
 export const AiCompleteResponseSchema = z.object({
   schemaVersion: z.literal('1.0').default('1.0'),
   text: z.string(),
+  /** The real upstream model id, e.g. "openrouter/google/gemma-4-31b-it:free". */
   model_used: z.string(),
+  /** The tier that was requested. Never conflate with model_used: one is a routing
+   *  intent, the other is what actually served the call. */
+  tier_used: ModelTierSchema,
+  /** False when the upstream response carried no model id, so model_used is a tier
+   *  name standing in for one. Callers relying on the served model (cv-tuning's
+   *  anti-fabrication guard, spec 8.1) MUST treat false as degraded rather than
+   *  string-sniffing whether model_used looks like a real id. */
+  model_resolved: z.boolean(),
   inputTokens: z.number().int().nonnegative().optional(),
   outputTokens: z.number().int().nonnegative().optional(),
   token_usage_estimate: z.number().int().nonnegative().optional(),

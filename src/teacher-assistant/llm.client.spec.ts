@@ -18,6 +18,8 @@ function aiCompleteResponse(overrides: Record<string, unknown> = {}): AiComplete
   return AiCompleteResponseSchema.parse({
     text: '',
     model_used: 'test-model',
+    tier_used: 'cheap',
+    model_resolved: true,
     ...overrides,
   });
 }
