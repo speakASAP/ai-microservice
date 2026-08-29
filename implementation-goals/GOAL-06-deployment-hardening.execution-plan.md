@@ -138,7 +138,7 @@ If deployment fails after image rollout, run the rollback command printed by `sc
 
 ```bash
 kubectl rollout undo deployment/ai-microservice -n statex-apps --to-revision=<previous-revision>
-kubectl rollout status deployment/ai-microservice -n statex-apps
+/home/ssf/Documents/Github/shared/scripts/wait-for-rollout.sh -n statex-apps -t 180 ai-microservice
 AI_SERVICE_BASE_URL=https://ai.alfares.cz ./scripts/smoke-unified-llm.sh
 ```
 
