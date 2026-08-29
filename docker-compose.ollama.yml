@@ -1,0 +1,56 @@
+# Ollama — local inference backend for ai-microservice RAG (embeddings via
+# nomic-embed-text) and small-model codegen (qwen2.5-coder:0.5b).
+#
+# WHY THIS FILE EXISTS
+# The running container was created 2026-05-19, but its compose file was deleted
+# four days later in 7affeeb ("remove deprecated Docker Compose files"). From then
+# until 2026-08-29 the container survived only on `restart: unless-stopped`, and its
+# configuration existed nowhere except Docker's own runtime state -- a single
+# `docker rm` would have taken RAG down with no way to rebuild it from the repo.
+# This file is that config, recovered from the live container.
+#
+# ai-microservice itself runs in k3s (statex-apps). Only Ollama runs as a plain
+# container, because it holds a 642MB model volume that must not be rescheduled.
+#
+# Never `docker compose down -v`: -v destroys the model volume.
+
+services:
+  ollama:
+    image: ai-microservice-ollama:local   # Ubuntu 24.04 + /bin/ollama, built locally
+    container_name: ai-microservice-ollama-green
+    restart: unless-stopped
+
+    environment:
+      # Non-default port: 11434 is taken by an unrelated snap ollama on localhost.
+      OLLAMA_HOST: 0.0.0.0:11435
+
+    ports:
+      - "11435:11435"
+
+    volumes:
+      - ollama-data-green:/root/.ollama
+
+    # CPU policy (set 2026-08-29). The box has 24 cores.
+    #   cpus: 6        -> hard ceiling, 25% of the machine. Re-indexing after a docs
+    #                     commit can otherwise pin every core for minutes.
+    #   cpu_shares: 128 -> cgroup cpu.weight 21 vs the default 100. A ceiling alone
+    #                     still lets Ollama win scheduler contention against docker
+    #                     builds and deploys; the low weight makes it yield instead,
+    #                     while still using spare cores when the box is idle.
+    cpus: 6
+    cpu_shares: 128
+
+    networks:
+      - nginx-network
+
+volumes:
+  # Declared external on purpose: it holds the pulled models. Binding by explicit
+  # name stops compose from silently creating a fresh empty volume if this file is
+  # ever run under a different project name.
+  ollama-data-green:
+    external: true
+    name: ai-microservice_ollama-data-green
+
+networks:
+  nginx-network:
+    external: true
