@@ -12,6 +12,8 @@ export const AiCompleteRequestSchema = z.object({
   correlation_id: z.string().optional(),
   business_id: z.string().min(1).max(128).optional(),
   businessId: z.string().min(1).max(128).optional(),
+  human_approval: z.boolean().optional(),
+  humanApproval: z.boolean().optional(),
   agent_slug: z.string().min(1).max(160).optional(),
   agent_service_scope: z.string().min(1).max(120).optional(),
 });

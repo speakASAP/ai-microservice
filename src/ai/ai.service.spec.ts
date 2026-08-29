@@ -300,6 +300,21 @@ describe('AiService - LiteLLM routing', () => {
     expect(result.text).toBe('');
   });
 
+  it('accepts premium tier with explicit human approval', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: 'approved premium result' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+        model: 'anthropic/claude-sonnet-4-6',
+      }),
+    } as Response);
+
+    const result = await service.complete({ model_tier: 'premium', user_prompt: 'hi', human_approval: true });
+    expect(result.error_code).toBeUndefined();
+    expect(result.text).toContain('approved premium result');
+  });
+
   it('blocks premium tier without human approval', async () => {
     const result = await service.complete({ model_tier: 'premium', user_prompt: 'hi' });
     expect(result.error_code).toBe('AI_AUTH_ERROR');

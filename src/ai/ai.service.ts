@@ -242,7 +242,8 @@ export class AiService {
     }
     const effectiveDto = resolved.dto;
 
-    if (effectiveDto.model_tier === 'premium') {
+    const premiumApproved = effectiveDto.human_approval === true || effectiveDto.humanApproval === true;
+    if (effectiveDto.model_tier === 'premium' && !premiumApproved) {
       return this.withAgentAudit(
         litellmErrorResult('premium', 403, 'Premium tier requires explicit human approval per call'),
         resolved.audit,
