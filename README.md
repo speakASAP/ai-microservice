@@ -29,9 +29,9 @@ Centralized AI processing service for the Statex ecosystem. Routes LLM calls by 
 | Gemini AI Service | 3388 | `GEMINI_AI_SERVICE_PORT` |
 | Data Viz Service | 3389 | `DATA_VIZ_SERVICE_PORT` |
 | LiteLLM proxy | 4000 (internal) | `LITELLM_BASE_URL` |
-| Ollama | 11434 (internal) | `OLLAMA_API_BASE` |
+| Ollama | 11435 (internal) | `OLLAMA_API_BASE` |
 
-**LiteLLM** routes `free`/`cheap`/`smart` tiers; config in `litellm_config.yaml`. **Ollama** built from `services/ollama/Dockerfile`; after first deploy pull weights: `docker exec -it ai-microservice-ollama-green ollama pull qwen2.5-coder:0.5b`. Cold-start order: `ollama` → `litellm` → `free-ai-service` → `backend`.
+**LiteLLM** routes `free`/`cheap`/`smart` tiers; config in `litellm_config.yaml`. **Ollama** listens on 11435, not its 11434 default, because the container sets `OLLAMA_HOST=0.0.0.0:11435`; `OLLAMA_API_BASE` is `http://ai-microservice-ollama-green:11435`. It runs from `docker-compose.ollama.yml` (image `ai-microservice-ollama:local`; there is no `services/ollama/Dockerfile`). After first deploy pull weights: `docker exec -it ai-microservice-ollama-green ollama pull qwen2.5-coder:0.5b`. Cold-start order: `ollama` → `litellm` → `free-ai-service` → `backend`.
 
 ## Environment / Secrets
 

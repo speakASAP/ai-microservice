@@ -21,15 +21,19 @@ All implementation and orchestration work for this project must happen on the re
 /home/ssf/Documents/Github/ai-microservice
 ```
 
-Use local files only as a temporary staging mirror when needed, then copy changes to the remote repo and validate on `alfares`.
+Work directly in the authoritative repository on `alfares`; do not copy staged source into production.
 
-## Knowledge Retrieval (query before reading files)
-Query the RAG service first — saves 2000-5000 tokens per query:
-- URL: `http://docs-rag-microservice.statex-apps.svc.cluster.local:3397`
-- Endpoint: `POST /retrieval/agent-context` with `{"query": "...", "maxTokens": 3000}`
-- Auth: `Authorization: Bearer <JWT_TOKEN>`
+## Knowledge Retrieval
 
-Infrastructure service — provides LLM inference to other agents, does not self-coordinate.
+Use `docs-rag-microservice` for bounded discovery when it is healthy, then
+verify deployment, security, database, integration and public-contract facts
+against the cited Git source. Git remains authoritative.
+
+Authority and fallback rules:
+`/home/ssf/Documents/Github/shared/docs/DOCUMENTATION_AUTHORITY.md`.
+
+Do not generate tokens in documentation or assume an unconfident/failed RAG
+response means that source documentation does not exist.
 
 ## Intent Preservation
 
@@ -93,7 +97,7 @@ reject rather than accept a silent downgrade.
 `request_timeout` means the fallback chain never runs at all, and the aborted attempts
 leave no trace in the proxy access log. Set caller timeouts *above* the proxy's.
 
-**Ollama** is the compose-built service (`services/ollama/Dockerfile`); **`OLLAMA_API_BASE`** points at `http://ai-microservice-ollama(-blue|-green):11434` by default. Pull weights into the volume after deploy (see `litellm_config.yaml` header comment).
+**Ollama** runs as the host container `ai-microservice-ollama-green`, defined in `docker-compose.ollama.yml` (image `ai-microservice-ollama:local`; there is no `services/ollama/Dockerfile`). **`OLLAMA_API_BASE`** is `http://ai-microservice-ollama-green:11435` — port 11435, not Ollama’s 11434 default, because the container sets `OLLAMA_HOST=0.0.0.0:11435`. Nothing serves 11434 on this host. Pull weights into the volume after deploy (see `litellm_config.yaml` header comment).
 
 If **`LITELLM_BASE_URL`** is unset on the orchestrator, **`/ai/complete`** keeps the legacy OpenRouter multi-model chain in `main.py`. **free-ai** without both `LITELLM_BASE_URL` and `LITELLM_MASTER_KEY` keeps direct OpenRouter/Ollama paths.
 

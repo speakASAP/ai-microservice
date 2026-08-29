@@ -37,9 +37,8 @@ Both verify paths pin `alg` from the token header before verifying — without t
 |-----------|-----|
 | database-server | db-server-postgres:5432 + Redis |
 | logging-microservice | logging-microservice:3367 |
-| Ollama (Docker) | Port 11435 on host. Sidecar pod in K8s. Controlled by `OLLAMA_DOCKER_PORT` env var (default 11435). `OLLAMA_API_BASE` overrides the internal URL. |
-| Ollama (systemd) | Host port 11434 — separate instance managed by systemd `ollama.service`. |
-| LiteLLM proxy | Sidecar pod `:4000` — routes `free` / `cheap` / `smart` tiers (see `litellm_config.yaml`) |
+| Ollama (Docker) | Host container `ai-microservice-ollama-green` on `:11435`, on `nginx-network`. Not in K8s and not a sidecar: the `ai-microservice` pod runs a single container (`app`). The port is 11435 rather than Ollama’s 11434 default because the container sets `OLLAMA_HOST=0.0.0.0:11435`. `OLLAMA_API_BASE` overrides the internal URL. Defined in `docker-compose.ollama.yml`. |
+| LiteLLM proxy | Host container `ai-microservice-litellm-green` on `:4000`, on `nginx-network` — not a sidecar pod. Routes `free` / `cheap` / `smart` tiers (see `litellm_config.yaml`). |
 | Codex CLI | `CODEX_CLI_PATH` (default `/home/ssf/.local/bin/codex`) for `implementationProvider=codex` jobs |
 
 ## Current State
