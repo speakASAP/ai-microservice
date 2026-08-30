@@ -56,7 +56,7 @@ cheap:          openrouter/google/gemma-4-26b-a4b-it:free          # OpenRouter;
 cheap-fallback: openrouter/nvidia/nemotron-3-nano-30b-a3b:free     # deliberately a different vendor from `cheap`
 smart:          openrouter/google/gemma-4-31b-it:free              # OpenRouter; LiteLLM fallback → smart-fallback
 smart-fallback: openrouter/nvidia/nemotron-3-super-120b-a12b:free  # deliberately a different vendor from `smart`
-premium:        anthropic/claude-sonnet-4-6                        # BLOCKED — human approval required per call (not routed in LiteLLM)
+premium:        openrouter/anthropic/claude-sonnet-4.6             # human_approval=true required on every call
 ```
 
 > ⚠️ `free` is a 0.5B **code** model. It is unsuitable for natural-language prose

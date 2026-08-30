@@ -306,7 +306,7 @@ describe('AiService - LiteLLM routing', () => {
       json: async () => ({
         choices: [{ message: { content: 'approved premium result' } }],
         usage: { prompt_tokens: 1, completion_tokens: 1 },
-        model: 'anthropic/claude-sonnet-4-6',
+        model: 'openrouter/anthropic/claude-sonnet-4.6',
       }),
     } as Response);
 

@@ -46,7 +46,7 @@ export const ADMIN_MODEL_CATALOG: AdminModelInfo[] = [
     caution: 'Use for tasks where quality matters but premium coding autonomy is unnecessary.',
   },
   {
-    id: 'anthropic/claude-sonnet-4-6',
+    id: 'openrouter/anthropic/claude-sonnet-4.6',
     label: 'Claude Sonnet 4.6',
     tier: 'premium',
     provider: 'Anthropic',
