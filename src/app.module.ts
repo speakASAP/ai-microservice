@@ -6,6 +6,7 @@ import { ClaudeCodeJob } from './database/entities/claude-code-job.entity';
 import { InferenceLog } from './database/entities/inference-log.entity';
 import { AiAgent } from './database/entities/ai-agent.entity';
 import { VoiceModule } from './voice/voice.module';
+import { DocumentsModule } from './documents/documents.module';
 import { TaskModule } from './task/task.module';
 import { AiModule } from './ai/ai.module';
 import { EmailTriageModule } from './email-triage/email-triage.module';
@@ -34,6 +35,7 @@ import { HealthController } from './health.controller';
     ServiceIdentityModule,
     ClaudeCodeModule,
     VoiceModule,
+    DocumentsModule,
     TaskModule,
     AiModule,
     EmailTriageModule,

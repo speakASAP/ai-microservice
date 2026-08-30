@@ -5,6 +5,7 @@ export * from './ai-complete.contract';
 export * from './claude-code-job.contract';
 export * from './task.contract';
 export * from './voice.contract';
+export * from './documents.contract';
 export * from './email-triage.contract';
 export * from './shop-assistant.contract';
 export * from './http-responses.contract';

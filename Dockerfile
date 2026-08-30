@@ -27,7 +27,13 @@ RUN npm run build
 # ---- runner ----
 FROM node:20-slim AS runner
 
-RUN apt-get update   && apt-get install -y --no-install-recommends git bash ca-certificates   && rm -rf /var/lib/apt/lists/*
+# tesseract + poppler back /documents/extract: poppler rasterises a scanned PDF and
+# tesseract recognises the pages. They are system packages, not npm ones, which is the
+# reason document reading lives in this shared service instead of in every caller.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git bash ca-certificates \
+     poppler-utils tesseract-ocr tesseract-ocr-eng tesseract-ocr-ces tesseract-ocr-rus tesseract-ocr-deu \
+  && rm -rf /var/lib/apt/lists/*
 
 # node:20-slim already has user 'node' at uid 1000 — use it directly
 WORKDIR /app
