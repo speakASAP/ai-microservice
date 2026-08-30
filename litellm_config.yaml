@@ -1,4 +1,4 @@
-# LiteLLM proxy — routed model names: free, cheap, smart, approved premium (see AGENTS.md).
+# LiteLLM proxy — routed model names: free, cheap, smart (see AGENTS.md).
 # Secrets: use os.environ/VAR only (never commit keys).
 #
 # Ollama: compose provides service `ollama` on nginx-network. OLLAMA_API_BASE is
@@ -60,18 +60,6 @@ model_list:
   - model_name: smart
     litellm_params:
       model: openrouter/google/gemma-4-31b-it:free
-      api_key: os.environ/OPENROUTER_API_KEY
-      api_base: https://openrouter.ai/api/v1
-      timeout: 58
-    model_info:
-      mode: completion
-
-  # Premium is metered and can only be reached when /ai/complete receives
-  # human_approval: true for that individual request. The route is intentionally
-  # present so an explicitly approved call does not bypass the central proxy.
-  - model_name: premium
-    litellm_params:
-      model: openrouter/anthropic/claude-sonnet-4.6
       api_key: os.environ/OPENROUTER_API_KEY
       api_base: https://openrouter.ai/api/v1
       timeout: 58

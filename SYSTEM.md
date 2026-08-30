@@ -4,7 +4,7 @@
 
 NestJS. Modules: Orchestrator, NLP, ASR, Document AI, Prototype Generator, Free AI, Gemini, Data Viz.
 
-- Tier routing: free (Ollama) → cheap (OpenRouter via LiteLLM when enabled) → smart (Gemini 2.0 Flash via LiteLLM when enabled) → premium (Claude, human approval)
+- Tier routing: free (Ollama) → cheap (OpenRouter via LiteLLM when enabled) → smart (Gemini 2.0 Flash via LiteLLM when enabled). Premium is deferred until the funded production rollout and will still require per-call human approval.
 - Implementation providers: `claude-code` (default) and `codex` via `/ai/claude-code-execute`; provider choice is separate from `/ai/complete` model-tier routing.
 - Intent preservation: every AI-microservice goal should include `intent`; implementation jobs persist `intent`, `intentChecksum`, and `implementationProvider`.
 - LiteLLM handles automatic failover when `LITELLM_BASE_URL` is set (e.g. OpenRouter issues → Ollama in compose via `OLLAMA_API_BASE`)

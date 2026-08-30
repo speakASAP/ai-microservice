@@ -56,7 +56,7 @@ cheap:          openrouter/google/gemma-4-26b-a4b-it:free          # OpenRouter;
 cheap-fallback: openrouter/nvidia/nemotron-3-nano-30b-a3b:free     # deliberately a different vendor from `cheap`
 smart:          openrouter/google/gemma-4-31b-it:free              # OpenRouter; LiteLLM fallback → smart-fallback
 smart-fallback: openrouter/nvidia/nemotron-3-super-120b-a12b:free  # deliberately a different vendor from `smart`
-premium:        openrouter/anthropic/claude-sonnet-4.6             # human_approval=true required on every call
+premium:        [deferred]                                         # disabled during development; enable only for a funded production rollout with per-call approval
 ```
 
 > ⚠️ `free` is a 0.5B **code** model. It is unsuitable for natural-language prose
@@ -75,7 +75,7 @@ The endpoint name remains `claude-code-execute` for backward compatibility, but 
 
 ## Fallback chain (LiteLLM proxy)
 
-When **`LITELLM_BASE_URL`** is set, orchestrator **`POST /ai/complete`** and **free-ai-service `/analyze`** (when `LITELLM_*` set) use LiteLLM’s OpenAI-compatible API; route names are the tier ids `free`, `cheap`, `smart`.
+When **`LITELLM_BASE_URL`** is set, orchestrator **`POST /ai/complete`** and **free-ai-service `/analyze`** (when `LITELLM_*` set) use LiteLLM’s OpenAI-compatible API; route names are the tier ids `free`, `cheap`, `smart`. Premium is intentionally not configured during development.
 
 Router fallbacks (see `router_settings.fallbacks` in `litellm_config.yaml`):
 
