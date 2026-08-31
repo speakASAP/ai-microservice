@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "report_id": "VAL-WAVE0-AI-MICROSERVICE-2026-08-31",
+  "repository": "ai-microservice",
+  "generated_at": "2026-08-31T06:07:29Z",
+  "scope": "Wave 0 v1 docs-only planning registry adoption",
+  "commands": {
+    "profile_validator": "python3 /home/ssf/Documents/Github/shared/scripts/validate-repository-profile.py --root . --json",
+    "artifact_index_check": "python3 /home/ssf/Documents/Github/shared/scripts/build-artifact-index.py --root . --check --json",
+    "json_parse": "python3 -m json.tool STATE.json docs/registry/REPOSITORY_PROFILE.json docs/registry/ARTIFACT_INDEX.json docs/registry/WAVE0_VALIDATION_REPORT.json",
+    "safe_placeholder_scan": "rg -n placeholders scan over STATE.json and docs/registry/*.json",
+    "git_diff_check": "git --no-pager diff --check"
+  },
+  "results": {
+    "profile_validator": {
+      "status": "passed",
+      "error_count": 0,
+      "warning_count": 0,
+      "artifact_count": 11,
+      "collectable_path_count": 37
+    },
+    "artifact_index_check": {
+      "status": "passed",
+      "error_count": 0,
+      "artifact_count": 11
+    },
+    "json_parse": {
+      "status": "passed"
+    },
+    "safe_placeholder_scan": {
+      "status": "passed",
+      "matches": 0
+    },
+    "git_diff_check": {
+      "status": "passed"
+    }
+  },
+  "notes": [
+    "RunLayer project mapping remains unverified in repository-local documentation; null mapping retained intentionally.",
+    "Validation scope covered docs/meta registry artifacts only; no source, deploy, dependency, migration, test, or script files were indexed."
+  ]
+}

@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0",
+  "repository": "ai-microservice",
+  "generated_at": "2026-08-31T06:07:29Z",
+  "artifacts": [
+    {
+      "id": "GOAL-01",
+      "type": "goal",
+      "status": "done",
+      "title": "Admin agent registry",
+      "path": "implementation-goals/GOAL-01-admin-agent-registry.md",
+      "parent_ids": [],
+      "updated_at": "2026-06-12T15:00:57+02:00"
+    },
+    {
+      "id": "GOAL-02",
+      "type": "goal",
+      "status": "done",
+      "title": "Orchestrator operating model",
+      "path": "implementation-goals/GOAL-02-orchestrator-operating-model.md",
+      "parent_ids": [],
+      "updated_at": "2026-06-12T15:00:57+02:00"
+    },
+    {
+      "id": "GOAL-03",
+      "type": "goal",
+      "status": "done",
+      "title": "Cost tracking per business",
+      "path": "implementation-goals/GOAL-03-cost-tracking.md",
+      "parent_ids": [
+        "GOAL-02"
+      ],
+      "updated_at": "2026-06-12T18:11:25+02:00"
+    },
+    {
+      "id": "GOAL-04",
+      "type": "goal",
+      "status": "done",
+      "title": "Implementation job observability",
+      "path": "implementation-goals/GOAL-04-implementation-job-observability.md",
+      "parent_ids": [
+        "GOAL-02"
+      ],
+      "updated_at": "2026-06-12T15:00:57+02:00"
+    },
+    {
+      "id": "GOAL-05",
+      "type": "goal",
+      "status": "done",
+      "title": "Agent registry routing",
+      "path": "implementation-goals/GOAL-05-agent-registry-routing.md",
+      "parent_ids": [
+        "GOAL-01",
+        "GOAL-02"
+      ],
+      "updated_at": "2026-06-12T18:11:25+02:00"
+    },
+    {
+      "id": "GOAL-06",
+      "type": "goal",
+      "status": "done",
+      "title": "Deployment hardening",
+      "path": "implementation-goals/GOAL-06-deployment-hardening.md",
+      "parent_ids": [
+        "GOAL-03",
+        "GOAL-04"
+      ],
+      "updated_at": "2026-06-12T16:18:20+02:00"
+    },
+    {
+      "id": "VAL-GOAL-04",
+      "type": "validation",
+      "status": "validated",
+      "title": "Validation report for GOAL-04 implementation job observability",
+      "path": "implementation-goals/GOAL-04-implementation-job-observability.validation-report.md",
+      "parent_ids": [
+        "GOAL-04"
+      ],
+      "updated_at": "2026-06-12T15:00:57+02:00"
+    },
+    {
+      "id": "VAL-GOAL-05",
+      "type": "validation",
+      "status": "validated",
+      "title": "Validation report for GOAL-05 agent registry routing",
+      "path": "implementation-goals/GOAL-05-agent-registry-routing.validation-report.md",
+      "parent_ids": [
+        "GOAL-05"
+      ],
+      "updated_at": "2026-06-12T15:00:57+02:00"
+    },
+    {
+      "id": "VAL-GOAL-06",
+      "type": "validation",
+      "status": "validated",
+      "title": "Validation report for GOAL-06 deployment hardening",
+      "path": "implementation-goals/GOAL-06-deployment-hardening.validation-report.md",
+      "parent_ids": [
+        "GOAL-06"
+      ],
+      "updated_at": "2026-06-12T18:11:25+02:00"
+    },
+    {
+      "id": "VAL-WAVE0-AI-MICROSERVICE-2026-08-31",
+      "type": "validation",
+      "status": "validated",
+      "title": "Wave 0 v1 docs-only registry adoption validation",
+      "path": "docs/registry/WAVE0_VALIDATION_REPORT.json",
+      "parent_ids": [],
+      "updated_at": "2026-08-31T06:07:29Z"
+    },
+    {
+      "id": "VR-GOAL-03",
+      "type": "validation",
+      "status": "validated",
+      "title": "Validation report for GOAL-03 cost tracking per business",
+      "path": "implementation-goals/GOAL-03-cost-tracking.validation-report.md",
+      "parent_ids": [
+        "GOAL-03"
+      ],
+      "updated_at": "2026-06-12T15:00:57+02:00"
+    }
+  ],
+  "warnings": [
+    "Canonical RunLayer mapping is unverified; runlayer_project_slug and runlayer_permalink are null by design."
+  ]
+}
