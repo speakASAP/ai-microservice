@@ -1,66 +1,25 @@
 # Agent Operations
 
-This repository follows the company Cross-Agent Automation Standard from the Intent Preservation System.
+## Roles
 
-## Required Chain
+Readiness scanner classifies work; worker agent implements one bounded goal; worker monitor tracks ownership and conflicts; integration validator separates current-task failures from validation debt.
 
-All agents must preserve:
+## Before work
 
-```text
-Vision -> Goal Impact -> System -> Feature -> Task -> Execution Plan -> Coding Prompt -> Code -> Validation
-```
+Read the required contracts, verify task traceability, identify sensitive-data and contract impacts, name validation commands, and establish scope before editing.
 
-## Agent Roles
+## Parallel work
 
-- Readiness scanner: classifies work as ready now, dependency-gated, blocked, active elsewhere, complete, or needs owner input. It does not implement.
-- Worker agent: implements one bounded goal or workstream with explicit scope.
-- Worker monitor: checks active worker status and conflict risks.
-- Integration validator: validates worker batches and separates current-task failures from known validation debt.
+Do not edit the same public contract, schema, deployment file, generated index, or status artifact in parallel without a documented integration owner and merge order.
 
-## Before Work
+## Validation debt
 
-Read repository-local instructions and planning sources first, including any `AGENTS.md`, `TASKS.md`, `STATE.json`, `docs/orchestrator/*`, `docs/intent-preservation/*`, or project-specific equivalents.
+Use `docs/orchestrator/VALIDATION_DEBT.md` only for pre-existing, out-of-scope failures. A failure affecting current files or acceptance criteria remains blocking.
 
-Before coding, verify:
+## Handoff
 
-- task and upstream traceability exist;
-- execution plan is approved or explicitly draft;
-- context package or equivalent source material exists;
-- sensitive-data classification is clear;
-- contract/schema and replay/determinism impact is clear;
-- validation commands are named;
-- parallel workstreams, blockers, shared files, integration owner, and merge order are defined.
+Record the objective, changed files, commands and results, remaining blockers, validation debt, and next responsible owner.
 
-## Parallel Work
+## Project-specific operations
 
-Do not start parallel edits to the same file, schema, migration, public contract, deployment file, generated index, or status document unless one integration owner and conflict-resolution order are documented.
-
-Every parallel workstream must declare:
-
-- objective;
-- owner role;
-- allowed files;
-- forbidden files;
-- dependencies and blockers;
-- validation evidence;
-- expected output;
-- handoff notes.
-
-## Validation Debt
-
-Use `docs/orchestrator/VALIDATION_DEBT.md`, `docs/intent-preservation/VALIDATION_DEBT.md`, or the nearest repo-standard ledger to record known out-of-scope validation failures.
-
-Validation debt does not excuse current-task failures. If a failure touches current-task files or acceptance criteria, treat it as blocking.
-
-## Remote/Secret Safety
-
-- Do not copy remote repository contents into local user directories.
-- Deploy only under pre-existing human-approved project or ecosystem policy; agents cannot self-authorize by editing policy.
-- Do not print secrets, tokens, raw production data, customer identifiers, or private evidence.
-- Use `[MISSING: ...]` or `[UNKNOWN: ...]` instead of inventing facts.
-
-## Final Report
-
-Report files changed, documents created, validation evidence, validation debt used or added, blockers, deviations, and the next concrete action.
-
-Next step: Follow the repository-specific `AGENTS.md` and planning files for the current task.
+Preserve existing runtime interfaces and the RS256 service-authentication design. Model routing changes begin in `litellm_config.yaml`. Do not operate the Docker-only Ollama or LiteLLM dependencies as part of documentation work.

@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "profile": "runtime-service",
+  "project": {
+    "name": "ai-microservice",
+    "repository": "https://github.com/speakASAP/ai-microservice.git"
+  },
+  "standard": {
+    "repository": "https://github.com/speakASAP/intent-preservation-system",
+    "revision": "22c061cb5f4ff641bbdb90f10ad1e2072e04a9f2"
+  },
+  "artifacts": {
+    "readme": "README.md",
+    "business": "BUSINESS.md",
+    "system": "SYSTEM.md",
+    "agents": "AGENTS.md",
+    "operations": "AGENT_OPERATIONS.md",
+    "claude": "CLAUDE.md",
+    "tasks": "TASKS.md",
+    "state": "STATE.json",
+    "constitution": "docs/00_constitution/CONSTITUTION.md",
+    "vision": "docs/01_vision/VISION.md",
+    "integrationContract": "docs/06_architecture/INTEGRATION_CONTRACT.md",
+    "projectInvariants": "docs/17_governance/PROJECT_INVARIANTS.md",
+    "validationDebt": "docs/orchestrator/VALIDATION_DEBT.md",
+    "bootstrapTask": "docs/11_tasks/TASK-001-bootstrap-service.md",
+    "bootstrapGoalImpact": "docs/22_goal_impact/GOAL-IMPACT-TASK-001.md",
+    "bootstrapExecutionPlan": "docs/21_execution_plans/EP-TASK-001-bootstrap-service.md",
+    "bootstrapValidation": "docs/12_validation/VAL-TASK-001-bootstrap-service.md"
+  },
+  "integrationReview": [
+    {"capability":"auth","component":"service-identity","decision":"required","reason":"RS256 service-token signing and verification are core gateway behavior.","contract":"Bearer tokens are signed with JWT_PRIVATE_KEY and verified with JWT_PUBLIC_KEY while pinning header alg.","configuration":"JWT_PRIVATE_KEY, JWT_PUBLIC_KEY, and ALLOW_HS256_FALLBACK environment configuration.","failureMode":"Invalid or stale signatures are rejected with authentication failure.","validation":"Run service-identity JWT and guard tests plus scripts/verify-service-tokens.sh after token changes."},
+    {"capability":"postgres","component":"db-server-postgres","decision":"required","reason":"The gateway persists AI agents, Claude Code jobs, and inference logs through TypeORM.","contract":"TypeORM entities ClaudeCodeJob, InferenceLog, and AiAgent are stored in PostgreSQL.","configuration":"DATABASE_URL or DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, and DB_NAME.","failureMode":"Persistence-dependent AI and job operations cannot complete when the database is unavailable.","validation":"Run maintained application tests and inspect TypeORM configuration in src/app.module.ts."},
+    {"capability":"redis","component":"database-server Redis","decision":"required","reason":"The established SYSTEM.md database-server integration explicitly requires db-server-postgres:5432 plus Redis.","contract":"Platform database-server contract includes Redis alongside PostgreSQL for this service.","configuration":"Database-server environment configuration documented by the service deployment.","failureMode":"The platform dependency is unavailable until database-server Redis connectivity is restored.","validation":"Review the declared database-server integration in SYSTEM.md and deployment configuration."},
+    {"capability":"logging","component":"logging-microservice","decision":"required","reason":"The service emits structured operational logs.","contract":"LoggingClient POSTs service, level, message, timestamp, and metadata to /api/logs.","configuration":"LOGGING_SERVICE_URL defaults to http://logging-microservice:3367.","failureMode":"Logging is best effort and must not crash the service.","validation":"Run logging-client tests or inspect the structured logging client contract."},
+    {"capability":"notifications","component":"notifications-microservice","decision":"required","reason":"The contract-violation filter sends configured notifications.","contract":"Configured notification delivery uses the notifications/send endpoint.","configuration":"NOTIFICATION_SERVICE_URL selects the notification service endpoint.","failureMode":"Malformed notification configuration is ignored by the filter and does not block request handling.","validation":"Review src/common/filters/contract-violation.filter.ts configuration and delivery path."},
+    {"capability":"ai","component":"ai-microservice","decision":"not-applicable","reason":"This service is the ai-microservice and AI domain gateway itself; it does not consume another ai-microservice as a client."},
+    {"capability":"payments","component":"payments-microservice","decision":"not-applicable","reason":"No payments-microservice client or payment-domain contract is implemented; the gateway is called by domain services."},
+    {"capability":"catalog","component":"catalog-microservice","decision":"not-applicable","reason":"No catalog-microservice client or catalog-domain contract is implemented; the gateway is called by domain services."},
+    {"capability":"orders","component":"orders-microservice","decision":"not-applicable","reason":"No orders-microservice client or orders-domain contract is implemented; the gateway is called by domain services."},
+    {"capability":"warehouse","component":"warehouse-microservice","decision":"not-applicable","reason":"No warehouse-microservice client or warehouse-domain contract is implemented; the gateway is called by domain services."},
+    {"capability":"invoices","component":"invoices-microservice","decision":"not-applicable","reason":"No invoices-microservice client or invoice-domain contract is implemented; the gateway is called by domain services."},
+    {"capability":"object-storage","component":"minio-microservice","decision":"required","reason":"Voice transcription retrieves audio objects before transcription.","contract":"VoiceService fetches a file key from a configured MinIO-compatible bucket and endpoint.","configuration":"STORAGE_ENDPOINT, STORAGE_BUCKET, STORAGE_ACCESS_KEY, and STORAGE_SECRET_KEY.","failureMode":"Missing or inaccessible audio returns a bad-request failure rather than a transcript.","validation":"Run voice-service tests and review the configured storage fetch contract."},
+    {"capability":"event-bus","component":"RabbitMQ","decision":"required","reason":"Claude Code implementation jobs publish and consume RabbitMQ messages.","contract":"Jobs publish to claude-code-exchange with claude-code.execute routing and are consumed by the job worker.","configuration":"RABBITMQ_URL configures the AMQP connection.","failureMode":"A failed publish leaves the persisted job available for recovery; consumers retry work after backoff.","validation":"Run Claude Code service and consumer tests."},
+    {"capability":"docs-rag","component":"docs-rag-microservice","decision":"required","reason":"Project documentation must be discoverable while Git remains authoritative.","contract":"The repository is ingested directly from Git for bounded documentation retrieval.","configuration":"Ecosystem repository catalog controls repository discovery.","failureMode":"When retrieval is unavailable or unconfident, agents verify against Git source.","validation":"Confirm distinctive documentation content resolves to the repository path when retrieval is healthy."},
+    {"capability":"monitoring","component":"monitoring-microservice","decision":"required","reason":"Runtime health must be observable.","contract":"The public GET /health endpoint returns status and service identity.","configuration":"Health controller and Kubernetes service probes expose the endpoint.","failureMode":"An unhealthy application does not report a healthy health response.","validation":"Request GET /health and run maintained controller tests."},
+    {"capability":"backups","component":"backups-microservice","decision":"not-applicable","reason":"No backups-microservice client or backup-management contract is implemented in this gateway."}
+  ]
+}
