@@ -37,3 +37,7 @@ No approved exception is recorded.
 ## Review cadence
 
 Review with every architecture, authentication, routing, or consumer-contract change.
+
+## RS256 key-rotation institutional memory
+
+RS256 replaced a shared HS256 secret held by 11 services, where any holder could impersonate another. On 2026-08-01, rotating the signing key without re-minting dependent tokens broke 9 services with `401 Invalid signature` even though their expiration remained in 2027. INV-02 is therefore a hard rule: never rotate a signing key without re-minting the tokens signed by it, then verify them with `scripts/verify-service-tokens.sh`.
