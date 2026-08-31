@@ -5,37 +5,13 @@
   "health": "production health endpoint is available at GET /health",
   "activeTask": "No active implementation task; TASK-001-bootstrap-service is completed",
   "lastUpdated": "2026-08-30",
-  "deployment": {
-    "status": "production Kubernetes app; Docker-only Ollama and LiteLLM dependencies remain separate"
-  },
+  "deployment": { "status": "production Kubernetes app; Docker-only Ollama and LiteLLM dependencies remain separate" },
   "blockers": [],
   "followUps": [],
   "schema_version": "1.0",
   "repository": "ai-microservice",
-  "service": {
-    "name": "ai-microservice",
-    "kind": "service",
-    "lifecycle": "active",
-    "deployment": "kubernetes"
-  },
-  "planning": {
-    "status": "done",
-    "active_goal_ids": [],
-    "next_ready_goal_ids": [],
-    "blocked_goal_ids": [],
-    "active_workstream_ids": [],
-    "last_updated_at": "2026-08-31T06:07:29Z"
-  },
-  "delivery": {
-    "last_validation_id": "VAL-WAVE0-AI-MICROSERVICE-2026-08-31",
-    "last_validation_status": "validated",
-    "validation_debt_count": 0,
-    "last_deployment_commit": null
-  },
-  "collection": {
-    "profile": "service",
-    "artifact_index": "docs/registry/ARTIFACT_INDEX.json",
-    "status_source": "TASKS.md completion marker and implementation-goals validation reports"
-  },
-  "status": "done"
+  "service": { "name": "ai-microservice", "kind": "service", "lifecycle": "active", "deployment": "kubernetes" },
+  "planning": { "status": "done", "active_goal_ids": [], "next_ready_goal_ids": [], "blocked_goal_ids": [], "active_workstream_ids": [], "last_updated_at": "2026-08-31T06:07:29Z" },
+  "delivery": { "last_validation_id": "VAL-WAVE0-AI-MICROSERVICE-2026-08-31", "last_validation_status": "validated", "validation_debt_count": 0, "last_deployment_commit": null },
+  "collection": { "profile": "service", "artifact_index": "docs/registry/ARTIFACT_INDEX.json", "status_source": "TASKS.md completion marker and implementation-goals validation reports" }
 }
