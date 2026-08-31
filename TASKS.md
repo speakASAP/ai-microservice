@@ -1,15 +1,12 @@
 # Tasks: ai-microservice
 
 ## Active
-
 No active implementation goal is queued.
 
-## Ready next
-
+## Ready Next
 A new owner-approved goal may be added with canonical IPS traceability.
 
 ## Blocked
-
 No active blocker is recorded.
 
 ## Completed
