@@ -2,7 +2,7 @@
 
 ```yaml
 id: EP-TASK-001-bootstrap-service
-status: implemented
+status: validated
 owner: project owner
 created: 2026-08-30
 last_updated: 2026-08-30
