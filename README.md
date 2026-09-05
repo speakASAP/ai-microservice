@@ -22,7 +22,7 @@ Run `npm run build` and the relevant Jest test command from this repository. Mod
 
 ## Configuration
 
-PostgreSQL uses `DATABASE_URL` or `DB_*`/`POSTGRES_*`; service authentication uses the configured RS256 keys; LiteLLM is selected by `LITELLM_BASE_URL`.
+PostgreSQL uses `DATABASE_URL` or `DB_*`/`POSTGRES_*`; service-to-service authentication follows the [canonical service identity standard](../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md); LiteLLM is selected by `LITELLM_BASE_URL`.
 
 ## Deployment
 

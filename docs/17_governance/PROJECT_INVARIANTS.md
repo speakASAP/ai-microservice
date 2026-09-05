@@ -1,3 +1,5 @@
+Service-to-service authentication follows the [canonical service identity standard](../../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md).
+
 # Project Invariants
 
 ```yaml
@@ -25,8 +27,8 @@ These invariants apply to every ai-microservice change, including documentation,
 | ID | Level | Source | Rule | Forbidden outcome | Validation method | Gate |
 | --- | --- | --- | --- | --- | --- | --- |
 | INV-01 | constitutional | `BUSINESS.md` | Other Statex services must not call external LLM providers directly; they use ai-microservice interfaces. | Bypassing centralized routing and governance. | Review contracts and consumer integration changes. | pre-coding |
-| INV-02 | security | `SYSTEM.md` | Never rotate a signing key without re-minting tokens signed by it. | Dependent services fail authentication after a key rotation. | Run `scripts/verify-service-tokens.sh` after token minting. | deployment |
-| INV-03 | security | `SYSTEM.md` | RS256 signing and verification must pin token-header `alg`. | Algorithm-confusion verification or caller impersonation. | Service-identity tests and security review. | pre-coding |
+| INV-02 | security | `SYSTEM.md` | Service-to-service authentication follows the [canonical service identity standard](../../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md). | Conflicting service authentication procedures create unsafe authorization boundaries. | Review the canonical standard. | pre-coding |
+| INV-03 | security | `SYSTEM.md` | Service-to-service authentication follows the [canonical service identity standard](../../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md). | Conflicting service authentication procedures create unsafe authorization boundaries. | Review the canonical standard. | pre-coding |
 | INV-04 | operational | `SYSTEM.md` | Preserve published health and AI API compatibility. | Consumer outage from a breaking endpoint change. | Relevant tests and health verification. | validation |
 | INV-05 | governance | `BUSINESS.md` | Premium inference requires explicit human approval per invocation. | Unattended premium spend. | Request-contract review. | pre-coding |
 
@@ -38,6 +40,6 @@ No approved exception is recorded.
 
 Review with every architecture, authentication, routing, or consumer-contract change.
 
-## RS256 key-rotation institutional memory
+## Service-to-service authentication
 
-RS256 replaced a shared HS256 secret held by 11 services, where any holder could impersonate another. On 2026-08-01, rotating the signing key without re-minting dependent tokens broke 9 services with `401 Invalid signature` even though their expiration remained in 2027. INV-02 is therefore a hard rule: never rotate a signing key without re-minting the tokens signed by it, then verify them with `scripts/verify-service-tokens.sh`.
+Follow the [canonical service identity standard](../../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md).

@@ -27,7 +27,7 @@ The service owns its AI agents, Claude Code jobs, and inference-log records. Con
 
 ## Authentication and authorization
 
-Machine service-identity requirements are governed exclusively by [`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md).
+Machine service-identity requirements are governed exclusively by [`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md).
 
 ## Synchronous dependencies
 
