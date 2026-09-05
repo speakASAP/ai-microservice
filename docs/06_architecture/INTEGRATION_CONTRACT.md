@@ -27,7 +27,7 @@ The service owns its AI agents, Claude Code jobs, and inference-log records. Con
 
 ## Authentication and authorization
 
-The global service guard verifies RS256 bearer tokens with `JWT_PUBLIC_KEY`; this service signs its service tokens with `JWT_PRIVATE_KEY`. Legacy HS256 fallback is controlled by `ALLOW_HS256_FALLBACK`. Token verification pins the token-header algorithm.
+Machine-accessible routes accept only Auth-issued, pair-specific RS256 bearer JWTs. They validate through Auth or an approved local RS256 verifier, create a separate service actor, declare target-scoped roles per route, and deny and error-log undecorated routes. Auth alone signs and re-mints credentials; delivery is Vault -> ExternalSecret -> Kubernetes Secret -> secretKeyRef. See auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md.
 
 ## Synchronous dependencies
 
