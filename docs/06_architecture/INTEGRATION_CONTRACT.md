@@ -8,7 +8,7 @@ Define deliberate ecosystem integration decisions for the production AI gateway 
 
 | Capability | Decision | Evidence |
 | --- | --- | --- |
-| Auth | required | RS256 service-token signing and verification are implemented by service-identity. |
+| Auth | required | Service calls use Auth-issued per-pair RS256 JWTs with target-scoped roles; see `auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md`. |
 | PostgreSQL | required | TypeORM persists agents, jobs, and inference logs. |
 | Redis | required | The established database-server contract is PostgreSQL plus Redis. |
 | Logging | required | `LoggingClient` posts structured logs to logging-microservice. |
