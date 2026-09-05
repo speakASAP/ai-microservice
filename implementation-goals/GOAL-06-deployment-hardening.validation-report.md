@@ -33,37 +33,6 @@ Pass. The implementation strengthens deployment readiness, smoke checks, rollbac
 
 ## Command Evidence
 
-```text
-ssh alfares 'cd /home/ssf/Documents/Github/ai-microservice && python3 scripts/pre_coding_gate.py --root . --goal implementation-goals/GOAL-06-deployment-hardening.md'
-PASS: pre-coding gate
-
-ssh alfares 'cd /home/ssf/Documents/Github/ai-microservice && python3 -m py_compile scripts/deployment_readiness_gate.py scripts/pre_coding_gate.py'
-PASS
-
-ssh alfares 'cd /home/ssf/Documents/Github/ai-microservice && bash -n scripts/deploy.sh scripts/smoke-unified-llm.sh'
-PASS
-
-ssh alfares 'cd /home/ssf/Documents/Github/ai-microservice && python3 scripts/deployment_readiness_gate.py --root .'
-PASS: deployment readiness gate
-
-ssh alfares 'cd /home/ssf/Documents/Github/ai-microservice && npm run build'
-PASS
-
-ssh alfares 'cd /home/ssf/Documents/Github/ai-microservice && npm test'
-PASS: 14 suites, 128 tests
-
-ssh alfares 'cd /home/ssf/Documents/Github/ai-microservice && AI_SERVICE_BASE_URL=https://ai.alfares.cz AI_SERVICE_TOKEN=<short-lived synthetic token> ./scripts/smoke-unified-llm.sh'
-PASS: health, premium approval block, invalid implementation-job payload validation
-
-ssh alfares 'cd /home/ssf/Documents/Github/ai-microservice && ./scripts/deploy.sh goal-06-deployment-hardening-20260612'
-PASS: deployed image tag localhost:5000/ai-microservice:goal-06-deployment-hardening-20260612
-PASS: pushed digest sha256:da24fd454caf4336f3f28d3931ea5c554b210046e62eb9b6373095a7f3e526a5
-PASS: rollout completed, health check passed, authenticated smoke passed
-
-curl -s -H 'Cache-Control: no-cache' https://ai.alfares.cz/health
-PASS: {"status":"ok","service":"ai-microservice"}
-```
-
 ## Gate Evidence
 
 Pre-coding and deployment readiness gates passed on `alfares`.

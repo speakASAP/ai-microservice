@@ -27,7 +27,7 @@ The service owns its AI agents, Claude Code jobs, and inference-log records. Con
 
 ## Authentication and authorization
 
-Machine-accessible routes accept only Auth-issued, pair-specific RS256 bearer JWTs. They validate through Auth or an approved local RS256 verifier, create a separate service actor, declare target-scoped roles per route, and deny and error-log undecorated routes. Auth alone signs and re-mints credentials; delivery is Vault -> ExternalSecret -> Kubernetes Secret -> secretKeyRef. See auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md.
+Machine service-identity requirements are governed exclusively by [`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md).
 
 ## Synchronous dependencies
 
