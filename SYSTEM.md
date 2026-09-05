@@ -41,24 +41,10 @@ TypeORM connects to database-server PostgreSQL using `DATABASE_URL` or `DB_*`/`P
 
 ## Service authentication (RS256)
 
-Callers present `Authorization: Bearer` service tokens. Tokens are **RS256**: this service holds the private key (`JWT_PRIVATE_KEY`) and signs; verification uses `JWT_PUBLIC_KEY`. A leaked public key cannot mint tokens, so compromising one caller does not affect any other.
-
-This replaced a **shared** HS256 `JWT_SECRET` that 11 services held in common - symmetric, so any of them could impersonate the others. Rotating it on 2026-08-01 without re-minting the dependent tokens broke 9 services with `401 Invalid signature` while their `exp` still read 2027.
-
-| Variable | Meaning |
-| --- | --- |
-| `JWT_PRIVATE_KEY` | RSA-2048 PEM. **Only this service holds it.** Signs service tokens. |
-| `JWT_PUBLIC_KEY` | RSA public PEM. Verifies incoming tokens. Not secret. |
-| `ALLOW_HS256_FALLBACK` | `false` closes the legacy shared-secret path. Defaults to `true` so an unconfigured deploy cannot lock every caller out. |
-
-Never rotate a signing key without re-minting the tokens signed by it:
-
-```bash
-./scripts/mint-service-token.sh --all
-./scripts/verify-service-tokens.sh
-```
-
-Both verify paths pin `alg` from the token header before verifying - without that, a token can be relabelled `HS256` and signed with the public key (algorithm-confusion attack).
+AI service-to-service calls use the canonical Auth-issued RS256 service JWT,
+one principal per `(caller -> target)` pair, with an explicitly enforced
+least-privilege role. Auth is the only signing authority. The complete protocol
+is [`auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md).
 
 ## Upstream traceability
 
