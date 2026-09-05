@@ -41,10 +41,7 @@ TypeORM connects to database-server PostgreSQL using `DATABASE_URL` or `DB_*`/`P
 
 ## Service authentication (RS256)
 
-AI service-to-service calls use the canonical Auth-issued RS256 service JWT,
-one principal per `(caller -> target)` pair, with an explicitly enforced
-least-privilege role. Auth is the only signing authority. The complete protocol
-is [`auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md).
+For machine service identity, follow the sole canonical [`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md). It is not reproduced here.
 
 ## Upstream traceability
 

@@ -25,8 +25,4 @@ Work in the authoritative remote repository. Do not print secrets, tokens, raw p
 Report changed files, validation evidence, validation debt, blockers, scope deviations, and the concrete next action.
 
 ## Service-to-service authentication
-Any call this service makes to, or receives from, another service is governed by
-[`auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md).
-Read it before writing or debugging a machine call — including a 401 from an internal
-endpoint. New machine paths use an Auth-issued per-pair RS256 service JWT; a shared static
-token is legacy and closed to new adopters.
+For machine service identity, follow the sole canonical [`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md). It is not reproduced here.
