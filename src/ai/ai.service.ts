@@ -38,6 +38,34 @@ function resolveTimeoutMs(requested?: number): number {
   return Math.min(requested, MAX_CALLER_TIMEOUT_MS);
 }
 
+/**
+ * Cheaper tiers to try when the requested tier returns an error or empty text.
+ *
+ * Order is intentional: keep OpenRouter free prose models (`cheap`) ahead of local
+ * `free` (Ollama 0.5B code). Falling straight to Ollama for CV/drill prose is worse
+ * than a degraded OpenRouter answer. `premium` is only reached when approval already
+ * passed; this chain does not bypass that gate.
+ */
+const LITELLM_TIER_CASCADE: Record<ModelTier, readonly ModelTier[]> = {
+  premium: ['smart', 'cheap', 'free'],
+  smart: ['cheap', 'free'],
+  cheap: ['free'],
+  free: ['free'],
+};
+
+/** Wall-clock reserve so a non-final attempt cannot consume the whole caller budget. */
+const CASCADE_RESERVE_MS = 20_000;
+
+/** Cap on a non-final attempt so a stalled primary fails open to the next tier. */
+const CASCADE_PRIMARY_CAP_MS = 50_000;
+
+/** Refuse to start another attempt when less than this remains before the deadline. */
+const CASCADE_MIN_ATTEMPT_MS = 8_000;
+
+function cascadeTiers(requested: ModelTier): ModelTier[] {
+  return [requested, ...LITELLM_TIER_CASCADE[requested]];
+}
+
 type AiCompleteRouter = 'auto' | 'litellm' | 'claude_cli' | 'claude_cli_with_litellm_fallback';
 
 function litellmBaseUrl(): string {
@@ -315,8 +343,86 @@ export class AiService {
     return this.withAgentAudit(ccResult, resolved.audit);
   }
 
+  /**
+   * Try the requested tier, then cheaper tiers, until one returns text or the wall-clock
+   * budget is exhausted. A single LiteLLM alias fallback is not enough: when the primary
+   * stalls for the full outer budget (cv-tuning 2026-09-06, AI_HTTP_TIMEOUT 85s on
+   * `smart`), the in-proxy fallback never gets a usable window. Cascading here with a
+   * capped primary attempt leaves real time for `cheap` / `free`.
+   */
   private async completeViaLiteLLM(dto: AiCompleteRequestInput, audit?: AgentRouteAudit): Promise<AiCompleteResult> {
-    const model = dto.model_tier ?? 'free';
+    const requested = (dto.model_tier ?? 'free') as ModelTier;
+    const tiers = cascadeTiers(requested);
+    const totalBudgetMs = resolveTimeoutMs(dto.timeout_ms);
+    const deadlineMs = Date.now() + totalBudgetMs;
+    let lastError: AiCompleteResult = litellmErrorResult(
+      requested,
+      504,
+      `LiteLLM did not respond within ${totalBudgetMs}ms`,
+    );
+
+    for (let i = 0; i < tiers.length; i++) {
+      const tier = tiers[i];
+      const remainingMs = deadlineMs - Date.now();
+      if (remainingMs < CASCADE_MIN_ATTEMPT_MS) {
+        this.logger.error(
+          `${new Date().toISOString()} cascade stop requested=${requested} next=${tier} ` +
+            `remaining_ms=${remainingMs} (<${CASCADE_MIN_ATTEMPT_MS}); returning last error`,
+        );
+        break;
+      }
+
+      const isLast = i === tiers.length - 1;
+      const attemptBudgetMs = isLast
+        ? remainingMs
+        : Math.max(
+            CASCADE_MIN_ATTEMPT_MS,
+            Math.min(remainingMs - CASCADE_RESERVE_MS, CASCADE_PRIMARY_CAP_MS),
+          );
+
+      this.logger.log(
+        `${new Date().toISOString()} litellm attempt requested=${requested} tier=${tier} ` +
+          `attempt_ms=${attemptBudgetMs} remaining_ms=${remainingMs} cascade=${i + 1}/${tiers.length}`,
+      );
+
+      const result = await this.completeViaLiteLLMOnce(
+        { ...dto, model_tier: tier, timeout_ms: attemptBudgetMs },
+        audit,
+        requested,
+      );
+
+      if (!result.error_code && result.text.trim().length > 0) {
+        if (tier !== requested) {
+          this.logger.error(
+            `${new Date().toISOString()} litellm cascade served requested=${requested} ` +
+              `via tier=${tier} model=${result.model_used}; marking served_by_fallback`,
+          );
+          return {
+            ...result,
+            tier_used: requested,
+            served_by_fallback: true,
+          };
+        }
+        return result;
+      }
+
+      lastError = result;
+      this.logger.error(
+        `${new Date().toISOString()} litellm attempt failed requested=${requested} tier=${tier} ` +
+          `error=${result.error_code ?? 'empty_text'}: ${(result.error_message ?? '').slice(0, 200)}`,
+      );
+    }
+
+    return lastError;
+  }
+
+  private async completeViaLiteLLMOnce(
+    dto: AiCompleteRequestInput,
+    audit: AgentRouteAudit | undefined,
+    /** Tier the caller originally asked for — used only in timeout/error telemetry labels. */
+    requestedTier: ModelTier,
+  ): Promise<AiCompleteResult> {
+    const model = (dto.model_tier ?? 'free') as ModelTier;
     const messages: Array<{ role: string; content: string }> = [];
     let userContent = dto.user_prompt;
     if (dto.system_prompt) {
@@ -363,7 +469,7 @@ export class AiService {
         // (2026-08-14). Every other failure on this path already returns a structured
         // result; the timeout was the lone exception.
         this.logger.error(
-          `AI_HTTP_TIMEOUT tier=${model} after ${timeoutMs}ms ` +
+          `AI_HTTP_TIMEOUT tier=${model} requested=${requestedTier} after ${timeoutMs}ms ` +
             `correlationId=${dto.correlation_id ?? 'none'} url=${litellmChatCompletionsUrl()}`,
         );
         return litellmErrorResult(
@@ -373,7 +479,8 @@ export class AiService {
         );
       }
       this.logger.error(
-        `LiteLLM unreachable tier=${model} correlationId=${dto.correlation_id ?? 'none'} ` +
+        `LiteLLM unreachable tier=${model} requested=${requestedTier} ` +
+          `correlationId=${dto.correlation_id ?? 'none'} ` +
           `url=${litellmChatCompletionsUrl()}: ${detail.slice(0, 300)}`,
       );
       return litellmErrorResult(model, 0, `LiteLLM unreachable: ${detail}`);
@@ -381,7 +488,7 @@ export class AiService {
 
     if (!res.ok) {
       const errText = await res.text();
-      this.logger.error(`LiteLLM error ${res.status}: ${errText.slice(0, 300)}`);
+      this.logger.error(`LiteLLM error ${res.status} tier=${model}: ${errText.slice(0, 300)}`);
       this.emitTelemetry(dto.correlation_id, resolveBusinessId(dto), model, 0, 0, audit);
       return litellmErrorResult(model, res.status, errText || `HTTP ${res.status}`);
     }

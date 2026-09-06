@@ -85,9 +85,13 @@ model_list:
 router_settings:
   routing_strategy: least-busy
   fallbacks:
-    - {"free": ["cheap"]}
-    - {"cheap": ["cheap-fallback"]}
-    - {"smart": ["smart-fallback"]}
+    # Cross-tier cascade: a paid/premium or smart stall must still reach an OpenRouter
+    # free prose model before local Ollama. `free` itself already falls to `cheap`
+    # because the 0.5B Ollama code model is not a usable prose answer.
+    - {"free": ["cheap", "cheap-fallback"]}
+    - {"cheap": ["cheap-fallback", "free"]}
+    - {"smart": ["smart-fallback", "cheap", "cheap-fallback", "free"]}
+    - {"premium": ["smart", "smart-fallback", "cheap", "cheap-fallback", "free"]}
   # 2026-08-14 — a drill generation hung and the teacher got a red banner after ~150s.
   # The budgets were nested inside-out: the caller (ai-microservice, LITELLM_TIMEOUT_MS
   # 75s) aborted while THIS proxy was still working through `request_timeout: 120` on
@@ -103,6 +107,9 @@ router_settings:
   # why a slow caller sends a per-request `timeout_ms` instead (clamped server-side to
   # MAX_CALLER_TIMEOUT_MS in ai.service.ts): it lifts one caller's ceiling without
   # touching the shared global the retry math above depends on.
+  # Application-level cascade in ai.service.ts (2026-09-06) additionally caps the
+  # primary attempt and retries cheaper tiers with the remaining wall-clock, because
+  # an in-proxy fallback after a full primary stall still had no usable window.
   # 30 + 30 + 5 = 65s worst case, under 75s with headroom for connect + JSON parse.
   # Retries dropped 3 -> 1: with a fallback model configured, retrying a stalled vendor
   # three times only burns the budget the fallback needs to reach a different vendor.
