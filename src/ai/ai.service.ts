@@ -17,6 +17,27 @@ import { Repository } from 'typeorm';
 
 const LITELLM_TIMEOUT_MS = Number(process.env.LITELLM_TIMEOUT_MS || 120_000);
 
+/**
+ * Hard ceiling on a caller-supplied `timeout_ms`. A per-request budget exists because the
+ * global is pinned from above and cannot be raised for everyone (education-service allows
+ * 180s and LlmClient retries once, so 2x the global is the ceiling — router_settings note in
+ * litellm_config.yaml, 2026-08-14), but a budget a caller can set without limit is a way for
+ * one service to park a request indefinitely and starve the shared pool. 150s clears
+ * cv-tuning's slowest measured CV prompt (70.3s) with room for its fallback chain, and stays
+ * under the 180s any caller upstream allows.
+ */
+export const MAX_CALLER_TIMEOUT_MS = 150_000;
+
+/**
+ * The budget actually applied to one upstream call. Returned rather than logged in place so
+ * the AI_HTTP_TIMEOUT message reports the deadline the request really ran under — reporting
+ * the global for a request that did not use it sends whoever reads the log to the wrong knob.
+ */
+function resolveTimeoutMs(requested?: number): number {
+  if (!requested || !Number.isFinite(requested) || requested <= 0) return LITELLM_TIMEOUT_MS;
+  return Math.min(requested, MAX_CALLER_TIMEOUT_MS);
+}
+
 type AiCompleteRouter = 'auto' | 'litellm' | 'claude_cli' | 'claude_cli_with_litellm_fallback';
 
 function litellmBaseUrl(): string {
@@ -318,6 +339,8 @@ export class AiService {
       requestBody.response_format = { type: 'json_object' };
     }
 
+    const timeoutMs = resolveTimeoutMs(dto.timeout_ms);
+
     let res: Response;
     try {
       res = await fetch(litellmChatCompletionsUrl(), {
@@ -327,7 +350,7 @@ export class AiService {
           Authorization: `Bearer ${process.env.LITELLM_MASTER_KEY ?? ''}`,
         },
         body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(LITELLM_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (err: unknown) {
       const detail = err instanceof Error ? err.message : String(err);
@@ -340,13 +363,13 @@ export class AiService {
         // (2026-08-14). Every other failure on this path already returns a structured
         // result; the timeout was the lone exception.
         this.logger.error(
-          `AI_HTTP_TIMEOUT tier=${model} after ${LITELLM_TIMEOUT_MS}ms ` +
+          `AI_HTTP_TIMEOUT tier=${model} after ${timeoutMs}ms ` +
             `correlationId=${dto.correlation_id ?? 'none'} url=${litellmChatCompletionsUrl()}`,
         );
         return litellmErrorResult(
           model,
           504,
-          `LiteLLM did not respond within ${LITELLM_TIMEOUT_MS}ms`,
+          `LiteLLM did not respond within ${timeoutMs}ms`,
         );
       }
       this.logger.error(

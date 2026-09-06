@@ -53,10 +53,13 @@ model_list:
   # eval fixtures failed. Not a token cap — max_tokens 8000 is requested and a direct
   # probe returned finish_reason "stop".
   #
-  # Budget still nests inside the caller's LITELLM_TIMEOUT_MS of 75s, per the rule in
-  # router_settings below: 58 (smart) + 10 (smart-fallback) + 5 (retry_after) = 73s,
-  # leaving ~2s for connect and JSON parse. `free` and `cheap` keep the global 30s, so
-  # education-service's drill path is unchanged.
+  # Budget still nests inside the caller's timeout, per the rule in router_settings below:
+  # 58 (smart) + 10 (smart-fallback) + 5 (retry_after) = 73s. Against the 75s global that
+  # left ~2s for connect and JSON parse, which cv-tuning's CV prompts (max measured 70.3s)
+  # kept tipping over. Since 2026-09-06 a caller may send its own `timeout_ms` on
+  # /ai/complete and cv-tuning sends 85s, so the chain has real headroom for that path
+  # without moving the 75s global every other caller is sized against. `free` and `cheap`
+  # keep the global 30s, so education-service's drill path is unchanged.
   - model_name: smart
     litellm_params:
       model: openrouter/google/gemma-4-31b-it:free
@@ -94,9 +97,12 @@ router_settings:
   # left no trace here, which is why the proxy looked healthy throughout.
   #
   # Budgets must nest: one attempt + one fallback + backoff must finish INSIDE the
-  # caller's timeout, or the fallback is decorative. The caller's 75s is itself pinned
+  # caller's timeout, or the fallback is decorative. The 75s global is itself pinned
   # from above — education-service allows 180s and LlmClient retries once, so 2x75s is
-  # the ceiling and LITELLM_TIMEOUT_MS cannot simply be raised to make room here.
+  # the ceiling and LITELLM_TIMEOUT_MS cannot simply be raised to make room here. That is
+  # why a slow caller sends a per-request `timeout_ms` instead (clamped server-side to
+  # MAX_CALLER_TIMEOUT_MS in ai.service.ts): it lifts one caller's ceiling without
+  # touching the shared global the retry math above depends on.
   # 30 + 30 + 5 = 65s worst case, under 75s with headroom for connect + JSON parse.
   # Retries dropped 3 -> 1: with a fallback model configured, retrying a stalled vendor
   # three times only burns the budget the fallback needs to reach a different vendor.

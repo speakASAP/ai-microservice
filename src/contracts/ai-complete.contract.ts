@@ -16,6 +16,16 @@ export const AiCompleteRequestSchema = z.object({
   humanApproval: z.boolean().optional(),
   agent_slug: z.string().min(1).max(160).optional(),
   agent_service_scope: z.string().min(1).max(120).optional(),
+  /**
+   * Per-request budget for the upstream LiteLLM call, in ms. Optional: a caller that omits it
+   * keeps the global LITELLM_TIMEOUT_MS, which is pinned from above and cannot simply be
+   * raised (education-service allows 180s and retries once, so 2x the global is the ceiling).
+   * A caller whose own workload is measurably slower — cv-tuning's CV prompts run to 70.3s
+   * against a 73s chain — asks for its own instead. Clamped server-side to
+   * MAX_CALLER_TIMEOUT_MS: an unbounded value would let one service park a request and
+   * starve the shared pool.
+   */
+  timeout_ms: z.number().int().positive().optional(),
 });
 
 export const AiCompleteResponseSchema = z.object({

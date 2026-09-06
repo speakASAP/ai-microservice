@@ -1,4 +1,4 @@
-import { AiService } from './ai.service';
+import { AiService, MAX_CALLER_TIMEOUT_MS } from './ai.service';
 import { LoggingClient } from '../claude-code/logging.client';
 import { AiCompleteRequestSchema } from '../contracts';
 
@@ -105,6 +105,75 @@ describe('AiService - LiteLLM routing', () => {
     expect(result.error_code).toBe('AI_HTTP_TIMEOUT');
     expect(result.text).toBe('');
     expect(result.model_used).toBe('smart');
+  });
+
+  /**
+   * cv-tuning's revise path is a two-call pipeline (revision + a separate entailment pass
+   * that must never fold into the first), and its CV prompts were measured at median 40.3s
+   * / max 70.3s against a 73s chain budget — ~3s of headroom, so any slow call tips over
+   * (litellm_config.yaml model_list note, 2026-08-24). The global LITELLM_TIMEOUT_MS cannot
+   * simply be raised to make room: education-service allows 180s and LlmClient retries once,
+   * so 2x the global is the ceiling pinned from above (router_settings note, 2026-08-14).
+   * A caller that knows its own workload is slower therefore asks for its own budget.
+   */
+  it('honours a caller-supplied timeout_ms over the global default', async () => {
+    let signal: AbortSignal | undefined;
+    global.fetch = jest.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+      signal = init.signal as AbortSignal;
+      throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+    });
+
+    const result = await service.complete({
+      model_tier: 'smart',
+      user_prompt: 'revise this CV',
+      timeout_ms: 110_000,
+    });
+
+    expect(result.error_code).toBe('AI_HTTP_TIMEOUT');
+    // The budget actually applied is the one reported, so an operator reading the log sees
+    // the real deadline rather than the global it was not run under.
+    expect(result.error_message).toContain('110000ms');
+    expect(signal).toBeDefined();
+  });
+
+  /**
+   * A caller-supplied budget is bounded, never trusted outright: an unbounded value would let
+   * one service park a request indefinitely and starve the shared pool for every other caller.
+   */
+  it('clamps a caller-supplied timeout_ms to the hard ceiling', async () => {
+    global.fetch = jest.fn().mockRejectedValue(
+      Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' }),
+    );
+
+    const result = await service.complete({
+      model_tier: 'smart',
+      user_prompt: 'revise this CV',
+      timeout_ms: 900_000,
+    });
+
+    expect(result.error_message).toContain(`${MAX_CALLER_TIMEOUT_MS}ms`);
+  });
+
+  /** A caller that asks for nothing keeps exactly the behaviour it had before. */
+  it('falls back to the global timeout when the caller supplies none', async () => {
+    global.fetch = jest.fn().mockRejectedValue(
+      Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' }),
+    );
+
+    const result = await service.complete({ model_tier: 'smart', user_prompt: 'generate a drill' });
+
+    expect(result.error_message).toContain('120000ms');
+  });
+
+  it('keeps timeout_ms optional in the request contract', () => {
+    expect(() => AiCompleteRequestSchema.parse({ model_tier: 'free', user_prompt: 'say ok' })).not.toThrow();
+    expect(() => AiCompleteRequestSchema.parse({
+      model_tier: 'free', user_prompt: 'say ok', timeout_ms: 90_000,
+    })).not.toThrow();
+    // Zero or negative is a caller bug, not "no timeout".
+    expect(() => AiCompleteRequestSchema.parse({
+      model_tier: 'free', user_prompt: 'say ok', timeout_ms: 0,
+    })).toThrow();
   });
 
   it('keeps business_id optional in the request contract', () => {
