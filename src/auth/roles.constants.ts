@@ -32,9 +32,3 @@ export const AI_OPERATOR_ROLES = [
   AI_ADMIN_ROLE,
   AI_OPERATOR_ROLE,
 ] as const;
-
-/** Roles the legacy ai-issued JWT path may satisfy during the dual window.
- *  Matches pre-migration authority (any AI_SERVICE_TOKEN could call every machine
- *  route, including claude-code). Auth-minted principals get least privilege;
- *  close ALLOW_LEGACY_AI_ISSUED only after runlayer holds operator and others invoke. */
-export const AI_LEGACY_EFFECTIVE_ROLES = [AI_INVOKE_ROLE, AI_OPERATOR_ROLE] as const;

@@ -1,5 +1,4 @@
 import { LlmClient } from './llm.client';
-import { JwtUtil } from '../service-identity/jwt.util';
 import {
   AiCompleteResponse,
   AiCompleteResponseSchema,
@@ -29,7 +28,7 @@ function okResponse(overrides: Record<string, unknown> = {}) {
   return { ok: true, status: 200, json: async () => aiCompleteResponse(overrides) };
 }
 
-const TEST_SECRET = 'test-jwt-secret-not-a-real-credential';
+const TEST_TOKEN = 'auth-minted-test-token-not-a-real-credential';
 
 describe('LlmClient.completeJson', () => {
   const fetchMock = jest.fn();
@@ -39,7 +38,7 @@ describe('LlmClient.completeJson', () => {
     global.fetch = fetchMock as unknown as typeof fetch;
     process.env.AI_ORCHESTRATOR_URL = 'http://ai-microservice:3380';
     process.env.DRILL_GENERATION_MODEL_TIER = 'smart';
-    process.env.JWT_SECRET = TEST_SECRET;
+    process.env.AI_SERVICE_TOKEN = TEST_TOKEN;
   });
 
   const call = (client: LlmClient, outputSchema: unknown = { type: 'object' }) =>
@@ -55,24 +54,17 @@ describe('LlmClient.completeJson', () => {
 
   // --- C1: service authentication -----------------------------------------
 
-  it('sends a service token that ServiceAuthGuard would accept', async () => {
+  it('sends the provisioned AI_SERVICE_TOKEN as Bearer', async () => {
     fetchMock.mockResolvedValue(okResponse({ text: '{"items":[]}' }));
     await call(new LlmClient());
 
     const headers = lastInit().headers as Record<string, string>;
-    expect(headers.Authorization).toMatch(/^Bearer \S+$/);
-
-    // Verify exactly the way ServiceAuthGuard does: HS256 over JWT_SECRET,
-    // issuer pinned to 'ai-microservice' inside JwtUtil.verify.
-    const token = headers.Authorization.slice('Bearer '.length);
-    const payload = JwtUtil.verify(token, TEST_SECRET);
-    expect(payload.serviceId).toBe('ai-microservice');
-    expect(payload.exp).toBeGreaterThan(Math.floor(Date.now() / 1000));
+    expect(headers.Authorization).toBe(`Bearer ${TEST_TOKEN}`);
   });
 
-  it('fails closed rather than calling unauthenticated when JWT_SECRET is absent', async () => {
-    delete process.env.JWT_SECRET;
-    await expect(call(new LlmClient())).rejects.toThrow(/auth is not configured/i);
+  it('fails closed rather than calling unauthenticated when AI_SERVICE_TOKEN is absent', async () => {
+    delete process.env.AI_SERVICE_TOKEN;
+    await expect(call(new LlmClient())).rejects.toThrow(/AI_SERVICE_TOKEN is not configured/i);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -220,7 +212,7 @@ describe('LlmClient.completeJson — transient failure retry', () => {
     global.fetch = fetchMock as unknown as typeof fetch;
     process.env.AI_ORCHESTRATOR_URL = 'http://ai-microservice:3380';
     process.env.DRILL_GENERATION_MODEL_TIER = 'smart';
-    process.env.JWT_SECRET = 'test-jwt-secret-not-a-real-credential';
+    process.env.AI_SERVICE_TOKEN = 'auth-minted-test-token-not-a-real-credential';
   });
 
   const call = (client: LlmClient) =>

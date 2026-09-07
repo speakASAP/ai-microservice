@@ -2,9 +2,8 @@
  * Auth-issued RS256 verification via JWKS.
  *
  * This service holds only auth's public key and cannot sign. Modelled on
- * docs-rag-microservice/src/auth/jwt-verifier.ts. AI-issued self-signed JWTs
- * (iss=ai-microservice, no kid) are handled by ServiceAuthGuard's legacy path,
- * not here.
+ * docs-rag-microservice/src/auth/jwt-verifier.ts. AI-issued / HS256 tokens are
+ * refused here — ServiceAuthGuard has no legacy fallback.
  */
 
 import { UnauthorizedException } from '@nestjs/common';

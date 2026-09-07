@@ -1,5 +1,4 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { JwtUtil } from '../service-identity/jwt.util';
 import { AiCompleteResponse } from '../contracts/ai-complete.contract';
 
 export interface LlmMeta {
@@ -19,15 +18,9 @@ export interface CompleteJsonArgs {
 
 const FENCE = /^\s*```(?:json)?\s*([\s\S]*?)\s*```\s*$/;
 
-/** `/ai/complete` runs behind ServiceAuthGuard (registered as APP_GUARD in
- *  ServiceIdentityModule) and `AiController` carries no `@Public()`. The guard
- *  verifies an HS256 token against `JWT_SECRET` and requires `iss` to be
- *  exactly `ai-microservice` (see JwtUtil.verify), so this service mints its
- *  own short-lived token with the same in-repo utility. */
-const SELF_SERVICE_ID = 'ai-microservice';
-/** Short enough that a leaked token is near-worthless, long enough to outlive
- *  a slow CC-CLI completion that started just before the token was minted. */
-const SERVICE_TOKEN_TTL_SECONDS = 900;
+/** `/ai/complete` runs behind ServiceAuthGuard. Auth-minted RS256 only —
+ *  deliver via Vault → ExternalSecret as AI_SERVICE_TOKEN
+ *  (svc-<caller>--ai-microservice). No in-process self-mint. */
 
 /** Generous by design: a 50-item generate on the claude-CLI path is minutes,
  *  not seconds. With no bound at all the request rides undici's ~300s default
@@ -143,7 +136,7 @@ export class LlmClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.mintServiceToken()}`,
+        Authorization: `Bearer ${this.resolveServiceToken()}`,
       },
       signal: AbortSignal.timeout(timeoutMs),
       body: JSON.stringify({
@@ -226,22 +219,14 @@ export class LlmClient {
     return `${userPrompt}\n\nReturn JSON matching exactly this schema:\n${JSON.stringify(outputSchema)}`;
   }
 
-  /** Mints a self-issued service token. Keys are read here and never logged,
-   *  stored on the instance, or included in any thrown message.
-   *
-   *  Prefers RS256 — the HS256 branch exists only for the migration window and
-   *  stops working once ALLOW_HS256_FALLBACK is closed. */
-  private mintServiceToken(): string {
-    const privateKey = process.env.JWT_PRIVATE_KEY;
-    if (privateKey) {
-      return JwtUtil.signRS256(SELF_SERVICE_ID, privateKey, SERVICE_TOKEN_TTL_SECONDS);
+  /** Auth-provisioned bearer for this (caller → ai-microservice) pair. Never
+   *  logged or included in thrown messages. */
+  private resolveServiceToken(): string {
+    const token = process.env.AI_SERVICE_TOKEN?.trim();
+    if (!token) {
+      throw new ServiceUnavailableException('AI_SERVICE_TOKEN is not configured');
     }
-
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-      throw new ServiceUnavailableException('ai/complete auth is not configured');
-    }
-    return JwtUtil.sign(SELF_SERVICE_ID, secret, SERVICE_TOKEN_TTL_SECONDS);
+    return token;
   }
 
   private resolveTimeoutMs(): number {

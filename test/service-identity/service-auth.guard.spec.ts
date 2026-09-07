@@ -1,5 +1,5 @@
 /**
- * Integration-style ServiceAuthGuard tests (async Auth/legacy paths).
+ * Integration-style ServiceAuthGuard tests (Auth RS256 only).
  * Prefer src/service-identity/service-auth.guard.spec.ts for role matrix coverage.
  */
 
@@ -60,22 +60,17 @@ describe('ServiceAuthGuard (test/)', () => {
     await expect(guard.canActivate(makeContext('Basic abc123'))).rejects.toThrow(UnauthorizedException);
   });
 
-  it('allows legacy ai-issued RS256 and attaches serviceId', async () => {
+  it('rejects legacy ai-issued RS256', async () => {
     process.env.JWT_PUBLIC_KEY = publicKey;
-    process.env.ALLOW_LEGACY_AI_ISSUED = 'true';
-    process.env.ALLOW_HS256_FALLBACK = 'false';
     const token = JwtUtil.signRS256('shop-assistant', privateKey);
-    const ctx = makeContext(`Bearer ${token}`);
     const guard = new ServiceAuthGuard(reflectorFor(AI_INVOKE_ROLES));
-    await expect(guard.canActivate(ctx)).resolves.toBe(true);
-    const req = ctx.switchToHttp().getRequest<{ serviceId: string }>();
-    expect(req.serviceId).toBe('shop-assistant');
+    await expect(guard.canActivate(makeContext(`Bearer ${token}`))).rejects.toThrow(
+      UnauthorizedException,
+    );
   });
 
   it('rejects expired legacy token', async () => {
     process.env.JWT_PUBLIC_KEY = publicKey;
-    process.env.ALLOW_LEGACY_AI_ISSUED = 'true';
-    process.env.ALLOW_HS256_FALLBACK = 'false';
     const token = JwtUtil.signRS256('shop-assistant', privateKey, -1);
     const guard = new ServiceAuthGuard(reflectorFor(AI_INVOKE_ROLES));
     await expect(guard.canActivate(makeContext(`Bearer ${token}`))).rejects.toThrow(
@@ -83,10 +78,8 @@ describe('ServiceAuthGuard (test/)', () => {
     );
   });
 
-  it('rejects HS256 when fallback is closed', async () => {
+  it('rejects HS256 tokens', async () => {
     process.env.JWT_SECRET = SECRET;
-    process.env.ALLOW_LEGACY_AI_ISSUED = 'true';
-    process.env.ALLOW_HS256_FALLBACK = 'false';
     const token = JwtUtil.sign('shop-assistant', SECRET);
     const guard = new ServiceAuthGuard(reflectorFor(AI_INVOKE_ROLES));
     await expect(guard.canActivate(makeContext(`Bearer ${token}`))).rejects.toThrow(

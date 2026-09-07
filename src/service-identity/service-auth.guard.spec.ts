@@ -1,9 +1,8 @@
 /**
  * ServiceAuthGuard authorization tests.
  *
- * Auth-minted RS256 (kid present) is enforced with roles. Legacy ai-issued
- * tokens (no kid) are accepted only while ALLOW_LEGACY_AI_ISSUED is open, and
- * only for invoke-tier routes — never operator.
+ * Only Auth-minted RS256 (via verifyAuthToken) is accepted. Legacy ai-issued
+ * RS256/HS256 tokens are rejected with zero fallback.
  */
 
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
@@ -67,49 +66,26 @@ describe('ServiceAuthGuard', () => {
     await expect(guard.canActivate(contextFor())).rejects.toThrow('Missing service token');
   });
 
-  it('accepts a legacy ai-issued RS256 token on an invoke route while legacy is open', async () => {
+  it('rejects a legacy ai-issued RS256 token', async () => {
     process.env.JWT_PUBLIC_KEY = publicKey;
-    process.env.ALLOW_LEGACY_AI_ISSUED = 'true';
-    process.env.ALLOW_HS256_FALLBACK = 'false';
-    const token = JwtUtil.signRS256('runlayer', privateKey);
-    const guard = new ServiceAuthGuard(reflectorFor(AI_INVOKE_ROLES));
-    await expect(guard.canActivate(contextFor(`Bearer ${token}`))).resolves.toBe(true);
-  });
-
-  it('accepts a legacy ai-issued token on an operator route during the dual window', async () => {
-    process.env.JWT_PUBLIC_KEY = publicKey;
-    process.env.ALLOW_LEGACY_AI_ISSUED = 'true';
-    process.env.ALLOW_HS256_FALLBACK = 'false';
-    const token = JwtUtil.signRS256('runlayer', privateKey);
-    const guard = new ServiceAuthGuard(reflectorFor(AI_OPERATOR_ROLES));
-    await expect(guard.canActivate(contextFor(`Bearer ${token}`))).resolves.toBe(true);
-  });
-
-  it('rejects legacy tokens once ALLOW_LEGACY_AI_ISSUED is closed', async () => {
-    process.env.JWT_PUBLIC_KEY = publicKey;
-    process.env.ALLOW_LEGACY_AI_ISSUED = 'false';
     const token = JwtUtil.signRS256('runlayer', privateKey);
     const guard = new ServiceAuthGuard(reflectorFor(AI_INVOKE_ROLES));
     await expect(guard.canActivate(contextFor(`Bearer ${token}`))).rejects.toThrow(
-      'AI-issued service tokens are no longer accepted',
+      UnauthorizedException,
     );
   });
 
-  it('still accepts HS256 only while ALLOW_HS256_FALLBACK is open', async () => {
+  it('rejects a legacy ai-issued token on an operator route', async () => {
     process.env.JWT_PUBLIC_KEY = publicKey;
-    process.env.JWT_SECRET = HS_SECRET;
-    process.env.ALLOW_LEGACY_AI_ISSUED = 'true';
-    process.env.ALLOW_HS256_FALLBACK = 'true';
-    const token = JwtUtil.sign('runlayer', HS_SECRET);
-    const guard = new ServiceAuthGuard(reflectorFor(AI_INVOKE_ROLES));
-    await expect(guard.canActivate(contextFor(`Bearer ${token}`))).resolves.toBe(true);
+    const token = JwtUtil.signRS256('runlayer', privateKey);
+    const guard = new ServiceAuthGuard(reflectorFor(AI_OPERATOR_ROLES));
+    await expect(guard.canActivate(contextFor(`Bearer ${token}`))).rejects.toThrow(
+      UnauthorizedException,
+    );
   });
 
-  it('rejects HS256 once ALLOW_HS256_FALLBACK is closed', async () => {
-    process.env.JWT_PUBLIC_KEY = publicKey;
+  it('rejects HS256 tokens', async () => {
     process.env.JWT_SECRET = HS_SECRET;
-    process.env.ALLOW_LEGACY_AI_ISSUED = 'true';
-    process.env.ALLOW_HS256_FALLBACK = 'false';
     const token = JwtUtil.sign('runlayer', HS_SECRET);
     const guard = new ServiceAuthGuard(reflectorFor(AI_INVOKE_ROLES));
     await expect(guard.canActivate(contextFor(`Bearer ${token}`))).rejects.toThrow(
