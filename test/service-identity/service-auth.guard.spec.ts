@@ -1,68 +1,96 @@
+/**
+ * Integration-style ServiceAuthGuard tests (async Auth/legacy paths).
+ * Prefer src/service-identity/service-auth.guard.spec.ts for role matrix coverage.
+ */
+
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { generateKeyPairSync } from 'crypto';
 import { ServiceAuthGuard } from '../../src/service-identity/service-auth.guard';
 import { JwtUtil } from '../../src/service-identity/jwt.util';
+import { IS_PUBLIC_KEY } from '../../src/service-identity/public.decorator';
+import { ROLES_KEY } from '../../src/auth/roles.decorator';
+import { AI_INVOKE_ROLES } from '../../src/auth/roles.constants';
 
 const SECRET = 'test-secret-at-least-32-chars-long!!';
+const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+  modulusLength: 2048,
+  publicKeyEncoding: { type: 'spki', format: 'pem' },
+  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+});
 
-function makeContext(authHeader: string | undefined, isPublic = false): ExecutionContext {
+function makeContext(authHeader: string | undefined): ExecutionContext {
   const request = { headers: { authorization: authHeader }, path: '/task/draft', method: 'POST' } as never;
   return {
     switchToHttp: () => ({ getRequest: () => request }),
-    getHandler: () => ({}),
-    getClass: () => ({}),
-    _isPublic: isPublic,
+    getHandler: () => function handler() {},
+    getClass: () => class TestController {},
   } as unknown as ExecutionContext;
 }
 
-describe('ServiceAuthGuard', () => {
-  let guard: ServiceAuthGuard;
-  let reflector: Reflector;
+function reflectorFor(roles?: readonly string[], isPublic = false): Reflector {
+  return {
+    getAllAndOverride: (key: string) => {
+      if (key === IS_PUBLIC_KEY) return isPublic;
+      if (key === ROLES_KEY) return roles ? { roles } : undefined;
+      return undefined;
+    },
+  } as unknown as Reflector;
+}
 
-  beforeEach(() => {
-    process.env.JWT_SECRET = SECRET;
-    reflector = { getAllAndOverride: jest.fn() } as unknown as Reflector;
-    guard = new ServiceAuthGuard(reflector);
-  });
+describe('ServiceAuthGuard (test/)', () => {
+  const original = { ...process.env };
 
   afterEach(() => {
-    delete process.env.JWT_SECRET;
+    process.env = { ...original };
   });
 
-  it('allows @Public() routes without token', () => {
-    (reflector.getAllAndOverride as jest.Mock).mockReturnValue(true);
-    expect(guard.canActivate(makeContext(undefined, true))).toBe(true);
+  it('allows @Public() routes without token', async () => {
+    const guard = new ServiceAuthGuard(reflectorFor(undefined, true));
+    await expect(guard.canActivate(makeContext(undefined))).resolves.toBe(true);
   });
 
-  it('rejects missing Authorization header', () => {
-    (reflector.getAllAndOverride as jest.Mock).mockReturnValue(false);
-    expect(() => guard.canActivate(makeContext(undefined))).toThrow(UnauthorizedException);
+  it('rejects missing Authorization header', async () => {
+    const guard = new ServiceAuthGuard(reflectorFor(AI_INVOKE_ROLES));
+    await expect(guard.canActivate(makeContext(undefined))).rejects.toThrow(UnauthorizedException);
   });
 
-  it('rejects non-Bearer scheme', () => {
-    (reflector.getAllAndOverride as jest.Mock).mockReturnValue(false);
-    expect(() => guard.canActivate(makeContext('Basic abc123'))).toThrow(UnauthorizedException);
+  it('rejects non-Bearer scheme', async () => {
+    const guard = new ServiceAuthGuard(reflectorFor(AI_INVOKE_ROLES));
+    await expect(guard.canActivate(makeContext('Basic abc123'))).rejects.toThrow(UnauthorizedException);
   });
 
-  it('rejects invalid token', () => {
-    (reflector.getAllAndOverride as jest.Mock).mockReturnValue(false);
-    expect(() => guard.canActivate(makeContext('Bearer garbage.token.here'))).toThrow(
-      UnauthorizedException,
-    );
-  });
-
-  it('allows valid token and attaches serviceId to request', () => {
-    (reflector.getAllAndOverride as jest.Mock).mockReturnValue(false);
-    const token = JwtUtil.sign('shop-assistant', SECRET);
+  it('allows legacy ai-issued RS256 and attaches serviceId', async () => {
+    process.env.JWT_PUBLIC_KEY = publicKey;
+    process.env.ALLOW_LEGACY_AI_ISSUED = 'true';
+    process.env.ALLOW_HS256_FALLBACK = 'false';
+    const token = JwtUtil.signRS256('shop-assistant', privateKey);
     const ctx = makeContext(`Bearer ${token}`);
-    expect(guard.canActivate(ctx)).toBe(true);
+    const guard = new ServiceAuthGuard(reflectorFor(AI_INVOKE_ROLES));
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
     const req = ctx.switchToHttp().getRequest<{ serviceId: string }>();
     expect(req.serviceId).toBe('shop-assistant');
   });
 
-  it('rejects expired token', () => {
-    (reflector.getAllAndOverride as jest.Mock).mockReturnValue(false);
-    const token = JwtUtil.sign('shop-assistant', SECRET, -1);
-    expect(() => guard.canActivate(makeContext(`Bearer ${token}`))).toThrow(UnauthorizedException);
+  it('rejects expired legacy token', async () => {
+    process.env.JWT_PUBLIC_KEY = publicKey;
+    process.env.ALLOW_LEGACY_AI_ISSUED = 'true';
+    process.env.ALLOW_HS256_FALLBACK = 'false';
+    const token = JwtUtil.signRS256('shop-assistant', privateKey, -1);
+    const guard = new ServiceAuthGuard(reflectorFor(AI_INVOKE_ROLES));
+    await expect(guard.canActivate(makeContext(`Bearer ${token}`))).rejects.toThrow(
+      UnauthorizedException,
+    );
+  });
+
+  it('rejects HS256 when fallback is closed', async () => {
+    process.env.JWT_SECRET = SECRET;
+    process.env.ALLOW_LEGACY_AI_ISSUED = 'true';
+    process.env.ALLOW_HS256_FALLBACK = 'false';
+    const token = JwtUtil.sign('shop-assistant', SECRET);
+    const guard = new ServiceAuthGuard(reflectorFor(AI_INVOKE_ROLES));
+    await expect(guard.canActivate(makeContext(`Bearer ${token}`))).rejects.toThrow(
+      UnauthorizedException,
+    );
   });
 });

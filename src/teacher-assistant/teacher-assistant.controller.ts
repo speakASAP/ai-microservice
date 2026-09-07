@@ -7,6 +7,8 @@ import { GenerateDrillRequestDto } from './dto/generate-drill-request.dto';
 import { ValidateDrillRequestDto } from './dto/validate-drill-request.dto';
 import { AnalyzeErrorsRequestDto } from './dto/analyze-errors-request.dto';
 import { AnalyzeErrorsResponse, GenerateDrillResponse, ValidateDrillResponse } from './contracts';
+import { Roles } from '../auth/roles.decorator';
+import { AI_INVOKE_ROLES } from '../auth/roles.constants';
 
 /**
  * Service-to-service endpoints called by education-service's drill
@@ -18,6 +20,7 @@ import { AnalyzeErrorsResponse, GenerateDrillResponse, ValidateDrillResponse } f
 // It documents the guarantee at the call site and is what
 // teacher-assistant.controller.spec.ts's guard test actually asserts on.
 @UseGuards(ServiceAuthGuard)
+@Roles(...AI_INVOKE_ROLES)
 @Controller('api/teacher-assistant')
 export class TeacherAssistantController {
   constructor(

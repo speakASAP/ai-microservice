@@ -7,8 +7,11 @@ import {
   parseOrThrow,
 } from '../contracts';
 import type { TaskDraftRequestInput, TaskDraftResponse } from '../contracts';
+import { Roles } from '../auth/roles.decorator';
+import { AI_INVOKE_ROLES } from '../auth/roles.constants';
 
 @Controller('task')
+@Roles(...AI_INVOKE_ROLES)
 export class TaskController {
   constructor(private readonly taskService: TaskService) {}
 

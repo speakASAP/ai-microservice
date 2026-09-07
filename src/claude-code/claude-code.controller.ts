@@ -3,8 +3,11 @@ import { ClaudeCodeService } from './claude-code.service';
 import { ZodValidationPipe } from '../contracts/zod-validation.pipe';
 import { parseOrThrow, ExecuteCodeRequestSchema, JobEnqueueResponseSchema, JobStatusResponseSchema, NotFoundResponseSchema } from '../contracts';
 import type { ExecuteCodeRequestInput } from '../contracts';
+import { Roles } from '../auth/roles.decorator';
+import { AI_OPERATOR_ROLES } from '../auth/roles.constants';
 
 @Controller('ai/claude-code-execute')
+@Roles(...AI_OPERATOR_ROLES)
 export class ClaudeCodeController {
   constructor(private service: ClaudeCodeService) {}
 

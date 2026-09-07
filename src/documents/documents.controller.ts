@@ -7,6 +7,8 @@ import {
   parseOrThrow,
 } from '../contracts';
 import type { ExtractDocumentRequestInput, ExtractDocumentResponse } from '../contracts';
+import { Roles } from '../auth/roles.decorator';
+import { AI_INVOKE_ROLES } from '../auth/roles.constants';
 
 /**
  * Shared document reading for the whole ecosystem.
@@ -16,6 +18,7 @@ import type { ExtractDocumentRequestInput, ExtractDocumentResponse } from '../co
  * of carrying its own parser stack and its own OCR system packages.
  */
 @Controller('documents')
+@Roles(...AI_INVOKE_ROLES)
 export class DocumentsController {
   constructor(private readonly extractor: DocumentExtractorService) {}
 

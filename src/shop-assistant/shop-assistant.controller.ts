@@ -1,5 +1,4 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, UsePipes } from '@nestjs/common';
-import { Public } from '../service-identity/public.decorator';
 import { ShopAssistantService } from './shop-assistant.service';
 import { ZodValidationPipe } from '../contracts/zod-validation.pipe';
 import { parseOrThrow } from '../contracts/parse-or-throw';
@@ -25,9 +24,11 @@ import type {
   ShopComparePricesRequest,
   ShopExtractLocationRequest,
 } from '../contracts';
+import { Roles } from '../auth/roles.decorator';
+import { AI_INVOKE_ROLES } from '../auth/roles.constants';
 
 @Controller('api/shop-assistant')
-@Public()
+@Roles(...AI_INVOKE_ROLES)
 export class ShopAssistantController {
   constructor(private readonly shopAssistantService: ShopAssistantService) {}
 

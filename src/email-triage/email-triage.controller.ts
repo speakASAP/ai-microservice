@@ -22,6 +22,8 @@ import {
   EmailDecideRequestSchema,
   EmailDecideResponseSchema,
 } from '../contracts';
+import { Roles } from '../auth/roles.decorator';
+import { AI_INVOKE_ROLES } from '../auth/roles.constants';
 
 function coerceUseLlm(value: unknown): boolean {
   if (value == null) return false;
@@ -32,7 +34,7 @@ function coerceUseLlm(value: unknown): boolean {
 }
 
 @Controller('api/email-triage')
-@Public()
+@Roles(...AI_INVOKE_ROLES)
 export class EmailTriageController {
   private readonly logger = new Logger(EmailTriageController.name);
   private readonly llmClassifierDefault: boolean;
@@ -48,6 +50,7 @@ export class EmailTriageController {
     this.llmDeciderDefault = toLlmFlag(process.env.EMAIL_TRIAGE_LLM_DECIDER);
   }
 
+  @Public()
   @Get('ready')
   ready() {
     return { ready: true, service: 'email-triage' };

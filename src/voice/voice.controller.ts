@@ -7,8 +7,11 @@ import {
   parseOrThrow,
 } from '../contracts';
 import type { TranscribeRequestInput, TranscribeResponse } from '../contracts';
+import { Roles } from '../auth/roles.decorator';
+import { AI_INVOKE_ROLES } from '../auth/roles.constants';
 
 @Controller('voice')
+@Roles(...AI_INVOKE_ROLES)
 export class VoiceController {
   constructor(private readonly voiceService: VoiceService) {}
 
