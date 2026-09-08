@@ -26,7 +26,7 @@ The validated objective is governed centralized AI inference, as traced by `../2
 | --- | --- | --- |
 | Canonical documents complete | Pass | Required sections and concrete fields are present. |
 | Capability decisions reviewed | Pass | `ips-adoption.json` covers all sixteen capabilities. |
-| RS256 institutional knowledge retained | Pass | `SYSTEM.md` and project invariants record the incident and rule. |
+| Service identity SPOT retained | Pass | Machine S2S points at [`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md). |
 | Planning profile valid | Pass | IPS planning validator succeeds. |
 
 ## Gate evidence
@@ -42,7 +42,7 @@ PostgreSQL, Redis, logging, notifications, object storage, RabbitMQ, docs-RAG, a
 
 ## Invariant evidence
 
-The canonical invariants prohibit direct external provider calls by Statex services and key rotation without re-minting tokens, and retain RS256 algorithm pinning.
+The canonical invariants prohibit direct external provider calls by Statex services. Machine S2S is Auth-issued RS256 pair principals only ([`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md)); no local mint or AI signing-key remint.
 
 ## Sensitive-data evidence
 

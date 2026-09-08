@@ -25,7 +25,7 @@ The repository passes the planning adoption validator with all sixteen integrati
 
 ## Invariant compatibility
 
-The task preserves the direct-provider prohibition, RS256 algorithm pinning, signing-key re-mint requirement, runtime contracts, and premium-approval rule.
+The task preserves the direct-provider prohibition, runtime contracts, and premium-approval rule. Machine S2S follows [`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md) only.
 
 ## Upstream and downstream links
 

@@ -43,7 +43,7 @@ Runtime endpoint behavior is unchanged. Premium requests remain blocked with exp
 
 ## Sensitive-Data Evidence
 
-Pass. Smoke uses synthetic payloads. The deploy script generates a short-lived deployment smoke token in memory from `JWT_SECRET` and does not print the token or secret. Scripts do not print provider keys, database credentials, JWTs, or raw implementation-job output.
+Pass. Smoke uses synthetic payloads. Machine caller credentials for smoke must be Auth-issued RS256 pair principals per [`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md) (mint only via `provision-service-token.js`); do not mint from `JWT_SECRET`. Scripts do not print provider keys, database credentials, JWTs, or raw implementation-job output.
 
 ## Contract/Schema Evidence
 

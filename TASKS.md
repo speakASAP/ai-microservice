@@ -27,4 +27,4 @@ No active blocker is recorded.
 ## Handoff
 
 
-The project is production-active with no active goals. Preserve model-tier, intent, and RS256 signing-key invariants when accepting future work.
+The project is production-active with no active goals. Preserve model-tier and intent invariants. Machine auth follows [`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md) only.

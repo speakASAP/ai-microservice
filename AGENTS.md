@@ -14,7 +14,7 @@ Preserve the chain Vision -> Goal Impact -> System -> Feature -> Task -> Executi
 
 ## Safety and operations
 
-Work in the authoritative remote repository. Do not print secrets, tokens, raw production data, or private evidence. Do not treat unconfident retrieval as absent documentation. Preserve the RS256 boundary and never rotate a signing key without re-minting dependent tokens.
+Work in the authoritative remote repository. Do not print secrets, tokens, raw production data, or private evidence. Do not treat unconfident retrieval as absent documentation. Machine identity is Auth-only RS256 pair principals — never local mint, never HS256, never AI-owned signing-key remint.
 
 ## Project-specific rules
 

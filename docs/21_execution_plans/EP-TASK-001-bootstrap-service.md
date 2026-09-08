@@ -28,7 +28,7 @@ No source, infrastructure, secret, Docker, provider-routing, migration, or deplo
 
 ## Project invariants
 
-Preserve direct-provider centralization, RS256 algorithm pinning, re-minting after signing-key rotation, compatibility, and premium approval.
+Preserve direct-provider centralization, compatibility, and premium approval. Machine S2S follows [`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md) only (Auth-issued RS256 pair principals via `provision-service-token.js`; no local mint or AI signing-key remint).
 
 ## Sensitive-data handling
 

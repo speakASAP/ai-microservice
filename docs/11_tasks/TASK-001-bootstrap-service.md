@@ -31,7 +31,7 @@ See `../22_goal_impact/GOAL-IMPACT-TASK-001.md`.
 
 ## Project invariant impact
 
-Preserves provider-routing, service-authentication, signing-key, premium-approval, and runtime-contract invariants.
+Preserves provider-routing, premium-approval, and runtime-contract invariants. Machine S2S follows [`SERVICE_IDENTITY_CONSUMER_STANDARD.md`](../../../auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md) only (no local mint or AI signing-key remint).
 
 ## Sensitive-data classification
 
@@ -57,7 +57,7 @@ No application code, deployment configuration, Docker container, secret, provide
 
 - [x] Required canonical artifacts exist with concrete required sections.
 - [x] All sixteen capability decisions are explicit and source-based.
-- [x] RS256 incident knowledge and key-rotation protection are canonicalized.
+- [x] Service identity points at the Auth SPOT (Auth-issued RS256 pair principals only).
 - [x] The planning adoption validator passes.
 
 ## Required context
