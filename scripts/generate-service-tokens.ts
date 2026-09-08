@@ -1,16 +1,8 @@
 #!/usr/bin/env ts-node
 /**
- * RETIRED — local HS256 minting is prohibited.
- *
- * Service tokens for ai-microservice callers must be Auth-issued RS256
- * principals minted only via:
- *   auth-microservice/scripts/provision-service-token.js
- *
- * Identity: svc-<caller>--ai-microservice@internal.alfares.cz
- * Role:     internal:ai-microservice:invoke  (or :operator for Claude Code)
- * Delivery: Vault → ExternalSecret → Secret → secretKeyRef as AI_SERVICE_TOKEN
- *
- * See auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md
+ * RETIRED. Follow auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md;
+ * do not invent alternate S2S protocols. Mint only via
+ * auth-microservice/scripts/provision-service-token.js.
  */
 
 console.error(

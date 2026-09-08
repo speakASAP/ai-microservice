@@ -20,7 +20,7 @@ const FENCE = /^\s*```(?:json)?\s*([\s\S]*?)\s*```\s*$/;
 
 /** `/ai/complete` runs behind ServiceAuthGuard. Auth-minted RS256 only —
  *  deliver via Vault → ExternalSecret as AI_SERVICE_TOKEN
- *  (svc-<caller>--ai-microservice). No in-process self-mint. */
+ *  S2S: auth-microservice/docs/SERVICE_IDENTITY_CONSUMER_STANDARD.md — no in-process self-mint. */
 
 /** Generous by design: a 50-item generate on the claude-CLI path is minutes,
  *  not seconds. With no bound at all the request rides undici's ~300s default
