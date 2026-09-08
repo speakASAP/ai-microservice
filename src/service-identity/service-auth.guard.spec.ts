@@ -2,25 +2,41 @@
  * ServiceAuthGuard authorization tests.
  *
  * Only Auth-minted RS256 (via verifyAuthToken) is accepted. Legacy ai-issued
- * RS256/HS256 tokens are rejected with zero fallback.
+ * RS256/HS256 tokens are rejected with zero fallback. Local JwtUtil mint is
+ * deleted — fixtures are unsigned/self-labelled JWT shells that Auth JWKS
+ * verification must refuse.
  */
 
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { generateKeyPairSync } from 'crypto';
-import { JwtUtil } from './jwt.util';
 import { ServiceAuthGuard } from './service-auth.guard';
 import { IS_PUBLIC_KEY } from './public.decorator';
 import { ROLES_KEY } from '../auth/roles.decorator';
 import { AI_INVOKE_ROLES, AI_OPERATOR_ROLES } from '../auth/roles.constants';
 
-const HS_SECRET = 'shared-secret-for-tests';
+function b64url(value: object): string {
+  return Buffer.from(JSON.stringify(value)).toString('base64url');
+}
 
-const { privateKey, publicKey } = generateKeyPairSync('rsa', {
-  modulusLength: 2048,
-  publicKeyEncoding: { type: 'spki', format: 'pem' },
-  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-});
+/** Unsigned JWT shell labelled RS256 — Auth JWKS verify must reject. */
+function legacyAiRs256Shell(serviceId = 'runlayer'): string {
+  return `${b64url({ alg: 'RS256', typ: 'JWT' })}.${b64url({
+    serviceId,
+    iss: 'ai-microservice',
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 600,
+  })}.not-a-real-signature`;
+}
+
+/** Unsigned JWT shell labelled HS256 — must never be accepted. */
+function hs256Shell(serviceId = 'runlayer'): string {
+  return `${b64url({ alg: 'HS256', typ: 'JWT' })}.${b64url({
+    serviceId,
+    iss: 'ai-microservice',
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 600,
+  })}.fakesig`;
+}
 
 function contextFor(authorization?: string): ExecutionContext {
   return {
@@ -67,28 +83,22 @@ describe('ServiceAuthGuard', () => {
   });
 
   it('rejects a legacy ai-issued RS256 token', async () => {
-    process.env.JWT_PUBLIC_KEY = publicKey;
-    const token = JwtUtil.signRS256('runlayer', privateKey);
     const guard = new ServiceAuthGuard(reflectorFor(AI_INVOKE_ROLES));
-    await expect(guard.canActivate(contextFor(`Bearer ${token}`))).rejects.toThrow(
+    await expect(guard.canActivate(contextFor(`Bearer ${legacyAiRs256Shell()}`))).rejects.toThrow(
       UnauthorizedException,
     );
   });
 
   it('rejects a legacy ai-issued token on an operator route', async () => {
-    process.env.JWT_PUBLIC_KEY = publicKey;
-    const token = JwtUtil.signRS256('runlayer', privateKey);
     const guard = new ServiceAuthGuard(reflectorFor(AI_OPERATOR_ROLES));
-    await expect(guard.canActivate(contextFor(`Bearer ${token}`))).rejects.toThrow(
+    await expect(guard.canActivate(contextFor(`Bearer ${legacyAiRs256Shell()}`))).rejects.toThrow(
       UnauthorizedException,
     );
   });
 
   it('rejects HS256 tokens', async () => {
-    process.env.JWT_SECRET = HS_SECRET;
-    const token = JwtUtil.sign('runlayer', HS_SECRET);
     const guard = new ServiceAuthGuard(reflectorFor(AI_INVOKE_ROLES));
-    await expect(guard.canActivate(contextFor(`Bearer ${token}`))).rejects.toThrow(
+    await expect(guard.canActivate(contextFor(`Bearer ${hs256Shell()}`))).rejects.toThrow(
       UnauthorizedException,
     );
   });
